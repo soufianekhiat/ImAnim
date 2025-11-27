@@ -39,3 +39,11 @@
 
 # debug information files
 *.dwo
+.vs
+tmp
+*.json
+*.vcxproj
+*.filters
+*.user
+*.exp
+*.map
