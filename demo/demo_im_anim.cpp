@@ -64,7 +64,7 @@ static void ShowEasingDemo()
 	ImGui::Combo("##iam_ease_preset", &selected_ease, ease_names, IM_ARRAYSIZE(ease_names));
 
 	ImGui::SameLine();
-	if (ImGui::Button(preview_playing ? "Reset" : "Play")) {
+	if (ImGui::Button(preview_playing ? "Reset##EasePreview" : "Play##EasePreview")) {
 		preview_playing = !preview_playing;
 		preview_time = 0.0f;
 	}
@@ -403,6 +403,164 @@ static void ShowEasingDemo()
 
 		ImGui::Dummy(steps_canvas_size);
 		ImGui::TextDisabled("Usage: iam_ease_steps_desc(%d, %d)", step_count, step_mode);
+		ImGui::TreePop();
+	}
+
+	if (ImGui::TreeNode("Easing Gallery")) {
+		ImGui::TextWrapped(
+			"Visual grid showing all standard easing functions side-by-side. "
+			"Red disc shows X (time), green disc shows Y (eased value).");
+
+		static float gallery_time = 0.0f;
+		static bool gallery_playing = true;
+		static float gallery_duration = 1.5f;
+
+		ImGui::Checkbox("Auto-play", &gallery_playing);
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##gallery")) {
+			gallery_time = 0.0f;
+		}
+		ImGui::SameLine();
+		ImGui::SliderFloat("Duration##EaseGallery", &gallery_duration, 0.5f, 3.0f, "%.1fs");
+
+		if (gallery_playing) {
+			gallery_time += dt;
+			if (gallery_time > gallery_duration + 0.5f) gallery_time = 0.0f;
+		}
+
+		float t = gallery_time / gallery_duration;
+		if (t > 1.0f) t = 1.0f;
+
+		// Easing info: name, enum value
+		struct EaseInfo { const char* name; int type; };
+		EaseInfo eases[] = {
+			{ "Linear",       iam_ease_linear },
+			{ "In Quad",      iam_ease_in_quad },
+			{ "Out Quad",     iam_ease_out_quad },
+			{ "InOut Quad",   iam_ease_in_out_quad },
+			{ "In Cubic",     iam_ease_in_cubic },
+			{ "Out Cubic",    iam_ease_out_cubic },
+			{ "InOut Cubic",  iam_ease_in_out_cubic },
+			{ "In Quart",     iam_ease_in_quart },
+			{ "Out Quart",    iam_ease_out_quart },
+			{ "InOut Quart",  iam_ease_in_out_quart },
+			{ "In Quint",     iam_ease_in_quint },
+			{ "Out Quint",    iam_ease_out_quint },
+			{ "InOut Quint",  iam_ease_in_out_quint },
+			{ "In Sine",      iam_ease_in_sine },
+			{ "Out Sine",     iam_ease_out_sine },
+			{ "InOut Sine",   iam_ease_in_out_sine },
+			{ "In Expo",      iam_ease_in_expo },
+			{ "Out Expo",     iam_ease_out_expo },
+			{ "InOut Expo",   iam_ease_in_out_expo },
+			{ "In Circ",      iam_ease_in_circ },
+			{ "Out Circ",     iam_ease_out_circ },
+			{ "InOut Circ",   iam_ease_in_out_circ },
+			{ "In Back",      iam_ease_in_back },
+			{ "Out Back",     iam_ease_out_back },
+			{ "InOut Back",   iam_ease_in_out_back },
+			{ "In Elastic",   iam_ease_in_elastic },
+			{ "Out Elastic",  iam_ease_out_elastic },
+			{ "InOut Elastic",iam_ease_in_out_elastic },
+			{ "In Bounce",    iam_ease_in_bounce },
+			{ "Out Bounce",   iam_ease_out_bounce },
+			{ "InOut Bounce", iam_ease_in_out_bounce },
+		};
+		int num_eases = IM_ARRAYSIZE(eases);
+
+		// Grid layout - larger cells
+		ImVec2 cell_size(200, 160);
+		int cols = (int)(ImGui::GetContentRegionAvail().x / (cell_size.x + 10));
+		if (cols < 1) cols = 1;
+		if (cols > 4) cols = 4;
+
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		for (int i = 0; i < num_eases; i++) {
+			if (i % cols != 0) ImGui::SameLine();
+
+			ImGui::BeginGroup();
+
+			ImVec2 cell_pos = ImGui::GetCursorScreenPos();
+			float margin = 12.0f;
+			float label_h = 20.0f;
+			float graph_x = cell_pos.x + margin;
+			float graph_y = cell_pos.y + label_h;
+			float graph_w = cell_size.x - margin * 2;
+			float graph_h = cell_size.y - label_h - margin;
+
+			// Cell background
+			draw_list->AddRectFilled(cell_pos,
+				ImVec2(cell_pos.x + cell_size.x, cell_pos.y + cell_size.y),
+				IM_COL32(30, 30, 35, 255), 4.0f);
+			draw_list->AddRect(cell_pos,
+				ImVec2(cell_pos.x + cell_size.x, cell_pos.y + cell_size.y),
+				IM_COL32(60, 60, 70, 255), 4.0f);
+
+			// Graph background
+			draw_list->AddRectFilled(ImVec2(graph_x, graph_y),
+				ImVec2(graph_x + graph_w, graph_y + graph_h),
+				IM_COL32(20, 20, 25, 255), 2.0f);
+
+			// Grid lines
+			for (int g = 1; g < 4; g++) {
+				float gx = graph_x + graph_w * (g / 4.0f);
+				float gy = graph_y + graph_h * (g / 4.0f);
+				draw_list->AddLine(ImVec2(gx, graph_y), ImVec2(gx, graph_y + graph_h), IM_COL32(50, 50, 55, 100));
+				draw_list->AddLine(ImVec2(graph_x, gy), ImVec2(graph_x + graph_w, gy), IM_COL32(50, 50, 55, 100));
+			}
+
+			// Y=0 and Y=1 reference lines
+			float y0_line = graph_y + graph_h;
+			float y1_line = graph_y;
+			draw_list->AddLine(ImVec2(graph_x, y0_line), ImVec2(graph_x + graph_w, y0_line), IM_COL32(80, 80, 80, 150));
+			draw_list->AddLine(ImVec2(graph_x, y1_line), ImVec2(graph_x + graph_w, y1_line), IM_COL32(80, 80, 80, 150));
+
+			// Draw easing curve
+			ImVec2 prev_pt(graph_x, graph_y + graph_h);
+			for (int j = 1; j <= 60; j++) {
+				float ct = j / 60.0f;
+				float val = iam_eval_preset(eases[i].type, ct);
+				val = ImClamp(val, -0.2f, 1.2f);
+
+				ImVec2 pt;
+				pt.x = graph_x + graph_w * ct;
+				pt.y = graph_y + graph_h - graph_h * val;
+
+				draw_list->AddLine(prev_pt, pt, IM_COL32(100, 180, 255, 255), 2.0f);
+				prev_pt = pt;
+			}
+
+			// Animated indicators
+			if (t <= 1.0f) {
+				float eased = iam_eval_preset(eases[i].type, t);
+				float eased_clamped = ImClamp(eased, -0.2f, 1.2f);
+
+				float ball_x = graph_x + graph_w * t;
+				float ball_y = graph_y + graph_h - graph_h * eased_clamped;
+
+				// X axis indicator (red) - horizontal line with disc
+				draw_list->AddLine(ImVec2(graph_x, ball_y), ImVec2(ball_x, ball_y), IM_COL32(255, 80, 80, 150), 1.0f);
+				draw_list->AddCircleFilled(ImVec2(graph_x - 6, ball_y), 5.0f, IM_COL32(255, 80, 80, 255));
+
+				// Y axis indicator (green) - vertical line with disc
+				draw_list->AddLine(ImVec2(ball_x, graph_y + graph_h), ImVec2(ball_x, ball_y), IM_COL32(80, 255, 80, 150), 1.0f);
+				draw_list->AddCircleFilled(ImVec2(ball_x, graph_y + graph_h + 6), 5.0f, IM_COL32(80, 255, 80, 255));
+
+				// Ball on curve (yellow)
+				draw_list->AddCircleFilled(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 220, 100, 255));
+				draw_list->AddCircle(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 255, 255, 200), 0, 1.5f);
+			}
+
+			// Label at top
+			ImVec2 text_size = ImGui::CalcTextSize(eases[i].name);
+			ImVec2 text_pos = ImVec2(cell_pos.x + (cell_size.x - text_size.x) * 0.5f, cell_pos.y + 3);
+			draw_list->AddText(text_pos, IM_COL32(220, 220, 220, 255), eases[i].name);
+
+			ImGui::Dummy(cell_size);
+			ImGui::EndGroup();
+		}
+
 		ImGui::TreePop();
 	}
 }
@@ -1628,7 +1786,7 @@ static void ShowClipSystemDemo()
 		static ImGuiID inst_id = ImHashStr("control_inst");
 
 		ImGui::Text("Controls:");
-		if (ImGui::Button("Play")) iam_play(CLIP_COMPLEX, inst_id);
+		if (ImGui::Button("Play##ClipPlayback")) iam_play(CLIP_COMPLEX, inst_id);
 		ImGui::SameLine();
 
 		iam_instance inst = iam_get_instance(inst_id);
@@ -3221,6 +3379,11 @@ static void ShowOscillatorsDemo()
 		float pulse = iam_oscillate(ImGui::GetID("pulse_btn"), 0.1f, 2.0f, iam_wave_sine, 0.0f, dt);
 		float scale = 1.0f + pulse;
 
+		// Fixed height container to prevent layout shifts
+		float max_scale = 1.1f;  // 1.0 + max amplitude
+		float fixed_height = 40 * max_scale + ImGui::GetStyle().ItemSpacing.y;
+		ImGui::BeginChild("##PulsingButtonContainer", ImVec2(0, fixed_height), false, ImGuiWindowFlags_NoScrollbar);
+
 		ImGui::SetWindowFontScale(scale);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f + pulse * 0.5f, 0.5f, 0.8f, 1.0f));
 		ImGui::Button("Click Me!", ImVec2(120 * scale, 40 * scale));
@@ -3229,6 +3392,8 @@ static void ShowOscillatorsDemo()
 
 		ImGui::SameLine();
 		ImGui::TextDisabled("Button pulses continuously");
+
+		ImGui::EndChild();
 		ImGui::TreePop();
 	}
 }
@@ -3353,7 +3518,7 @@ static void ShowScrollDemo()
 	ImGui::Text("Scroll Controls:");
 
 	static float scroll_duration = 0.5f;
-	ImGui::SliderFloat("Duration", &scroll_duration, 0.1f, 2.0f, "%.1f s");
+	ImGui::SliderFloat("Duration##Scroll", &scroll_duration, 0.1f, 2.0f, "%.1f s");
 
 	if (ImGui::Button("Scroll to Top")) {
 		// Will be called inside the child window
@@ -3458,7 +3623,7 @@ static void ShowMotionPathsDemo()
 
 	static float path_duration = 2.0f;
 	static int selected_ease = iam_ease_in_out_cubic;
-	ImGui::SliderFloat("Duration", &path_duration, 0.5f, 5.0f);
+	ImGui::SliderFloat("Duration##MotionPath", &path_duration, 0.5f, 5.0f);
 
 	static const char* ease_names[] = { "Linear", "In Quad", "Out Quad", "InOut Quad",
 		"In Cubic", "Out Cubic", "InOut Cubic", "In Quart", "Out Quart", "InOut Quart" };
@@ -4153,7 +4318,7 @@ static void ShowTextStaggerDemo()
 	// Animation control
 	static float progress = 0.0f;
 	static bool playing = false;
-	if (ImGui::Button(playing ? "Reset" : "Play")) {
+	if (ImGui::Button(playing ? "Reset##TextStagger" : "Play##TextStagger")) {
 		playing = !playing;
 		progress = 0.0f;
 	}
@@ -4643,35 +4808,209 @@ static void ShowStyleInterpolationDemo()
 }
 
 // ============================================================
+// DRAG FEEDBACK DEMO
+// ============================================================
+static void ShowDragFeedbackDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Drag feedback provides animated visual response during drag operations. "
+		"Features include grid snapping, snap points, overshoot, and velocity tracking.");
+
+	ImGui::Spacing();
+
+	// Snap grid demo
+	if (ImGui::TreeNodeEx("Grid Snapping", ImGuiTreeNodeFlags_DefaultOpen)) {
+		static ImVec2 drag_pos(100, 60);
+		static bool dragging = false;
+
+		static float grid_size = 50.0f;
+		static float snap_duration = 0.3f;
+		static float overshoot = 0.5f;
+		static int ease_type = iam_ease_out_back;
+
+		ImGui::SliderFloat("Grid Size", &grid_size, 20.0f, 100.0f);
+		ImGui::SliderFloat("Snap Duration", &snap_duration, 0.1f, 0.8f);
+		ImGui::SliderFloat("Overshoot", &overshoot, 0.0f, 2.0f);
+
+		const char* ease_names[] = { "Out Cubic", "Out Back", "Out Elastic", "Out Bounce" };
+		int ease_types[] = { iam_ease_out_cubic, iam_ease_out_back, iam_ease_out_elastic, iam_ease_out_bounce };
+		static int ease_idx = 1;
+		if (ImGui::Combo("Easing", &ease_idx, ease_names, IM_ARRAYSIZE(ease_names))) {
+			ease_type = ease_types[ease_idx];
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300, 200);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		// Background
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw grid
+		for (float x = 0; x <= canvas_size.x; x += grid_size) {
+			draw_list->AddLine(
+				ImVec2(canvas_pos.x + x, canvas_pos.y),
+				ImVec2(canvas_pos.x + x, canvas_pos.y + canvas_size.y),
+				IM_COL32(60, 60, 70, 150));
+		}
+		for (float y = 0; y <= canvas_size.y; y += grid_size) {
+			draw_list->AddLine(
+				ImVec2(canvas_pos.x, canvas_pos.y + y),
+				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + y),
+				IM_COL32(60, 60, 70, 150));
+		}
+
+		// Handle dragging
+		ImGui::InvisibleButton("drag_canvas", canvas_size);
+		ImGuiID drag_id = ImGui::GetID("grid_drag");
+		iam_drag_feedback feedback;
+
+		if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
+			ImVec2 mouse_pos = ImGui::GetMousePos();
+			ImVec2 relative_pos(mouse_pos.x - canvas_pos.x, mouse_pos.y - canvas_pos.y);
+
+			if (!dragging) {
+				iam_drag_begin(drag_id, relative_pos);
+				dragging = true;
+			}
+			feedback = iam_drag_update(drag_id, relative_pos, dt);
+			drag_pos = feedback.position;
+		} else if (dragging) {
+			iam_drag_opts opts;
+			opts.snap_grid = ImVec2(grid_size, grid_size);
+			opts.snap_duration = snap_duration;
+			opts.overshoot = overshoot;
+			opts.ease_type = ease_type;
+
+			feedback = iam_drag_release(drag_id, drag_pos, opts, dt);
+			drag_pos = feedback.position;
+
+			if (!feedback.is_snapping) {
+				dragging = false;
+			}
+		} else {
+			// Continue snapping animation if active
+			iam_drag_opts opts;
+			opts.snap_grid = ImVec2(grid_size, grid_size);
+			opts.snap_duration = snap_duration;
+			opts.overshoot = overshoot;
+			opts.ease_type = ease_type;
+
+			feedback = iam_drag_release(drag_id, drag_pos, opts, dt);
+			drag_pos = feedback.position;
+		}
+
+		// Draw draggable object
+		ImVec2 obj_pos(canvas_pos.x + drag_pos.x, canvas_pos.y + drag_pos.y);
+		ImU32 obj_color = dragging ? IM_COL32(255, 200, 100, 255) : IM_COL32(100, 200, 255, 255);
+		draw_list->AddCircleFilled(obj_pos, 15.0f, obj_color);
+		draw_list->AddCircle(obj_pos, 15.0f, IM_COL32(255, 255, 255, 150), 0, 2.0f);
+
+		ImGui::TextDisabled("Drag the circle and release to see it snap to grid");
+
+		ImGui::TreePop();
+	}
+
+	// Snap points demo
+	if (ImGui::TreeNode("Snap Points")) {
+		static ImVec2 drag_pos2(150, 100);
+		static bool dragging2 = false;
+
+		static ImVec2 snap_points[] = {
+			ImVec2(50, 50), ImVec2(150, 50), ImVec2(250, 50),
+			ImVec2(50, 100), ImVec2(150, 100), ImVec2(250, 100),
+			ImVec2(50, 150), ImVec2(150, 150), ImVec2(250, 150)
+		};
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300, 200);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw snap points
+		for (int i = 0; i < IM_ARRAYSIZE(snap_points); i++) {
+			ImVec2 pt(canvas_pos.x + snap_points[i].x, canvas_pos.y + snap_points[i].y);
+			draw_list->AddCircleFilled(pt, 6.0f, IM_COL32(80, 80, 100, 255));
+			draw_list->AddCircle(pt, 6.0f, IM_COL32(120, 120, 140, 255));
+		}
+
+		// Handle dragging
+		ImGui::InvisibleButton("snap_canvas", canvas_size);
+		ImGuiID drag_id = ImGui::GetID("points_drag");
+		iam_drag_feedback feedback;
+
+		if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
+			ImVec2 mouse_pos = ImGui::GetMousePos();
+			ImVec2 relative_pos(mouse_pos.x - canvas_pos.x, mouse_pos.y - canvas_pos.y);
+
+			if (!dragging2) {
+				iam_drag_begin(drag_id, relative_pos);
+				dragging2 = true;
+			}
+			feedback = iam_drag_update(drag_id, relative_pos, dt);
+			drag_pos2 = feedback.position;
+		} else if (dragging2) {
+			iam_drag_opts opts;
+			opts.snap_points = snap_points;
+			opts.snap_points_count = IM_ARRAYSIZE(snap_points);
+			opts.snap_duration = 0.25f;
+			opts.overshoot = 0.3f;
+			opts.ease_type = iam_ease_out_back;
+
+			feedback = iam_drag_release(drag_id, drag_pos2, opts, dt);
+			drag_pos2 = feedback.position;
+
+			if (!feedback.is_snapping) {
+				dragging2 = false;
+			}
+		} else {
+			iam_drag_opts opts;
+			opts.snap_points = snap_points;
+			opts.snap_points_count = IM_ARRAYSIZE(snap_points);
+			opts.snap_duration = 0.25f;
+			opts.overshoot = 0.3f;
+			opts.ease_type = iam_ease_out_back;
+
+			feedback = iam_drag_release(drag_id, drag_pos2, opts, dt);
+			drag_pos2 = feedback.position;
+		}
+
+		// Draw draggable object
+		ImVec2 obj_pos(canvas_pos.x + drag_pos2.x, canvas_pos.y + drag_pos2.y);
+		ImU32 obj_color = dragging2 ? IM_COL32(255, 200, 100, 255) : IM_COL32(200, 100, 255, 255);
+		draw_list->AddCircleFilled(obj_pos, 12.0f, obj_color);
+
+		ImGui::TextDisabled("Drag to snap to nearest point");
+
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
 // ANIMATION INSPECTOR DEMO
 // ============================================================
 static void ShowAnimationInspectorDemo()
 {
-	ImGui::TextWrapped("The Animation Inspector provides a debug view of all active animations in your application. "
-		"It shows tweens, clips, paths, noise channels, and style transitions with detailed information.");
-
-	static bool show_inspector = false;
-	if (ImGui::Button("Open Animation Inspector")) {
-		show_inspector = true;
-	}
-
-	ImGui::SameLine();
-	ImGui::TextDisabled("(Opens in separate window)");
+	ImGui::TextWrapped("The Unified Inspector provides a complete debug view of all active animations. "
+		"Use the 'Show Debug Window' checkbox at the top of this demo to open it.");
 
 	ImGui::Separator();
-	ImGui::Text("Features:");
-	ImGui::BulletText("View all active tweens with current values");
-	ImGui::BulletText("Monitor clip instances and playback state");
-	ImGui::BulletText("Visualize motion paths");
-	ImGui::BulletText("Track noise channels and style interpolations");
-	ImGui::BulletText("Performance metrics and memory usage");
+	ImGui::Text("Inspector Tabs:");
+	ImGui::BulletText("Stats - Time scale, tween counts, clip stats, custom easing slots");
+	ImGui::BulletText("Clips - Active instances with playback controls and scrubbing");
+	ImGui::BulletText("Paths - Registered motion paths with segment info");
+	ImGui::BulletText("Noise - Active noise channels with interactive preview");
+	ImGui::BulletText("Styles - Registered styles and active style tweens");
+	ImGui::BulletText("Performance - Profiler with per-section timing breakdown");
 
 	ImGui::Separator();
-	ImGui::TextDisabled("Tip: Keep the inspector open while exploring other demos to see animations in real-time.");
-
-	if (show_inspector) {
-		iam_show_animation_inspector(&show_inspector);
-	}
+	ImGui::TextDisabled("Tip: Use iam_profiler_begin/end() to instrument your code.");
 }
 
 // ============================================================
@@ -4679,13 +5018,22 @@ static void ShowAnimationInspectorDemo()
 // ============================================================
 void ImAnimDemoWindow()
 {
+	// Start profiler frame
+	iam_profiler_begin_frame();
+
 	// Update animation systems
+	iam_profiler_begin("iam_update_begin_frame");
 	iam_update_begin_frame();
+	iam_profiler_end();
+
+	iam_profiler_begin("iam_clip_update");
 	iam_clip_update(GetSafeDeltaTime());
+	iam_profiler_end();
 
 	ImGui::SetNextWindowSize(ImVec2(650, 750), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("Anim Demo")) {
 		ImGui::End();
+		iam_profiler_end_frame();
 		return;
 	}
 
@@ -4696,101 +5044,153 @@ void ImAnimDemoWindow()
 	static bool show_debug_window = false;
 	ImGui::Checkbox("Show Debug Window", &show_debug_window);
 	ImGui::SameLine();
-	ImGui::TextDisabled("(time scale, stats)");
+	ImGui::TextDisabled("(time scale, stats, profiler)");
 
 	ImGui::Separator();
 
 	// Main sections as collapsing headers (like imgui_demo.cpp)
 	if (ImGui::CollapsingHeader("Easing Functions")) {
+		iam_profiler_begin("Easing Functions");
 		ShowEasingDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Custom Easing")) {
+		iam_profiler_begin("Custom Easing");
 		ShowCustomEasingDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Basic Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
+		iam_profiler_begin("Basic Tweens");
 		ShowBasicTweensDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Color Tweens")) {
+		iam_profiler_begin("Color Tweens");
 		ShowColorTweensDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Per-Axis Easing")) {
+		iam_profiler_begin("Per-Axis Easing");
 		ShowPerAxisEasingDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Tween Policies")) {
+		iam_profiler_begin("Tween Policies");
 		ShowPoliciesDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Interactive Widgets", ImGuiTreeNodeFlags_DefaultOpen)) {
+		iam_profiler_begin("Interactive Widgets");
 		ShowWidgetsDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Clip System")) {
+		iam_profiler_begin("Clip System");
 		ShowClipSystemDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Layering System")) {
+		iam_profiler_begin("Layering System");
 		ShowLayeringDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Resize-Aware Helpers")) {
+		iam_profiler_begin("Resize Helpers");
 		ShowResizeHelpersDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("ImDrawList Animations")) {
+		iam_profiler_begin("DrawList Animations");
 		ShowDrawListDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Oscillators")) {
+		iam_profiler_begin("Oscillators");
 		ShowOscillatorsDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Shake & Wiggle")) {
+		iam_profiler_begin("Shake & Wiggle");
 		ShowShakeWiggleDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Scroll Animation")) {
+		iam_profiler_begin("Scroll Animation");
 		ShowScrollDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Motion Paths")) {
+		iam_profiler_begin("Motion Paths");
 		ShowMotionPathsDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Path Morphing")) {
+		iam_profiler_begin("Path Morphing");
 		ShowPathMorphingDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Text Along Paths")) {
+		iam_profiler_begin("Text Along Paths");
 		ShowTextAlongPathDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Timeline Markers")) {
+		iam_profiler_begin("Timeline Markers");
 		ShowTimelineMarkersDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Animation Chaining")) {
+		iam_profiler_begin("Animation Chaining");
 		ShowAnimationChainingDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Text Stagger")) {
+		iam_profiler_begin("Text Stagger");
 		ShowTextStaggerDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Noise Channels")) {
+		iam_profiler_begin("Noise Channels");
 		ShowNoiseChannelsDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Style Interpolation")) {
+		iam_profiler_begin("Style Interpolation");
 		ShowStyleInterpolationDemo();
+		iam_profiler_end();
+	}
+
+	if (ImGui::CollapsingHeader("Drag Feedback")) {
+		iam_profiler_begin("Drag Feedback");
+		ShowDragFeedbackDemo();
+		iam_profiler_end();
 	}
 
 	if (ImGui::CollapsingHeader("Animation Inspector")) {
+		iam_profiler_begin("Animation Inspector");
 		ShowAnimationInspectorDemo();
+		iam_profiler_end();
 	}
 
 	// Footer
@@ -4799,8 +5199,13 @@ void ImAnimDemoWindow()
 
 	ImGui::End();
 
-	// Show debug window if enabled
+	// Show unified inspector if enabled
 	if (show_debug_window) {
-		iam_show_debug_window(&show_debug_window);
+		iam_profiler_begin("Unified Inspector");
+		iam_show_unified_inspector(&show_debug_window);
+		iam_profiler_end();
 	}
+
+	// End profiler frame
+	iam_profiler_end_frame();
 }

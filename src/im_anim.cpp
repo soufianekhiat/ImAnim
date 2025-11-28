@@ -8,6 +8,9 @@
 #include "imgui_internal.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // ----------------------------------------------------
 // Internal: parameterized easing LUT cache (ImPool)
@@ -146,7 +149,7 @@ struct ease_lut_pool {
 					break;
 				default: y = x; break;
 			}
-			if (y < 0.f) y = 0.f; if (y > 1.f) y = 1.f;
+			//if (y < 0.f) y = 0.f; if (y > 1.f) y = 1.f;
 			lut.samples[i] = y;
 		}
 	}
@@ -178,49 +181,100 @@ static ease_lut_pool& ease_lut_pool_singleton() { static ease_lut_pool S; return
 // Forward declaration for custom easing (defined later with other globals)
 static iam_ease_fn g_custom_ease[16];
 
+// ----------------------------------------------------
+// Easing implementation - base functions + transforms
+// ----------------------------------------------------
+
+// Easing families (groups of in/out/in_out)
+enum ease_family { ease_quad, ease_cubic, ease_quart, ease_quint, ease_sine, ease_expo, ease_circ, ease_back, ease_elastic, ease_bounce };
+enum ease_variant { ease_in, ease_out, ease_in_out };
+
+// Constants
+static const float EASE_PI = 3.1415926535f;
+static const float BACK_C1 = 1.70158f;
+static const float BACK_C3 = BACK_C1 + 1.f;
+static const float ELASTIC_C4 = (2.f * EASE_PI) / 3.f;
+
+// Base "in" easing functions - all others derived via transforms
+static float ease_in_quad(float t)    { return t * t; }
+static float ease_in_cubic(float t)   { return t * t * t; }
+static float ease_in_quart(float t)   { return t * t * t * t; }
+static float ease_in_quint(float t)   { return t * t * t * t * t; }
+static float ease_in_sine(float t)    { return 1.f - ImCos((t * EASE_PI) / 2.f); }
+static float ease_in_expo(float t)    { return (t == 0.f) ? 0.f : ImPow(2.f, 10.f * t - 10.f); }
+static float ease_in_circ(float t)    { return 1.f - ImSqrt(1.f - t * t); }
+static float ease_in_back(float t)    { return BACK_C3 * t * t * t - BACK_C1 * t * t; }
+static float ease_in_elastic(float t) { return (t == 0.f || t == 1.f) ? t : -ImPow(2.f, 10.f * t - 10.f) * sinf((t * 10.f - 10.75f) * ELASTIC_C4); }
+
+// Bounce is naturally defined as "out" - special case
+static float ease_out_bounce(float t) {
+	const float n1 = 7.5625f, d1 = 2.75f;
+	if (t < 1.f / d1)     return n1 * t * t;
+	if (t < 2.f / d1)     { t -= 1.5f / d1;   return n1 * t * t + 0.75f; }
+	if (t < 2.5f / d1)    { t -= 2.25f / d1;  return n1 * t * t + 0.9375f; }
+	t -= 2.625f / d1; return n1 * t * t + 0.984375f;
+}
+
+// Evaluate base "in" function by family
+static float eval_ease_in(int family, float t) {
+	switch (family) {
+		case ease_quad:    return ease_in_quad(t);
+		case ease_cubic:   return ease_in_cubic(t);
+		case ease_quart:   return ease_in_quart(t);
+		case ease_quint:   return ease_in_quint(t);
+		case ease_sine:    return ease_in_sine(t);
+		case ease_expo:    return ease_in_expo(t);
+		case ease_circ:    return ease_in_circ(t);
+		case ease_back:    return ease_in_back(t);
+		case ease_elastic: return ease_in_elastic(t);
+		case ease_bounce:  return 1.f - ease_out_bounce(1.f - t);  // bounce defined as out
+		default:           return t;
+	}
+}
+
+// Transform: in -> out  =>  out(t) = 1 - in(1 - t)
+static float transform_out(int family, float t) {
+	return 1.f - eval_ease_in(family, 1.f - t);
+}
+
+// Transform: in -> in_out  =>  in_out(t) = t < 0.5 ? in(2t)/2 : 1 - in(2-2t)/2
+static float transform_in_out(int family, float t) {
+	return (t < 0.5f)
+		? eval_ease_in(family, 2.f * t) / 2.f
+		: 1.f - eval_ease_in(family, 2.f - 2.f * t) / 2.f;
+}
+
 static float eval_preset_internal(int type, float t) {
-	if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
-	switch (type) {
-		case iam_ease_linear: return t;
-		case iam_ease_in_quad: return t*t;
-		case iam_ease_out_quad: { float u = 1.f - t; return 1.f - u*u; }
-		case iam_ease_in_out_quad: return (t < 0.5f) ? 2.f*t*t : 1.f - ImPow(-2.f*t + 2.f, 2.f)/2.f;
-		case iam_ease_in_cubic: return t*t*t;
-		case iam_ease_out_cubic: { float u = 1.f - t; return 1.f - u*u*u; }
-		case iam_ease_in_out_cubic: return (t < 0.5f) ? 4.f*t*t*t : 1.f - ImPow(-2.f*t + 2.f, 3.f)/2.f;
-		case iam_ease_in_quart: return t*t*t*t;
-		case iam_ease_out_quart: { float u = 1.f - t; return 1.f - u*u*u*u; }
-		case iam_ease_in_out_quart: return (t < 0.5f) ? 8.f*t*t*t*t : 1.f - ImPow(-2.f*t + 2.f, 4.f)/2.f;
-		case iam_ease_in_quint: return t*t*t*t*t;
-		case iam_ease_out_quint: { float u = 1.f - t; return 1.f - u*u*u*u*u; }
-		case iam_ease_in_out_quint: return (t < 0.5f) ? 16.f*t*t*t*t*t : 1.f - ImPow(-2.f*t + 2.f, 5.f)/2.f;
-		case iam_ease_in_sine: return 1.f - ImCos((t * 3.1415926535f) / 2.f);
-		case iam_ease_out_sine: return ImSin((t * 3.1415926535f) / 2.f);
-		case iam_ease_in_out_sine: return -(ImCos(3.1415926535f * t) - 1.f) / 2.f;
-		case iam_ease_in_expo: return (t == 0.f) ? 0.f : ImPow(2.f, 10.f * t - 10.f);
-		case iam_ease_out_expo: return (t == 1.f) ? 1.f : 1.f - ImPow(2.f, -10.f * t);
-		case iam_ease_in_out_expo:
-			if (t == 0.f) return 0.f; if (t == 1.f) return 1.f;
-			return (t < 0.5f) ? ImPow(2.f, 20.f*t - 10.f) / 2.f : (2.f - ImPow(2.f, -20.f*t + 10.f)) / 2.f;
-		case iam_ease_in_circ: return 1.f - ImSqrt(1.f - t*t);
-		case iam_ease_out_circ: return ImSqrt(1.f - (t - 1.f)*(t - 1.f));
-		case iam_ease_in_out_circ:
-			return (t < 0.5f) ? (1.f - ImSqrt(1.f - 4.f*t*t)) / 2.f
-							 : (ImSqrt(1.f - (2.f*t - 2.f)*(2.f*t - 2.f)) + 1.f) / 2.f;
-		default: return t;
+	t = ImClamp(t, 0.f, 1.f);
+	if (type == iam_ease_linear) return t;
+
+	// Decompose type into family and variant
+	// Enum layout: linear=0, then groups of 3 (in, out, in_out) for each family
+	int idx = type - 1;  // 0-based index after linear
+	int family = idx / 3;
+	int variant = idx % 3;
+
+	switch (variant) {
+		case ease_in:     return eval_ease_in(family, t);
+		case ease_out:    return transform_out(family, t);
+		case ease_in_out: return transform_in_out(family, t);
+		default:          return t;
 	}
 }
 
 static float eval(iam_ease_desc const& d, float t) {
 	switch (d.type) {
 		case iam_ease_linear:
-		case iam_ease_in_quad: case iam_ease_out_quad: case iam_ease_in_out_quad:
-		case iam_ease_in_cubic: case iam_ease_out_cubic: case iam_ease_in_out_cubic:
-		case iam_ease_in_quart: case iam_ease_out_quart: case iam_ease_in_out_quart:
-		case iam_ease_in_quint: case iam_ease_out_quint: case iam_ease_in_out_quint:
-		case iam_ease_in_sine:  case iam_ease_out_sine:  case iam_ease_in_out_sine:
-		case iam_ease_in_expo:  case iam_ease_out_expo:  case iam_ease_in_out_expo:
-		case iam_ease_in_circ:  case iam_ease_out_circ:  case iam_ease_in_out_circ:
+		case iam_ease_in_quad:    case iam_ease_out_quad:    case iam_ease_in_out_quad:
+		case iam_ease_in_cubic:   case iam_ease_out_cubic:   case iam_ease_in_out_cubic:
+		case iam_ease_in_quart:   case iam_ease_out_quart:   case iam_ease_in_out_quart:
+		case iam_ease_in_quint:   case iam_ease_out_quint:   case iam_ease_in_out_quint:
+		case iam_ease_in_sine:    case iam_ease_out_sine:    case iam_ease_in_out_sine:
+		case iam_ease_in_expo:    case iam_ease_out_expo:    case iam_ease_in_out_expo:
+		case iam_ease_in_circ:    case iam_ease_out_circ:    case iam_ease_in_out_circ:
+		case iam_ease_in_back:    case iam_ease_out_back:    case iam_ease_in_out_back:
+		case iam_ease_in_elastic: case iam_ease_out_elastic: case iam_ease_in_out_elastic:
+		case iam_ease_in_bounce:  case iam_ease_out_bounce:  case iam_ease_in_out_bounce:
 			return eval_preset_internal(d.type, t);
 		case iam_ease_custom: {
 			int slot = (int)d.p0;
@@ -401,15 +455,16 @@ struct float_chan {
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
+	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
 	float	pending_target;
 	float_chan() {
 		current=0; start=0; target=0; dur=1e-6f; t=1.f;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; pending_target = 0;
+		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
 	}
-	void set(float trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; }
-	void tick(float dt) { if (t>=1.f){ current=target; return; } if (dt>0) t += dt/dur; float k = eval(ez, t); current = start + (target - start) * k; }
+	void set(float trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
+	void tick(float dt) { if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t); current = start + (target - start) * k; }
 };
 
 struct vec2_chan {
@@ -419,16 +474,17 @@ struct vec2_chan {
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
+	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
 	ImVec2	pending_target;
 	vec2_chan() {
 		current=ImVec2(0,0); start=current; target=current; dur=1e-6f; t=1.f;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; pending_target = ImVec2(0,0);
+		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec2(0,0);
 	}
-	void set(ImVec2 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; }
+	void set(ImVec2 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
 	void tick(float dt) {
-		if (t>=1.f){ current=target; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
 		current.x = start.x + (target.x - start.x) * k;
 		current.y = start.y + (target.y - start.y) * k;
 	}
@@ -441,16 +497,17 @@ struct vec4_chan {
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
+	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
 	ImVec4	pending_target;
 	vec4_chan() {
 		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.f;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; pending_target = ImVec4(0,0,0,0);
+		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec4(0,0,0,0);
 	}
-	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; }
+	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
 	void tick(float dt) {
-		if (t>=1.f){ current=target; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
 		current.x = start.x + (target.x - start.x) * k;
 		current.y = start.y + (target.y - start.y) * k;
 		current.z = start.z + (target.z - start.z) * k;
@@ -465,16 +522,17 @@ struct int_chan {
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
+	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
 	int		pending_target;
 	int_chan() {
 		current=0; start=0; target=0; dur=1e-6f; t=1.f;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; pending_target = 0;
+		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
 	}
-	void set(int trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; }
+	void set(int trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
 	void tick(float dt) {
-		if (t>=1.f){ current=target; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
 		float v = (float)start + ((float)target - (float)start) * k;
 		current = (int)ImFloor(v + 0.5f);
 	}
@@ -487,16 +545,17 @@ struct color_chan {
 	int		policy;
 	int		space;
 	unsigned last_seen_frame;
+	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
 	color_chan() {
 		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.f;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		space = iam_col_srgb_linear;
-		last_seen_frame = 0;
+		last_seen_frame = 0; sleeping = 1;
 	}
-	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; space=sp; }
+	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; space=sp; sleeping=0; }
 	void tick(float dt) {
-		if (t>=1.f){ current=target; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
 		current = color::lerp_color(start, target, k, space);
 	}
 };
@@ -533,6 +592,79 @@ static float g_time_scale = 1.0f;
 static unsigned g_frame = 0;
 
 // Note: g_custom_ease is forward-declared earlier and initialized to nullptr here
+
+// ----------------------------------------------------
+// Profiler data structures
+// ----------------------------------------------------
+static const int PROFILER_MAX_SECTIONS = 64;
+static const int PROFILER_MAX_STACK = 16;
+static const int PROFILER_HISTORY_SIZE = 120; // 2 seconds at 60fps
+
+struct profiler_section {
+	char name[64];
+	double start_time;
+	double accumulated_time;  // Total time this frame
+	int call_count;           // Number of calls this frame
+	float history[PROFILER_HISTORY_SIZE];  // History for graph
+	int history_idx;
+	bool active;
+
+	profiler_section() : start_time(0), accumulated_time(0), call_count(0), history_idx(0), active(false) {
+		name[0] = '\0';
+		for (int i = 0; i < PROFILER_HISTORY_SIZE; i++) history[i] = 0.0f;
+	}
+};
+
+struct profiler_state {
+	bool enabled;
+	double frame_start_time;
+	double frame_total_time;
+	float frame_history[PROFILER_HISTORY_SIZE];
+	int frame_history_idx;
+	profiler_section sections[PROFILER_MAX_SECTIONS];
+	int section_count;
+	int stack[PROFILER_MAX_STACK];  // Stack of section indices
+	int stack_depth;
+
+	profiler_state() : enabled(false), frame_start_time(0), frame_total_time(0),
+		frame_history_idx(0), section_count(0), stack_depth(0) {
+		for (int i = 0; i < PROFILER_HISTORY_SIZE; i++) frame_history[i] = 0.0f;
+	}
+
+	int find_or_create_section(const char* name) {
+		// Find existing section
+		for (int i = 0; i < section_count; i++) {
+			if (strcmp(sections[i].name, name) == 0) return i;
+		}
+		// Create new section
+		if (section_count >= PROFILER_MAX_SECTIONS) return -1;
+		int idx = section_count++;
+		strncpy(sections[idx].name, name, 63);
+		sections[idx].name[63] = '\0';
+		sections[idx].active = true;
+		return idx;
+	}
+};
+
+static profiler_state g_profiler;
+
+static double get_time_ms() {
+#ifdef _WIN32
+	static bool freq_initialized = false;
+	static double inv_freq = 0.0;
+	if (!freq_initialized) {
+		LARGE_INTEGER freq;
+		QueryPerformanceFrequency(&freq);
+		inv_freq = 1000.0 / (double)freq.QuadPart;
+		freq_initialized = true;
+	}
+	LARGE_INTEGER counter;
+	QueryPerformanceCounter(&counter);
+	return (double)counter.QuadPart * inv_freq;
+#else
+	return (double)ImGui::GetTime() * 1000.0;
+#endif
+}
 
 } // namespace iam_detail
 
@@ -582,6 +714,79 @@ float iam_get_global_time_scale() {
 	return iam_detail::g_time_scale;
 }
 
+// ----------------------------------------------------
+// Profiler API implementations
+// ----------------------------------------------------
+
+void iam_profiler_enable(bool enable) {
+	iam_detail::g_profiler.enabled = enable;
+	if (enable) {
+		// Reset all sections when enabling
+		for (int i = 0; i < iam_detail::g_profiler.section_count; i++) {
+			iam_detail::g_profiler.sections[i].accumulated_time = 0;
+			iam_detail::g_profiler.sections[i].call_count = 0;
+		}
+	}
+}
+
+bool iam_profiler_is_enabled() {
+	return iam_detail::g_profiler.enabled;
+}
+
+void iam_profiler_begin_frame() {
+	if (!iam_detail::g_profiler.enabled) return;
+	iam_detail::g_profiler.frame_start_time = iam_detail::get_time_ms();
+	iam_detail::g_profiler.stack_depth = 0;
+	// Reset per-frame accumulators
+	for (int i = 0; i < iam_detail::g_profiler.section_count; i++) {
+		iam_detail::g_profiler.sections[i].accumulated_time = 0;
+		iam_detail::g_profiler.sections[i].call_count = 0;
+	}
+}
+
+void iam_profiler_end_frame() {
+	if (!iam_detail::g_profiler.enabled) return;
+	double end_time = iam_detail::get_time_ms();
+	iam_detail::g_profiler.frame_total_time = end_time - iam_detail::g_profiler.frame_start_time;
+
+	// Store frame time in history
+	int& idx = iam_detail::g_profiler.frame_history_idx;
+	iam_detail::g_profiler.frame_history[idx] = (float)iam_detail::g_profiler.frame_total_time;
+	idx = (idx + 1) % iam_detail::PROFILER_HISTORY_SIZE;
+
+	// Store section times in history
+	for (int i = 0; i < iam_detail::g_profiler.section_count; i++) {
+		auto& sec = iam_detail::g_profiler.sections[i];
+		sec.history[sec.history_idx] = (float)sec.accumulated_time;
+		sec.history_idx = (sec.history_idx + 1) % iam_detail::PROFILER_HISTORY_SIZE;
+	}
+}
+
+void iam_profiler_begin(const char* name) {
+	if (!iam_detail::g_profiler.enabled) return;
+	int idx = iam_detail::g_profiler.find_or_create_section(name);
+	if (idx < 0) return;
+
+	auto& sec = iam_detail::g_profiler.sections[idx];
+	sec.start_time = iam_detail::get_time_ms();
+	sec.call_count++;
+
+	// Push to stack
+	if (iam_detail::g_profiler.stack_depth < iam_detail::PROFILER_MAX_STACK) {
+		iam_detail::g_profiler.stack[iam_detail::g_profiler.stack_depth++] = idx;
+	}
+}
+
+void iam_profiler_end() {
+	if (!iam_detail::g_profiler.enabled) return;
+	if (iam_detail::g_profiler.stack_depth <= 0) return;
+
+	int idx = iam_detail::g_profiler.stack[--iam_detail::g_profiler.stack_depth];
+	auto& sec = iam_detail::g_profiler.sections[idx];
+	double end_time = iam_detail::get_time_ms();
+	sec.accumulated_time += end_time - sec.start_time;
+}
+
 void iam_register_custom_ease(int slot, iam_ease_fn fn) {
 	if (slot >= 0 && slot < 16) {
 		iam_detail::g_custom_ease[slot] = fn;
@@ -600,15 +805,19 @@ float iam_eval_preset(int type, float t) {
 }
 
 float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::float_chan* c = iam_detail::g_float.get(key);
+	// Fast path: sleeping and target unchanged - skip all processing
+	if (c->sleeping && fabsf(c->target - target) <= 1e-6f && !c->has_pending) {
+		return c->current;
+	}
+	dt *= iam_detail::g_time_scale;
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
 	                    (fabsf(c->target - target) > 1e-6f) || (c->t >= 1.0f);
 	if (change) {
 		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
 	} else { c->tick(dt); }
 	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -616,15 +825,19 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 }
 
 ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::vec2_chan* c = iam_detail::g_vec2.get(key);
+	// Fast path: sleeping and target unchanged - skip all processing
+	if (c->sleeping && fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) <= 1e-6f && !c->has_pending) {
+		return c->current;
+	}
+	dt *= iam_detail::g_time_scale;
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
 	                    (fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) > 1e-6f) || (c->t >= 1.0f);
 	if (change) {
 		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
 	} else { c->tick(dt); }
 	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -632,15 +845,19 @@ ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, 
 }
 
 ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::vec4_chan* c = iam_detail::g_vec4.get(key);
+	// Fast path: sleeping and target unchanged - skip all processing
+	if (c->sleeping && fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) <= 1e-6f && !c->has_pending) {
+		return c->current;
+	}
+	dt *= iam_detail::g_time_scale;
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
 	                    (fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) > 1e-6f) || (c->t >= 1.0f);
 	if (change) {
 		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
 	} else { c->tick(dt); }
 	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -651,6 +868,8 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::int_chan* c = iam_detail::g_int.get(key);
+	// Fast path: sleeping and target unchanged - skip all processing
+	if (c->sleeping && c->target == target && !c->has_pending) { return c->current; }
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
 	                    (c->target != target) || (c->t >= 1.0f);
@@ -667,6 +886,8 @@ ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float
 	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::color_chan* c = iam_detail::g_color.get(key);
+	// Fast path: sleeping and target unchanged - skip all processing
+	if (c->sleeping && (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w)) <= 1e-6f) { return c->current; }
 	bool const change = (c->policy!=policy) || (c->space != color_space) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
 	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || (c->t >= 1.0f);
@@ -2330,84 +2551,6 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	fclose(f);
 	*out_clip_id = clip_id;
 	return iam_ok;
-}
-
-// ----------------------------------------------------
-// Debug Window
-// ----------------------------------------------------
-void iam_show_debug_window(bool* p_open) {
-	if (!ImGui::Begin("ImAnim Debug", p_open)) {
-		ImGui::End();
-		return;
-	}
-
-	// Time scale control
-	if (ImGui::CollapsingHeader("Time Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
-		float scale = iam_detail::g_time_scale;
-		ImGui::SliderFloat("Global Time Scale", &scale, 0.0f, 2.0f, "%.2fx");
-		if (scale != iam_detail::g_time_scale) {
-			iam_detail::g_time_scale = scale;
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Reset##timescale")) {
-			iam_detail::g_time_scale = 1.0f;
-		}
-
-		// Quick presets
-		ImGui::Text("Presets:");
-		ImGui::SameLine();
-		if (ImGui::SmallButton("0.1x")) iam_detail::g_time_scale = 0.1f;
-		ImGui::SameLine();
-		if (ImGui::SmallButton("0.25x")) iam_detail::g_time_scale = 0.25f;
-		ImGui::SameLine();
-		if (ImGui::SmallButton("0.5x")) iam_detail::g_time_scale = 0.5f;
-		ImGui::SameLine();
-		if (ImGui::SmallButton("1x")) iam_detail::g_time_scale = 1.0f;
-		ImGui::SameLine();
-		if (ImGui::SmallButton("2x")) iam_detail::g_time_scale = 2.0f;
-	}
-
-	// Tween stats
-	if (ImGui::CollapsingHeader("Tween Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("Active Tweens:");
-		ImGui::Indent();
-		ImGui::Text("Float:  %d", iam_detail::g_float.pool.GetAliveCount());
-		ImGui::Text("Vec2:   %d", iam_detail::g_vec2.pool.GetAliveCount());
-		ImGui::Text("Vec4:   %d", iam_detail::g_vec4.pool.GetAliveCount());
-		ImGui::Text("Int:    %d", iam_detail::g_int.pool.GetAliveCount());
-		ImGui::Text("Color:  %d", iam_detail::g_color.pool.GetAliveCount());
-		int total = iam_detail::g_float.pool.GetAliveCount() +
-		            iam_detail::g_vec2.pool.GetAliveCount() +
-		            iam_detail::g_vec4.pool.GetAliveCount() +
-		            iam_detail::g_int.pool.GetAliveCount() +
-		            iam_detail::g_color.pool.GetAliveCount();
-		ImGui::Unindent();
-		ImGui::Text("Total:  %d", total);
-	}
-
-	// Clip system stats
-	if (ImGui::CollapsingHeader("Clip System Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-		using namespace iam_clip_detail;
-		ImGui::Text("Clips:     %d", g_clip_sys.clips.Size);
-		ImGui::Text("Instances: %d", g_clip_sys.instances.Size);
-
-		// Count active instances
-		int active = 0;
-		for (int i = 0; i < g_clip_sys.instances.Size; ++i) {
-			if (g_clip_sys.instances[i].playing) active++;
-		}
-		ImGui::Text("Playing:   %d", active);
-	}
-
-	// Custom easing slots
-	if (ImGui::CollapsingHeader("Custom Easing Slots")) {
-		for (int i = 0; i < 16; i++) {
-			bool registered = iam_detail::g_custom_ease[i] != nullptr;
-			ImGui::Text("Slot %2d: %s", i, registered ? "Registered" : "-");
-		}
-	}
-
-	ImGui::End();
 }
 
 // ----------------------------------------------------
@@ -5143,4 +5286,341 @@ void iam_show_animation_inspector(bool* p_open) {
 	}
 
 	ImGui::End();
+}
+
+// ----------------------------------------------------
+// Unified Inspector (combines Debug Window + Animation Inspector)
+// ----------------------------------------------------
+
+void iam_show_unified_inspector(bool* p_open) {
+	if (!ImGui::Begin("ImAnim Inspector", p_open, ImGuiWindowFlags_None)) {
+		ImGui::End();
+		return;
+	}
+
+	if (ImGui::BeginTabBar("UnifiedInspectorTabs")) {
+		// Debug Tab
+		if (ImGui::BeginTabItem("Debug")) {
+			// Time scale control
+			if (ImGui::CollapsingHeader("Time Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
+				float scale = iam_detail::g_time_scale;
+				ImGui::SliderFloat("Global Time Scale", &scale, 0.0f, 2.0f, "%.2fx");
+				if (scale != iam_detail::g_time_scale) {
+					iam_detail::g_time_scale = scale;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Reset##timescale")) {
+					iam_detail::g_time_scale = 1.0f;
+				}
+
+				ImGui::Text("Presets:");
+				ImGui::SameLine();
+				if (ImGui::SmallButton("0.1x")) iam_detail::g_time_scale = 0.1f;
+				ImGui::SameLine();
+				if (ImGui::SmallButton("0.25x")) iam_detail::g_time_scale = 0.25f;
+				ImGui::SameLine();
+				if (ImGui::SmallButton("0.5x")) iam_detail::g_time_scale = 0.5f;
+				ImGui::SameLine();
+				if (ImGui::SmallButton("1x")) iam_detail::g_time_scale = 1.0f;
+				ImGui::SameLine();
+				if (ImGui::SmallButton("2x")) iam_detail::g_time_scale = 2.0f;
+			}
+
+			// Tween stats
+			if (ImGui::CollapsingHeader("Tween Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Active Tweens:");
+				ImGui::Indent();
+				ImGui::Text("Float:  %d", iam_detail::g_float.pool.GetAliveCount());
+				ImGui::Text("Vec2:   %d", iam_detail::g_vec2.pool.GetAliveCount());
+				ImGui::Text("Vec4:   %d", iam_detail::g_vec4.pool.GetAliveCount());
+				ImGui::Text("Int:    %d", iam_detail::g_int.pool.GetAliveCount());
+				ImGui::Text("Color:  %d", iam_detail::g_color.pool.GetAliveCount());
+				int total = iam_detail::g_float.pool.GetAliveCount() +
+				            iam_detail::g_vec2.pool.GetAliveCount() +
+				            iam_detail::g_vec4.pool.GetAliveCount() +
+				            iam_detail::g_int.pool.GetAliveCount() +
+				            iam_detail::g_color.pool.GetAliveCount();
+				ImGui::Unindent();
+				ImGui::Text("Total:  %d", total);
+			}
+
+			// Clip stats
+			if (ImGui::CollapsingHeader("Clip Stats")) {
+				ImGui::Text("Registered Clips: %d", iam_clip_detail::g_clip_sys.clips.Size);
+				ImGui::Text("Active Instances: %d", iam_clip_detail::g_clip_sys.instances.Size);
+			}
+
+			ImGui::EndTabItem();
+		}
+
+		// Animation Inspector Tab
+		if (ImGui::BeginTabItem("Animations")) {
+			// List active clips/instances
+			auto& instances = iam_clip_detail::g_clip_sys.instances;
+			if (instances.Size == 0) {
+				ImGui::TextDisabled("No active animation instances");
+			} else {
+				for (int i = 0; i < instances.Size; i++) {
+					auto& inst = instances[i];
+					ImGui::PushID(i);
+					if (ImGui::TreeNode("Instance", "Instance %d (clip 0x%08X)", i, inst.clip_id)) {
+						ImGui::Text("Clip ID: 0x%08X", inst.clip_id);
+						ImGui::Text("Time: %.2f", inst.time);
+						ImGui::Text("Playing: %s", inst.playing ? "Yes" : "No");
+						ImGui::Text("Loops Left: %d", inst.loops_left);
+						ImGui::TreePop();
+					}
+					ImGui::PopID();
+				}
+			}
+			ImGui::EndTabItem();
+		}
+
+		// Performance Tab
+		if (ImGui::BeginTabItem("Performance")) {
+			auto& prof = iam_detail::g_profiler;
+
+			// Enable/disable toggle
+			bool enabled = prof.enabled;
+			if (ImGui::Checkbox("Enable Profiler", &enabled)) {
+				iam_profiler_enable(enabled);
+			}
+
+			if (!prof.enabled) {
+				ImGui::TextDisabled("Profiler is disabled. Enable to collect timing data.");
+				ImGui::TextDisabled("Call iam_profiler_begin_frame() at frame start,");
+				ImGui::TextDisabled("iam_profiler_end_frame() at frame end.");
+			} else {
+				ImGui::Separator();
+
+				// Frame time graph
+				if (ImGui::CollapsingHeader("Frame Time", ImGuiTreeNodeFlags_DefaultOpen)) {
+					// Calculate average frame time
+					float avg_frame_time = 0.0f;
+					float max_frame_time = 0.0f;
+					for (int i = 0; i < iam_detail::PROFILER_HISTORY_SIZE; i++) {
+						avg_frame_time += prof.frame_history[i];
+						if (prof.frame_history[i] > max_frame_time) max_frame_time = prof.frame_history[i];
+					}
+					avg_frame_time /= iam_detail::PROFILER_HISTORY_SIZE;
+
+					ImGui::Text("Current: %.3f ms | Avg: %.3f ms | Max: %.3f ms",
+						prof.frame_total_time, avg_frame_time, max_frame_time);
+
+					// Plot frame time history
+					char overlay[64];
+					snprintf(overlay, sizeof(overlay), "%.2f ms", (float)prof.frame_total_time);
+					ImGui::PlotLines("##FrameTime", prof.frame_history, iam_detail::PROFILER_HISTORY_SIZE,
+						prof.frame_history_idx, overlay, 0.0f, max_frame_time * 1.2f, ImVec2(-1, 80));
+				}
+
+				// Per-section breakdown
+				if (ImGui::CollapsingHeader("Section Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (prof.section_count == 0) {
+						ImGui::TextDisabled("No profiler sections recorded.");
+						ImGui::TextDisabled("Use iam_profiler_begin(\"name\") and iam_profiler_end() in code.");
+					} else {
+						// Sort sections by time for display
+						ImGui::Columns(4, "ProfilerSections");
+						ImGui::SetColumnWidth(0, 200);
+						ImGui::SetColumnWidth(1, 100);
+						ImGui::SetColumnWidth(2, 60);
+						ImGui::SetColumnWidth(3, 280);
+						ImGui::Text("Section"); ImGui::NextColumn();
+						ImGui::Text("Time (ms)"); ImGui::NextColumn();
+						ImGui::Text("Calls"); ImGui::NextColumn();
+						ImGui::Text("Graph"); ImGui::NextColumn();
+						ImGui::Separator();
+
+						float row_height = 40.0f;
+						for (int i = 0; i < prof.section_count; i++) {
+							auto& sec = prof.sections[i];
+							// Calculate max for this section's history
+							float sec_max = 0.0f;
+							for (int j = 0; j < iam_detail::PROFILER_HISTORY_SIZE; j++) {
+								if (sec.history[j] > sec_max) sec_max = sec.history[j];
+							}
+							if (sec_max < 0.01f) sec_max = 0.01f;
+
+							// Vertically center text with plot height
+							float text_offset = (row_height - ImGui::GetTextLineHeight()) * 0.5f;
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() + text_offset);
+							ImGui::Text("%s", sec.name); ImGui::NextColumn();
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() + text_offset);
+							ImGui::Text("%.3f", sec.accumulated_time); ImGui::NextColumn();
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() + text_offset);
+							ImGui::Text("%d", sec.call_count); ImGui::NextColumn();
+							ImGui::PushID(i);
+							ImGui::PlotLines("##SectionGraph", sec.history, iam_detail::PROFILER_HISTORY_SIZE,
+								sec.history_idx, nullptr, 0.0f, sec_max * 1.2f, ImVec2(250, row_height));
+							ImGui::PopID();
+							ImGui::NextColumn();
+						}
+						ImGui::Columns(1);
+					}
+				}
+			}
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	ImGui::End();
+}
+
+// ----------------------------------------------------
+// Drag Feedback - animated feedback for drag operations
+// ----------------------------------------------------
+
+namespace iam_detail {
+	struct drag_state {
+		ImVec2 start_pos;
+		ImVec2 current_pos;
+		ImVec2 prev_pos;
+		ImVec2 velocity;
+		bool is_dragging;
+		bool is_snapping;
+		float snap_progress;
+		ImVec2 snap_start;
+		ImVec2 snap_target;
+		float snap_duration;
+		int snap_ease;
+	};
+	static ImGuiStorage g_drag_states;
+}
+
+iam_drag_feedback iam_drag_begin(ImGuiID id, ImVec2 pos) {
+	iam_detail::drag_state* state = (iam_detail::drag_state*)iam_detail::g_drag_states.GetVoidPtr(id);
+	if (!state) {
+		state = IM_NEW(iam_detail::drag_state)();
+		iam_detail::g_drag_states.SetVoidPtr(id, state);
+	}
+
+	state->start_pos = pos;
+	state->current_pos = pos;
+	state->prev_pos = pos;
+	state->velocity = ImVec2(0, 0);
+	state->is_dragging = true;
+	state->is_snapping = false;
+	state->snap_progress = 0.0f;
+
+	iam_drag_feedback fb;
+	fb.position = pos;
+	fb.offset = ImVec2(0, 0);
+	fb.velocity = ImVec2(0, 0);
+	fb.is_dragging = true;
+	fb.is_snapping = false;
+	fb.snap_progress = 0.0f;
+	return fb;
+}
+
+iam_drag_feedback iam_drag_update(ImGuiID id, ImVec2 pos, float dt) {
+	iam_detail::drag_state* state = (iam_detail::drag_state*)iam_detail::g_drag_states.GetVoidPtr(id);
+
+	iam_drag_feedback fb;
+	fb.position = pos;
+	fb.offset = ImVec2(0, 0);
+	fb.velocity = ImVec2(0, 0);
+	fb.is_dragging = false;
+	fb.is_snapping = false;
+	fb.snap_progress = 0.0f;
+
+	if (!state) return fb;
+
+	// Calculate velocity
+	if (dt > 0.0f) {
+		state->velocity.x = (pos.x - state->prev_pos.x) / dt;
+		state->velocity.y = (pos.y - state->prev_pos.y) / dt;
+	}
+	state->prev_pos = state->current_pos;
+	state->current_pos = pos;
+
+	fb.position = pos;
+	fb.offset = ImVec2(pos.x - state->start_pos.x, pos.y - state->start_pos.y);
+	fb.velocity = state->velocity;
+	fb.is_dragging = state->is_dragging;
+	fb.is_snapping = state->is_snapping;
+	fb.snap_progress = state->snap_progress;
+	return fb;
+}
+
+iam_drag_feedback iam_drag_release(ImGuiID id, ImVec2 pos, iam_drag_opts const& opts, float dt) {
+	iam_detail::drag_state* state = (iam_detail::drag_state*)iam_detail::g_drag_states.GetVoidPtr(id);
+
+	iam_drag_feedback fb;
+	fb.position = pos;
+	fb.offset = ImVec2(0, 0);
+	fb.velocity = ImVec2(0, 0);
+	fb.is_dragging = false;
+	fb.is_snapping = false;
+	fb.snap_progress = 1.0f;
+
+	if (!state) return fb;
+
+	state->is_dragging = false;
+
+	// Check for snap targets
+	ImVec2 snap_target = pos;
+	bool should_snap = false;
+
+	// Grid snapping
+	if (opts.snap_grid.x > 0 || opts.snap_grid.y > 0) {
+		if (opts.snap_grid.x > 0) snap_target.x = ImFloor(pos.x / opts.snap_grid.x + 0.5f) * opts.snap_grid.x;
+		if (opts.snap_grid.y > 0) snap_target.y = ImFloor(pos.y / opts.snap_grid.y + 0.5f) * opts.snap_grid.y;
+		should_snap = true;
+	}
+
+	// Point snapping (find closest)
+	if (opts.snap_points && opts.snap_points_count > 0) {
+		float min_dist = FLT_MAX;
+		for (int i = 0; i < opts.snap_points_count; i++) {
+			float dx = opts.snap_points[i].x - pos.x;
+			float dy = opts.snap_points[i].y - pos.y;
+			float dist = dx * dx + dy * dy;
+			if (dist < min_dist) {
+				min_dist = dist;
+				snap_target = opts.snap_points[i];
+			}
+		}
+		should_snap = true;
+	}
+
+	if (should_snap && opts.snap_duration > 0.0f) {
+		state->is_snapping = true;
+		state->snap_progress = 0.0f;
+		state->snap_start = pos;
+		state->snap_target = snap_target;
+		state->snap_duration = opts.snap_duration;
+		state->snap_ease = opts.ease_type;
+	}
+
+	// Update snapping animation
+	if (state->is_snapping) {
+		state->snap_progress += dt / state->snap_duration;
+		if (state->snap_progress >= 1.0f) {
+			state->snap_progress = 1.0f;
+			state->is_snapping = false;
+		}
+		float t = iam_detail::eval_preset_internal(state->snap_ease, state->snap_progress);
+		fb.position.x = state->snap_start.x + (state->snap_target.x - state->snap_start.x) * t;
+		fb.position.y = state->snap_start.y + (state->snap_target.y - state->snap_start.y) * t;
+	} else {
+		fb.position = should_snap ? snap_target : pos;
+	}
+
+	fb.offset = ImVec2(fb.position.x - state->start_pos.x, fb.position.y - state->start_pos.y);
+	fb.velocity = state->velocity;
+	fb.is_dragging = false;
+	fb.is_snapping = state->is_snapping;
+	fb.snap_progress = state->snap_progress;
+	return fb;
+}
+
+void iam_drag_cancel(ImGuiID id) {
+	iam_detail::drag_state* state = (iam_detail::drag_state*)iam_detail::g_drag_states.GetVoidPtr(id);
+	if (state) {
+		state->is_dragging = false;
+		state->is_snapping = false;
+	}
 }

@@ -83,7 +83,42 @@ void iam_register_custom_ease(int slot, iam_ease_fn fn);                        
 iam_ease_fn iam_get_custom_ease(int slot);                                          // Get registered custom easing function.
 
 // Debug UI
-void iam_show_debug_window(bool* p_open = nullptr);                                 // Show ImAnim debug window with stats and controls.
+void iam_show_unified_inspector(bool* p_open = nullptr);                            // Show unified inspector (merges debug window + animation inspector).
+
+// Performance Profiler
+void iam_profiler_enable(bool enable);                                              // Enable/disable the performance profiler.
+bool iam_profiler_is_enabled();                                                     // Check if profiler is enabled.
+void iam_profiler_begin_frame();                                                    // Call at frame start when profiler is enabled.
+void iam_profiler_end_frame();                                                      // Call at frame end when profiler is enabled.
+void iam_profiler_begin(const char* name);                                          // Begin a named profiler section.
+void iam_profiler_end();                                                            // End the current profiler section.
+
+// Drag Feedback - animated feedback for drag operations
+struct iam_drag_opts {
+	ImVec2 snap_grid;              // Grid size for snapping (0,0 = no grid)
+	ImVec2* snap_points;           // Array of custom snap points
+	int snap_points_count;         // Number of snap points
+	float snap_duration;           // Duration of snap animation
+	float overshoot;               // Overshoot amount (0 = none, 1 = normal)
+	int ease_type;                 // Easing type for snap animation
+
+	iam_drag_opts() : snap_grid(0, 0), snap_points(nullptr), snap_points_count(0),
+		snap_duration(0.2f), overshoot(0), ease_type(iam_ease_out_cubic) {}
+};
+
+struct iam_drag_feedback {
+	ImVec2 position;               // Current animated position
+	ImVec2 offset;                 // Offset from drag start
+	ImVec2 velocity;               // Current velocity estimate
+	bool is_dragging;              // Currently being dragged
+	bool is_snapping;              // Currently snapping to target
+	float snap_progress;           // Snap animation progress (0-1)
+};
+
+iam_drag_feedback iam_drag_begin(ImGuiID id, ImVec2 pos);                           // Start tracking drag at position.
+iam_drag_feedback iam_drag_update(ImGuiID id, ImVec2 pos, float dt);                // Update drag position during drag.
+iam_drag_feedback iam_drag_release(ImGuiID id, ImVec2 pos, iam_drag_opts const& opts, float dt); // Release drag with animated feedback.
+void iam_drag_cancel(ImGuiID id);                                                   // Cancel drag tracking.
 
 // Oscillators - continuous periodic animations
 enum iam_wave_type {
