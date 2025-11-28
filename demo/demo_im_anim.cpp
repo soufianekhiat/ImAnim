@@ -4993,6 +4993,497 @@ static void ShowDragFeedbackDemo()
 }
 
 // ============================================================
+// GRADIENT KEYFRAMES DEMO
+// ============================================================
+static void ShowGradientKeyframesDemo()
+{
+	ImGui::TextWrapped("Gradient keyframes allow you to interpolate between multi-stop color gradients, "
+		"not just single colors. Great for animated backgrounds, health bars, and color themes.");
+
+	float dt = GetSafeDeltaTime();
+
+	// Demo 1: Basic gradient interpolation
+	if (ImGui::TreeNode("Basic Gradient Interpolation")) {
+		static float blend = 0.5f;
+		ImGui::SliderFloat("Blend##GradientBasic", &blend, 0.0f, 1.0f);
+
+		// Create two gradients
+		iam_gradient grad_a;
+		grad_a.add(0.0f, ImVec4(1.0f, 0.0f, 0.0f, 1.0f))  // Red
+			  .add(0.5f, ImVec4(1.0f, 1.0f, 0.0f, 1.0f))  // Yellow
+			  .add(1.0f, ImVec4(0.0f, 1.0f, 0.0f, 1.0f)); // Green
+
+		iam_gradient grad_b;
+		grad_b.add(0.0f, ImVec4(0.0f, 0.5f, 1.0f, 1.0f))  // Blue
+			  .add(0.5f, ImVec4(0.5f, 0.0f, 1.0f, 1.0f))  // Purple
+			  .add(1.0f, ImVec4(1.0f, 0.0f, 0.5f, 1.0f)); // Pink
+
+		iam_gradient result = iam_gradient_lerp(grad_a, grad_b, blend);
+
+		// Draw gradient bar
+		ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+		ImVec2 bar_size(300.0f, 30.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		int segments = 50;
+		for (int i = 0; i < segments; i++) {
+			float t0 = (float)i / segments;
+			float t1 = (float)(i + 1) / segments;
+			ImVec4 c0 = result.sample(t0);
+			ImVec4 c1 = result.sample(t1);
+			ImU32 col0 = ImGui::ColorConvertFloat4ToU32(c0);
+			ImU32 col1 = ImGui::ColorConvertFloat4ToU32(c1);
+			draw->AddRectFilledMultiColor(
+				ImVec2(bar_pos.x + t0 * bar_size.x, bar_pos.y),
+				ImVec2(bar_pos.x + t1 * bar_size.x, bar_pos.y + bar_size.y),
+				col0, col1, col1, col0);
+		}
+		ImGui::Dummy(bar_size);
+
+		ImGui::TextDisabled("Top gradient: Red -> Yellow -> Green");
+		ImGui::TextDisabled("Bottom gradient: Blue -> Purple -> Pink");
+		ImGui::TreePop();
+	}
+
+	// Demo 2: Animated gradient tween
+	if (ImGui::TreeNode("Animated Gradient Tween")) {
+		static int target_idx = 0;
+		static const char* gradient_names[] = { "Sunset", "Ocean", "Forest", "Neon" };
+
+		// Define gradient presets
+		iam_gradient presets[4];
+
+		// Sunset
+		presets[0].add(0.0f, ImVec4(1.0f, 0.3f, 0.0f, 1.0f))
+				  .add(0.5f, ImVec4(1.0f, 0.6f, 0.2f, 1.0f))
+				  .add(1.0f, ImVec4(0.4f, 0.1f, 0.3f, 1.0f));
+
+		// Ocean
+		presets[1].add(0.0f, ImVec4(0.0f, 0.3f, 0.6f, 1.0f))
+				  .add(0.5f, ImVec4(0.0f, 0.6f, 0.8f, 1.0f))
+				  .add(1.0f, ImVec4(0.0f, 0.9f, 0.9f, 1.0f));
+
+		// Forest
+		presets[2].add(0.0f, ImVec4(0.1f, 0.3f, 0.1f, 1.0f))
+				  .add(0.5f, ImVec4(0.2f, 0.6f, 0.2f, 1.0f))
+				  .add(1.0f, ImVec4(0.5f, 0.8f, 0.3f, 1.0f));
+
+		// Neon
+		presets[3].add(0.0f, ImVec4(1.0f, 0.0f, 1.0f, 1.0f))
+				  .add(0.33f, ImVec4(0.0f, 1.0f, 1.0f, 1.0f))
+				  .add(0.66f, ImVec4(1.0f, 1.0f, 0.0f, 1.0f))
+				  .add(1.0f, ImVec4(1.0f, 0.0f, 1.0f, 1.0f));
+
+		for (int i = 0; i < 4; i++) {
+			if (ImGui::RadioButton(gradient_names[i], target_idx == i)) {
+				target_idx = i;
+			}
+			if (i < 3) ImGui::SameLine();
+		}
+
+		iam_gradient current = iam_tween_gradient(
+			ImGui::GetID("gradient_tween"),
+			ImGui::GetID("ch_gradient"),
+			presets[target_idx],
+			0.8f,
+			iam_ease_preset(iam_ease_out_cubic),
+			iam_policy_crossfade,
+			iam_col_oklab,
+			dt
+		);
+
+		// Draw animated gradient bar
+		ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+		ImVec2 bar_size(300.0f, 40.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		int segments = 60;
+		for (int i = 0; i < segments; i++) {
+			float t0 = (float)i / segments;
+			float t1 = (float)(i + 1) / segments;
+			ImVec4 c0 = current.sample(t0);
+			ImVec4 c1 = current.sample(t1);
+			ImU32 col0 = ImGui::ColorConvertFloat4ToU32(c0);
+			ImU32 col1 = ImGui::ColorConvertFloat4ToU32(c1);
+			draw->AddRectFilledMultiColor(
+				ImVec2(bar_pos.x + t0 * bar_size.x, bar_pos.y),
+				ImVec2(bar_pos.x + t1 * bar_size.x, bar_pos.y + bar_size.y),
+				col0, col1, col1, col0);
+		}
+		ImGui::Dummy(bar_size);
+
+		ImGui::TextDisabled("Click presets to see smooth gradient transitions.");
+		ImGui::TreePop();
+	}
+
+	// Demo 3: Health bar with gradient
+	if (ImGui::TreeNode("Health Bar with Gradient")) {
+		static float health = 0.75f;
+		ImGui::SliderFloat("Health", &health, 0.0f, 1.0f);
+
+		// Gradient from red (low) to yellow (mid) to green (high)
+		iam_gradient health_gradient;
+		health_gradient.add(0.0f, ImVec4(0.8f, 0.1f, 0.1f, 1.0f))   // Red (critical)
+					   .add(0.25f, ImVec4(0.9f, 0.4f, 0.1f, 1.0f))  // Orange (low)
+					   .add(0.5f, ImVec4(0.9f, 0.9f, 0.2f, 1.0f))   // Yellow (medium)
+					   .add(0.75f, ImVec4(0.4f, 0.8f, 0.3f, 1.0f))  // Light green
+					   .add(1.0f, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));  // Green (full)
+
+		// Draw health bar
+		ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+		ImVec2 bar_size(250.0f, 25.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		// Background
+		draw->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_size.x, bar_pos.y + bar_size.y),
+			IM_COL32(40, 40, 40, 255), 4.0f);
+
+		// Filled portion with gradient
+		int segments = 30;
+		float fill_width = bar_size.x * health;
+		for (int i = 0; i < segments; i++) {
+			float t0 = (float)i / segments;
+			float t1 = (float)(i + 1) / segments;
+			if (t1 * bar_size.x > fill_width) break;
+
+			float sample_t = t0 * health;  // Sample gradient based on fill position
+			ImVec4 col = health_gradient.sample(sample_t + (1.0f - health) * 0.5f);
+			ImU32 c = ImGui::ColorConvertFloat4ToU32(col);
+			draw->AddRectFilled(
+				ImVec2(bar_pos.x + t0 * bar_size.x, bar_pos.y),
+				ImVec2(bar_pos.x + ImMin(t1 * bar_size.x, fill_width), bar_pos.y + bar_size.y),
+				c, 4.0f);
+		}
+
+		// Border
+		draw->AddRect(bar_pos, ImVec2(bar_pos.x + bar_size.x, bar_pos.y + bar_size.y),
+			IM_COL32(100, 100, 100, 255), 4.0f);
+
+		ImGui::Dummy(bar_size);
+		ImGui::TextDisabled("Health bar color changes based on value.");
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// TRANSFORM INTERPOLATION DEMO
+// ============================================================
+static void ShowTransformInterpolationDemo()
+{
+	ImGui::TextWrapped("Transform interpolation allows you to blend 2D transforms (position, rotation, scale) "
+		"with proper shortest-path rotation. Great for UI elements, sprites, and complex animations.");
+
+	float dt = GetSafeDeltaTime();
+
+	// Demo 1: Basic transform interpolation
+	if (ImGui::TreeNode("Basic Transform Blend")) {
+		static float blend = 0.5f;
+		ImGui::SliderFloat("Blend##TransformBasic", &blend, 0.0f, 1.0f);
+
+		iam_transform t_a;
+		t_a.position = ImVec2(50.0f, 50.0f);
+		t_a.rotation = 0.0f;
+		t_a.scale = ImVec2(1.0f, 1.0f);
+
+		iam_transform t_b;
+		t_b.position = ImVec2(200.0f, 80.0f);
+		t_b.rotation = 1.57f;  // 90 degrees
+		t_b.scale = ImVec2(1.5f, 0.5f);
+
+		iam_transform result = iam_transform_lerp(t_a, t_b, blend);
+
+		// Draw canvas
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300.0f, 150.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		draw->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255));
+
+		// Draw transformed rectangle
+		float hw = 30.0f * result.scale.x;
+		float hh = 20.0f * result.scale.y;
+		float cos_r = cosf(result.rotation);
+		float sin_r = sinf(result.rotation);
+
+		ImVec2 center(canvas_pos.x + result.position.x, canvas_pos.y + result.position.y);
+		ImVec2 corners[4] = {
+			ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
+		};
+
+		ImVec2 transformed[4];
+		for (int i = 0; i < 4; i++) {
+			transformed[i].x = center.x + corners[i].x * cos_r - corners[i].y * sin_r;
+			transformed[i].y = center.y + corners[i].x * sin_r + corners[i].y * cos_r;
+		}
+
+		draw->AddQuadFilled(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(100, 150, 255, 200));
+		draw->AddQuad(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(150, 200, 255, 255), 2.0f);
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Blending position, rotation (90 deg), and non-uniform scale.");
+		ImGui::TreePop();
+	}
+
+	// Demo 2: Animated transform tween
+	if (ImGui::TreeNode("Animated Transform Tween")) {
+		static int target_idx = 0;
+		static const char* pose_names[] = { "Center", "Top-Left", "Bottom-Right", "Spinning" };
+
+		iam_transform poses[4];
+
+		// Center (default)
+		poses[0].position = ImVec2(150.0f, 75.0f);
+		poses[0].rotation = 0.0f;
+		poses[0].scale = ImVec2(1.0f, 1.0f);
+
+		// Top-left
+		poses[1].position = ImVec2(50.0f, 30.0f);
+		poses[1].rotation = -0.3f;
+		poses[1].scale = ImVec2(0.7f, 0.7f);
+
+		// Bottom-right
+		poses[2].position = ImVec2(250.0f, 120.0f);
+		poses[2].rotation = 0.5f;
+		poses[2].scale = ImVec2(1.3f, 1.3f);
+
+		// Spinning (rotated 180 degrees)
+		poses[3].position = ImVec2(150.0f, 75.0f);
+		poses[3].rotation = 3.14159f;
+		poses[3].scale = ImVec2(1.0f, 1.0f);
+
+		for (int i = 0; i < 4; i++) {
+			if (ImGui::RadioButton(pose_names[i], target_idx == i)) {
+				target_idx = i;
+			}
+			if (i < 3) ImGui::SameLine();
+		}
+
+		iam_transform current = iam_tween_transform(
+			ImGui::GetID("transform_tween"),
+			ImGui::GetID("ch_transform"),
+			poses[target_idx],
+			0.6f,
+			iam_ease_preset(iam_ease_out_back),
+			iam_policy_crossfade,
+			iam_rotation_shortest,
+			dt
+		);
+
+		// Draw canvas
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300.0f, 150.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		draw->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255));
+
+		// Draw animated rectangle
+		float hw = 25.0f * current.scale.x;
+		float hh = 25.0f * current.scale.y;
+		float cos_r = cosf(current.rotation);
+		float sin_r = sinf(current.rotation);
+
+		ImVec2 center(canvas_pos.x + current.position.x, canvas_pos.y + current.position.y);
+		ImVec2 corners[4] = {
+			ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
+		};
+
+		ImVec2 transformed[4];
+		for (int i = 0; i < 4; i++) {
+			transformed[i].x = center.x + corners[i].x * cos_r - corners[i].y * sin_r;
+			transformed[i].y = center.y + corners[i].x * sin_r + corners[i].y * cos_r;
+		}
+
+		draw->AddQuadFilled(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(255, 150, 100, 200));
+		draw->AddQuad(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(255, 200, 150, 255), 2.0f);
+
+		// Draw direction indicator
+		ImVec2 arrow_end(center.x + 20.0f * cos_r, center.y + 20.0f * sin_r);
+		draw->AddLine(center, arrow_end, IM_COL32(255, 255, 255, 255), 2.0f);
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Uses iam_rotation_shortest (default).");
+		ImGui::TreePop();
+	}
+
+	// Demo 3: Rotation Modes
+	if (ImGui::TreeNode("Rotation Modes")) {
+		static int rotation_mode = iam_rotation_shortest;
+		static float target_angle = 0.0f;
+
+		ImGui::Text("Rotation Mode:");
+		ImGui::RadioButton("Shortest##RotMode", &rotation_mode, iam_rotation_shortest);
+		ImGui::SameLine();
+		ImGui::RadioButton("Longest##RotMode", &rotation_mode, iam_rotation_longest);
+		ImGui::SameLine();
+		ImGui::RadioButton("Clockwise##RotMode", &rotation_mode, iam_rotation_cw);
+		ImGui::RadioButton("Counter-CW##RotMode", &rotation_mode, iam_rotation_ccw);
+		ImGui::SameLine();
+		ImGui::RadioButton("Direct##RotMode", &rotation_mode, iam_rotation_direct);
+
+		ImGui::Separator();
+		ImGui::Text("Target Angle:");
+		if (ImGui::Button("0 deg")) target_angle = 0.0f;
+		ImGui::SameLine();
+		if (ImGui::Button("90 deg")) target_angle = 1.5708f;
+		ImGui::SameLine();
+		if (ImGui::Button("180 deg")) target_angle = 3.14159f;
+		ImGui::SameLine();
+		if (ImGui::Button("270 deg")) target_angle = 4.7124f;
+		ImGui::SameLine();
+		if (ImGui::Button("360 deg")) target_angle = 6.28318f;
+
+		iam_transform target;
+		target.position = ImVec2(150.0f, 75.0f);
+		target.rotation = target_angle;
+		target.scale = ImVec2(1.0f, 1.0f);
+
+		iam_transform current = iam_tween_transform(
+			ImGui::GetID("rotation_mode_demo"),
+			ImGui::GetID("ch_rot_mode"),
+			target,
+			1.0f,
+			iam_ease_preset(iam_ease_out_cubic),
+			iam_policy_crossfade,
+			rotation_mode,
+			dt
+		);
+
+		// Draw canvas
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300.0f, 150.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		draw->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255));
+
+		// Draw animated rectangle
+		float hw = 40.0f;
+		float hh = 25.0f;
+		float cos_r = cosf(current.rotation);
+		float sin_r = sinf(current.rotation);
+
+		ImVec2 center(canvas_pos.x + current.position.x, canvas_pos.y + current.position.y);
+		ImVec2 corners[4] = {
+			ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
+		};
+
+		ImVec2 transformed[4];
+		for (int i = 0; i < 4; i++) {
+			transformed[i].x = center.x + corners[i].x * cos_r - corners[i].y * sin_r;
+			transformed[i].y = center.y + corners[i].x * sin_r + corners[i].y * cos_r;
+		}
+
+		draw->AddQuadFilled(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(100, 200, 150, 200));
+		draw->AddQuad(transformed[0], transformed[1], transformed[2], transformed[3],
+			IM_COL32(150, 255, 200, 255), 2.0f);
+
+		// Draw direction indicator
+		ImVec2 arrow_end(center.x + 30.0f * cos_r, center.y + 30.0f * sin_r);
+		draw->AddLine(center, arrow_end, IM_COL32(255, 255, 255, 255), 2.0f);
+		draw->AddCircleFilled(arrow_end, 4.0f, IM_COL32(255, 255, 255, 255));
+
+		ImGui::Dummy(canvas_size);
+
+		// Display current angle
+		float deg = current.rotation * 57.2958f;
+		ImGui::Text("Current: %.1f deg (%.2f rad)", deg, current.rotation);
+
+		ImGui::TextDisabled("Shortest: takes the short way (<180 deg)");
+		ImGui::TextDisabled("Longest: takes the long way (>180 deg)");
+		ImGui::TextDisabled("CW/CCW: always rotates in one direction");
+		ImGui::TextDisabled("Direct: raw lerp (can spin multiple times)");
+		ImGui::TreePop();
+	}
+
+	// Demo 3: Transform composition
+	if (ImGui::TreeNode("Transform Composition")) {
+		static float time = 0.0f;
+		time += dt;
+
+		// Parent transform (orbiting)
+		iam_transform parent;
+		parent.position = ImVec2(150.0f, 75.0f);
+		parent.rotation = time * 0.5f;
+		parent.scale = ImVec2(1.0f, 1.0f);
+
+		// Child transform (relative to parent)
+		iam_transform child;
+		child.position = ImVec2(50.0f, 0.0f);  // Offset from parent
+		child.rotation = time * 2.0f;          // Spinning faster
+		child.scale = ImVec2(0.5f, 0.5f);
+
+		// Compose transforms
+		iam_transform composed = parent * child;
+
+		// Draw canvas
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300.0f, 150.0f);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+
+		draw->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255));
+
+		// Draw parent (larger square)
+		{
+			float hw = 20.0f;
+			float hh = 20.0f;
+			float cos_r = cosf(parent.rotation);
+			float sin_r = sinf(parent.rotation);
+			ImVec2 center(canvas_pos.x + parent.position.x, canvas_pos.y + parent.position.y);
+			ImVec2 corners[4] = {
+				ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
+			};
+			ImVec2 transformed[4];
+			for (int i = 0; i < 4; i++) {
+				transformed[i].x = center.x + corners[i].x * cos_r - corners[i].y * sin_r;
+				transformed[i].y = center.y + corners[i].x * sin_r + corners[i].y * cos_r;
+			}
+			draw->AddQuadFilled(transformed[0], transformed[1], transformed[2], transformed[3],
+				IM_COL32(100, 100, 200, 150));
+		}
+
+		// Draw child (smaller square, orbiting)
+		{
+			float hw = 10.0f * composed.scale.x;
+			float hh = 10.0f * composed.scale.y;
+			float cos_r = cosf(composed.rotation);
+			float sin_r = sinf(composed.rotation);
+			ImVec2 center(canvas_pos.x + composed.position.x, canvas_pos.y + composed.position.y);
+			ImVec2 corners[4] = {
+				ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
+			};
+			ImVec2 transformed[4];
+			for (int i = 0; i < 4; i++) {
+				transformed[i].x = center.x + corners[i].x * cos_r - corners[i].y * sin_r;
+				transformed[i].y = center.y + corners[i].x * sin_r + corners[i].y * cos_r;
+			}
+			draw->AddQuadFilled(transformed[0], transformed[1], transformed[2], transformed[3],
+				IM_COL32(255, 200, 100, 200));
+		}
+
+		// Draw connection line
+		ImVec2 parent_center(canvas_pos.x + parent.position.x, canvas_pos.y + parent.position.y);
+		ImVec2 child_center(canvas_pos.x + composed.position.x, canvas_pos.y + composed.position.y);
+		draw->AddLine(parent_center, child_center, IM_COL32(150, 150, 150, 150), 1.0f);
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Blue = parent, Orange = child (orbiting with own spin).");
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
 // ANIMATION INSPECTOR DEMO
 // ============================================================
 static void ShowAnimationInspectorDemo()
@@ -5148,6 +5639,18 @@ void ImAnimDemoWindow()
 	if (ImGui::CollapsingHeader("Text Along Paths")) {
 		iam_profiler_begin("Text Along Paths");
 		ShowTextAlongPathDemo();
+		iam_profiler_end();
+	}
+
+	if (ImGui::CollapsingHeader("Gradient Keyframes")) {
+		iam_profiler_begin("Gradient Keyframes");
+		ShowGradientKeyframesDemo();
+		iam_profiler_end();
+	}
+
+	if (ImGui::CollapsingHeader("Transform Interpolation")) {
+		iam_profiler_begin("Transform Interpolation");
+		ShowTransformInterpolationDemo();
 		iam_profiler_end();
 	}
 
