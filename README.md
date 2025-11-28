@@ -6,7 +6,13 @@ Animation helpers for [Dear ImGui](https://github.com/ocornut/imgui). Provides s
 
 - **Tween API** - Immediate-mode animation for floats, vec2, vec4, int, and colors
 - **Clip API** - Timeline-based keyframe animations (anime.js-style)
+- **Motion Paths** - Animate along bezier curves and Catmull-Rom splines
+- **Timeline Markers** - Trigger callbacks at specific times within clips
+- **Animation Chaining** - Fluent `.then()` syntax to chain clips together
 - **Stagger Animations** - Cascading effects for lists, grids, and UI elements
+- **Oscillators** - Continuous sine, triangle, sawtooth, square wave generators
+- **Shake & Wiggle** - Procedural noise animations for feedback and organic movement
+- **Scroll Animation** - Smooth animated scrolling within ImGui windows
 - **30+ Easing Functions** - Standard presets plus cubic-bezier, steps, spring physics
 - **Color Blending** - sRGB, Linear, HSV, OKLAB, and OKLCH color spaces
 - **Tween Policies** - Crossfade, cut, or queue animations
@@ -159,6 +165,121 @@ iam_clip::begin(id)
     .end();
 ```
 
+### Timeline Markers
+
+Trigger callbacks at specific times during clip playback:
+
+```cpp
+void my_marker_callback(ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user) {
+    // Called when playback crosses this time point
+    printf("Marker hit at %.2fs!\n", marker_time);
+}
+
+iam_clip::begin(ImHashStr("marked_clip"))
+    .key_float(CH_VALUE, 0.0f, 0.0f, iam_ease_linear)
+    .key_float(CH_VALUE, 3.0f, 100.0f, iam_ease_linear)
+    .marker(0.5f, my_marker_callback)                           // Auto-generated ID
+    .marker(1.0f, ImHashStr("checkpoint"), my_marker_callback)  // Named marker
+    .marker(2.0f, my_marker_callback, my_user_data)             // With user data
+    .end();
+```
+
+Markers are automatically triggered:
+- During normal playback when the time crosses the marker
+- During reverse playback
+- On each loop iteration when looping
+
+### Animation Chaining
+
+Chain clips to play in sequence using the fluent `.then()` API:
+
+```cpp
+// Play clip A, then automatically start clip B when A completes
+iam_play(clip_a, ImHashStr("inst_a"))
+    .then(clip_b)                     // Auto-generates instance ID for clip_b
+    .then_delay(0.1f);                // Optional delay before clip_b starts
+
+// Chain with explicit instance IDs for later querying
+iam_play(clip_a, ImHashStr("inst_a"))
+    .then(clip_b, ImHashStr("inst_b"))
+    .then_delay(0.2f);
+
+// Multi-step chains (set up B->C when B starts)
+iam_instance inst_b = iam_get_instance(ImHashStr("inst_b"));
+if (inst_b.is_playing()) {
+    inst_b.then(clip_c, ImHashStr("inst_c"));
+}
+```
+
+## Motion Paths
+
+Animate positions along bezier curves and Catmull-Rom splines.
+
+### Defining Paths
+
+```cpp
+// Quadratic bezier path
+iam_path::begin(ImHashStr("my_path"), ImVec2(0, 0))   // Start point
+    .quadratic_to(ImVec2(50, -50), ImVec2(100, 0))   // Control point, end point
+    .line_to(ImVec2(150, 0))                          // Linear segment
+    .end();
+
+// Cubic bezier path
+iam_path::begin(ImHashStr("cubic_path"), ImVec2(0, 50))
+    .cubic_to(ImVec2(30, 0), ImVec2(70, 100), ImVec2(100, 50))  // 2 control points, end
+    .cubic_to(ImVec2(130, 0), ImVec2(170, 100), ImVec2(200, 50))
+    .end();
+
+// Catmull-Rom spline (smooth curve through points)
+iam_path::begin(ImHashStr("smooth_path"), ImVec2(0, 50))
+    .catmull_to(ImVec2(50, 20))           // Curve passes through these points
+    .catmull_to(ImVec2(100, 80))
+    .catmull_to(ImVec2(150, 50))
+    .catmull_to(ImVec2(200, 50), 0.7f)    // Custom tension (0.5 = default)
+    .close()                               // Close path back to start
+    .end();
+```
+
+### Animating Along Paths
+
+```cpp
+// Tween position along a path
+ImVec2 pos = iam_tween_path(
+    id, channel_id, path_id,
+    duration, ease, policy, dt
+);
+
+// Get rotation angle (radians) aligned to path tangent
+float angle = iam_tween_path_angle(
+    id, channel_id, path_id,
+    duration, ease, policy, dt
+);
+
+// Manual path evaluation (no animation state)
+ImVec2 point = iam_path_evaluate(path_id, t);     // t in [0,1]
+ImVec2 tangent = iam_path_tangent(path_id, t);    // Normalized direction
+float angle = iam_path_angle(path_id, t);         // Rotation in radians
+float length = iam_path_length(path_id);          // Approximate total length
+```
+
+### Direct Curve Functions
+
+For one-off curve evaluation without building paths:
+
+```cpp
+// Bezier curves
+ImVec2 p = iam_bezier_quadratic(p0, p1, p2, t);          // Quadratic
+ImVec2 p = iam_bezier_cubic(p0, p1, p2, p3, t);          // Cubic
+
+// Catmull-Rom (curve passes through p1 and p2)
+ImVec2 p = iam_catmull_rom(p0, p1, p2, p3, t, tension);
+
+// Derivatives (for velocity/direction)
+ImVec2 vel = iam_bezier_quadratic_deriv(p0, p1, p2, t);
+ImVec2 vel = iam_bezier_cubic_deriv(p0, p1, p2, p3, t);
+ImVec2 vel = iam_catmull_rom_deriv(p0, p1, p2, p3, t, tension);
+```
+
 ## Stagger Animations
 
 Create cascading effects for multiple elements with automatic delay offsets.
@@ -223,6 +344,131 @@ for (int i = 0; i < 12; i++) {
 
 // Start from edges (pinch effect)
 .set_stagger(count, 0.06f, -1.0f)
+```
+
+## Oscillators
+
+Continuous periodic animations with multiple wave shapes.
+
+```cpp
+// Basic oscillation (returns value between -amplitude and +amplitude)
+float offset_y = iam_oscillate(
+    ImGui::GetID("pulse"),
+    50.0f,              // amplitude
+    1.0f,               // frequency (Hz)
+    iam_wave_sine,      // wave type
+    0.0f,               // phase offset
+    dt                  // delta time
+);
+
+// 2D oscillation (Lissajous patterns)
+ImVec2 offset = iam_oscillate_vec2(
+    ImGui::GetID("lissajous"),
+    ImVec2(40.0f, 40.0f),    // amplitude
+    ImVec2(1.0f, 2.0f),      // frequency
+    iam_wave_sine,           // wave type
+    ImVec2(0.0f, 0.0f),      // phase
+    dt
+);
+
+// 4D oscillation
+ImVec4 osc4 = iam_oscillate_vec4(id, amp4, freq4, wave_type, phase4, dt);
+
+// Color oscillation (pulsing glow in HSV)
+ImVec4 color = iam_oscillate_color(
+    ImGui::GetID("glow"),
+    ImVec4(0.5f, 0.8f, 1.0f, 1.0f),  // base color (sRGB)
+    ImVec4(0.0f, 0.0f, 0.3f, 0.0f),  // amplitude (V in HSV)
+    2.0f,                             // frequency
+    iam_wave_sine,                    // wave type
+    0.0f,                             // phase
+    iam_col_hsv,                      // color space
+    dt
+);
+```
+
+### Wave Types
+
+| Type | Description |
+|------|-------------|
+| `iam_wave_sine` | Smooth sinusoidal wave |
+| `iam_wave_triangle` | Linear ramp up and down |
+| `iam_wave_sawtooth` | Linear ramp up, instant reset |
+| `iam_wave_square` | On/off pulse wave |
+
+## Shake & Wiggle
+
+Procedural noise-based animations for UI feedback.
+
+```cpp
+// Decaying shake (error feedback, impacts)
+// Triggered by iam_trigger_shake(), then decays to 0
+ImGuiID shake_id = ImGui::GetID("error");
+if (validate_failed) {
+    iam_trigger_shake(shake_id);
+}
+float offset_x = iam_shake(shake_id, 10.0f, 30.0f, 0.5f, dt);
+//                         ^id      ^intensity ^freq  ^decay_time
+
+// 2D shake
+ImVec2 offset = iam_shake_vec2(id, ImVec2(10.0f, 10.0f), 30.0f, 0.5f, dt);
+
+// 4D shake
+ImVec4 shake4 = iam_shake_vec4(id, intensity4, freq, decay_time, dt);
+
+// Color shake (flickering error indicator in OKLAB)
+ImVec4 error_color = iam_shake_color(
+    ImGui::GetID("error_indicator"),
+    ImVec4(1.0f, 0.2f, 0.2f, 1.0f),  // base color (sRGB)
+    ImVec4(0.1f, 0.05f, 0.0f, 0.0f), // intensity
+    20.0f,                            // frequency
+    0.5f,                             // decay time
+    iam_col_oklab,                    // color space
+    dt
+);
+
+// Continuous wiggle (idle animations, organic movement)
+float wiggle = iam_wiggle(ImGui::GetID("idle"), 5.0f, 3.0f, dt);
+//                                              ^amplitude ^frequency
+
+// 2D wiggle
+ImVec2 wiggle_offset = iam_wiggle_vec2(id, ImVec2(5.0f, 5.0f), 3.0f, dt);
+
+// 4D wiggle
+ImVec4 wiggle4 = iam_wiggle_vec4(id, amplitude4, freq, dt);
+
+// Color wiggle (ambient color variation)
+ImVec4 ambient_color = iam_wiggle_color(
+    ImGui::GetID("ambient"),
+    ImVec4(0.3f, 0.5f, 0.8f, 1.0f),  // base color
+    ImVec4(0.0f, 0.05f, 0.1f, 0.0f), // amplitude
+    1.5f,                             // frequency
+    iam_col_oklch,                    // color space (perceptual)
+    dt
+);
+```
+
+## Scroll Animation
+
+Smooth animated scrolling within ImGui windows.
+
+```cpp
+// Inside your scrollable window/child:
+
+// Scroll to specific Y position
+if (ImGui::Button("Go to Section 3")) {
+    iam_scroll_to_y(500.0f, 0.5f);  // target_y, duration
+}
+
+// Scroll to top/bottom with default easing
+iam_scroll_to_top(0.3f);
+iam_scroll_to_bottom(0.3f);
+
+// With custom easing
+iam_scroll_to_y(target_y, 0.5f, iam_ease_preset(iam_ease_out_back));
+
+// Horizontal scroll
+iam_scroll_to_x(target_x, 0.5f);
 ```
 
 ## Layering
@@ -293,6 +539,53 @@ iam_clip_gc(600);  // Clip instances older than 600 frames
 
 // Configure easing LUT resolution (default: 256)
 iam_set_ease_lut_samples(512);
+```
+
+## Custom Easing Functions
+
+Register your own easing functions for unique animation curves:
+
+```cpp
+// Define a custom easing function
+float MyCustomEase(float t) {
+    return t * t * (3.0f - 2.0f * t);  // smoothstep
+}
+
+// Register in a slot (0-15 available)
+iam_register_custom_ease(0, MyCustomEase);
+
+// Use it in tweens
+float val = iam_tween_float(id, ch, target, dur,
+    iam_ease_custom_fn(0), iam_policy_crossfade, dt);
+```
+
+## Debug Tools
+
+### Debug Window
+
+Show an ImGui debug window with animation stats and controls:
+
+```cpp
+static bool show_debug = true;
+iam_show_debug_window(&show_debug);
+```
+
+The debug window provides:
+- Global time scale slider with presets (0.1x to 2x)
+- Active tween counts by type
+- Clip system statistics
+- Custom easing slot status
+
+### Slow-Motion Mode
+
+Control animation speed globally for debugging:
+
+```cpp
+iam_set_global_time_scale(0.25f);  // Quarter speed
+iam_set_global_time_scale(1.0f);   // Normal speed
+iam_set_global_time_scale(2.0f);   // Double speed
+
+float scale = iam_get_global_time_scale();
 ```
 
 ## Integration
@@ -366,11 +659,19 @@ The `demo/` folder contains a comprehensive demo application showing all feature
 - Cubic bezier editor with visual preview
 - Spring physics simulation
 - Step function animation
+- Custom easing functions (smoothstep, bouncy, wobble examples)
 - Tween examples (float, vec2, color with multiple color spaces)
 - Tween policy comparison (crossfade vs cut vs queue)
 - Clip system with playback controls and callbacks
 - ImDrawList animations (3D rotating cube, morphing shapes, particles, orbits)
 - Stagger animations (rainbow wave, list slide-in, grid reveal, dropping cards)
+- Oscillators (wave types, Lissajous patterns, pulsing UI elements)
+- Shake & Wiggle (error feedback, continuous organic movement)
+- Scroll animation (smooth animated scrolling within windows)
+- Motion paths (bezier curves, Catmull-Rom splines, mixed path segments)
+- Timeline markers (callbacks at specific clip times, visual timeline)
+- Animation chaining (A->B->C clip sequences with delays)
+- Debug window with time scale control and stats
 
 ## Contributing
 

@@ -175,6 +175,9 @@ struct ease_lut_pool {
 
 static ease_lut_pool& ease_lut_pool_singleton() { static ease_lut_pool S; return S; }
 
+// Forward declaration for custom easing (defined later with other globals)
+static iam_ease_fn g_custom_ease[16];
+
 static float eval_preset_internal(int type, float t) {
 	if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
 	switch (type) {
@@ -219,6 +222,14 @@ static float eval(iam_ease_desc const& d, float t) {
 		case iam_ease_in_expo:  case iam_ease_out_expo:  case iam_ease_in_out_expo:
 		case iam_ease_in_circ:  case iam_ease_out_circ:  case iam_ease_in_out_circ:
 			return eval_preset_internal(d.type, t);
+		case iam_ease_custom: {
+			int slot = (int)d.p0;
+			if (slot >= 0 && slot < 16 && g_custom_ease[slot]) {
+				if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
+				return g_custom_ease[slot](t);
+			}
+			return t; // fallback to linear if no callback registered
+		}
 		default:
 			return ease_lut_pool_singleton().eval_lut(d, t);
 	}
@@ -493,7 +504,18 @@ static pool_t<vec4_chan>  g_vec4;
 static pool_t<int_chan>   g_int;
 static pool_t<color_chan> g_color;
 
+// Global time scale for slow-motion / fast-forward
+static float g_time_scale = 1.0f;
+
+// Global frame counter for oscillators and procedural animations
+static unsigned g_frame = 0;
+
+// Note: g_custom_ease is forward-declared earlier and initialized to nullptr here
+
 } // namespace iam_detail
+
+// Forward declaration for scroll update
+static void iam_scroll_update_internal(float dt);
 
 // ----------------------------------------------------
 // Public API implementations
@@ -505,6 +527,8 @@ void iam_update_begin_frame() {
 	iam_detail::g_vec4.begin();
 	iam_detail::g_int.begin();
 	iam_detail::g_color.begin();
+	iam_detail::g_frame++;
+	iam_scroll_update_internal(ImGui::GetIO().DeltaTime);
 }
 
 void iam_gc(unsigned int max_age_frames) {
@@ -528,11 +552,33 @@ void iam_set_ease_lut_samples(int count) {
 	iam_detail::ease_lut_pool_singleton().sample_count = count;
 }
 
+void iam_set_global_time_scale(float scale) {
+	iam_detail::g_time_scale = scale > 0.0f ? scale : 0.0f;
+}
+
+float iam_get_global_time_scale() {
+	return iam_detail::g_time_scale;
+}
+
+void iam_register_custom_ease(int slot, iam_ease_fn fn) {
+	if (slot >= 0 && slot < 16) {
+		iam_detail::g_custom_ease[slot] = fn;
+	}
+}
+
+iam_ease_fn iam_get_custom_ease(int slot) {
+	if (slot >= 0 && slot < 16) {
+		return iam_detail::g_custom_ease[slot];
+	}
+	return nullptr;
+}
+
 float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
 }
 
 float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::float_chan* c = iam_detail::g_float.get(key);
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
@@ -548,6 +594,7 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 }
 
 ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::vec2_chan* c = iam_detail::g_vec2.get(key);
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
@@ -563,6 +610,7 @@ ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, 
 }
 
 ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::vec4_chan* c = iam_detail::g_vec4.get(key);
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
@@ -578,6 +626,7 @@ ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, 
 }
 
 int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::int_chan* c = iam_detail::g_int.get(key);
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
@@ -593,6 +642,7 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 }
 
 ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt) {
+	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	iam_detail::color_chan* c = iam_detail::g_color.get(key);
 	bool const change = (c->policy!=policy) || (c->space != color_space) || (c->ez.type!=ez.type) ||
@@ -765,6 +815,15 @@ struct iam_track {
 	iam_track() : channel(0), type(0) {}
 };
 
+// Timeline marker
+struct iam_marker {
+	float					time;
+	ImGuiID					marker_id;
+	iam_marker_callback		callback;
+	void*					user_data;
+	iam_marker() : time(0), marker_id(0), callback(nullptr), user_data(nullptr) {}
+};
+
 } // namespace iam_clip_detail
 
 // iam_clip_data definition
@@ -775,6 +834,9 @@ struct iam_clip_data {
 	int						loop_count;		// -1 = infinite, 0 = no loop, >0 = repeat count
 	int						direction;		// iam_direction
 	ImVector<iam_clip_detail::iam_track>	iam_tracks;
+
+	// Timeline markers
+	ImVector<iam_clip_detail::iam_marker>	markers;
 
 	// Callbacks
 	iam_clip_callback		cb_begin;
@@ -838,9 +900,18 @@ struct iam_instance_data {
 	ImVector<vec4_entry> blended_vec4;
 	bool			has_blended;	// true if blended values are valid
 
+	// Marker tracking - bitset for triggered markers (reset on loop)
+	ImVector<bool>	markers_triggered;
+	float			prev_time;		// Previous time for marker crossing detection
+
+	// Animation chaining - next clip to play when this one completes
+	ImGuiID		chain_next_clip_id;		// Clip to play next (0 = none)
+	ImGuiID		chain_next_inst_id;		// Instance ID for next clip (0 = auto-generate)
+	float		chain_delay;			// Delay before starting chained clip
+
 	iam_instance_data() : inst_id(0), clip_id(0), time(0), time_scale(1.0f), weight(1.0f),
 		delay_left(0), playing(false), paused(false), begin_called(false), dir_sign(1), loops_left(0), last_seen_frame(0),
-		has_blended(false) {}
+		has_blended(false), prev_time(0), chain_next_clip_id(0), chain_next_inst_id(0), chain_delay(0) {}
 };
 
 namespace iam_clip_detail {
@@ -1235,6 +1306,35 @@ iam_clip& iam_clip::on_complete(iam_clip_callback cb, void* user) {
 	return *this;
 }
 
+// Auto-generate unique marker IDs
+static ImGuiID generate_marker_id() {
+	static unsigned s_marker_counter = 0;
+	return ImHashData(&(++s_marker_counter), sizeof(s_marker_counter));
+}
+
+iam_clip& iam_clip::marker(float time, ImGuiID marker_id, iam_marker_callback cb, void* user) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+
+	iam_clip_detail::iam_marker m;
+	m.time = time + clip->build_time_offset;  // Apply current time offset
+	m.marker_id = marker_id;
+	m.callback = cb;
+	m.user_data = user;
+	clip->markers.push_back(m);
+
+	// Update duration if marker is past current end
+	if (m.time > clip->duration) {
+		clip->duration = m.time;
+	}
+
+	return *this;
+}
+
+iam_clip& iam_clip::marker(float time, iam_marker_callback cb, void* user) {
+	return marker(time, generate_marker_id(), cb, user);
+}
+
 void iam_clip::end() {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return;
@@ -1271,6 +1371,19 @@ void iam_clip::end() {
 
 	// Clear build data
 	clip->build_keys.clear();
+
+	// Sort markers by time
+	if (clip->markers.Size > 1) {
+		for (int i = 0; i < clip->markers.Size - 1; ++i) {
+			for (int j = i + 1; j < clip->markers.Size; ++j) {
+				if (clip->markers[j].time < clip->markers[i].time) {
+					iam_marker tmp = clip->markers[i];
+					clip->markers[i] = clip->markers[j];
+					clip->markers[j] = tmp;
+				}
+			}
+		}
+	}
 }
 
 // ----------------------------------------------------
@@ -1339,6 +1452,38 @@ void iam_instance::set_time_scale(float scale) {
 void iam_instance::set_weight(float weight) {
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (inst) inst->weight = weight;
+}
+
+// Animation chaining
+static ImGuiID generate_chain_instance_id() {
+	static unsigned s_chain_counter = 0;
+	return ImHashData(&(++s_chain_counter), sizeof(s_chain_counter));
+}
+
+iam_instance& iam_instance::then(ImGuiID next_clip_id) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (inst) {
+		inst->chain_next_clip_id = next_clip_id;
+		inst->chain_next_inst_id = generate_chain_instance_id();  // Auto-generate instance ID
+	}
+	return *this;
+}
+
+iam_instance& iam_instance::then(ImGuiID next_clip_id, ImGuiID next_instance_id) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (inst) {
+		inst->chain_next_clip_id = next_clip_id;
+		inst->chain_next_inst_id = next_instance_id;
+	}
+	return *this;
+}
+
+iam_instance& iam_instance::then_delay(float delay) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (inst) {
+		inst->chain_delay = delay;
+	}
+	return *this;
 }
 
 float iam_instance::time() const {
@@ -1428,6 +1573,9 @@ void iam_clip_update(float dt) {
 	using namespace iam_clip_detail;
 	g_clip_sys.frame_counter++;
 
+	// Apply global time scale
+	dt *= iam_detail::g_time_scale;
+
 	// Safety: clamp dt to reasonable range
 	if (dt < 0.0f) dt = 0.0f;
 	if (dt > 1.0f) dt = 1.0f;
@@ -1443,7 +1591,14 @@ void iam_clip_update(float dt) {
 		// Handle delay
 		if (inst->delay_left > 0.0f) {
 			inst->delay_left -= inst_dt;
-			if (inst->delay_left > 0.0f) continue;
+			if (inst->delay_left > 0.0f) {
+				// Still evaluate tracks at t=0 so values are readable during delay
+				for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
+					eval_iam_track(clip->iam_tracks[tr], 0.0f, inst);
+				}
+				inst->last_seen_frame = g_clip_sys.frame_counter;
+				continue;
+			}
 			inst_dt = -inst->delay_left;
 			inst->delay_left = 0.0f;
 			// Call on_begin when delay expires
@@ -1501,6 +1656,15 @@ void iam_clip_update(float dt) {
 		if (t < 0.0f) t = 0.0f;
 		if (t > dur) t = dur;
 
+		// Reset markers on loop
+		if (loop_iters > 0) {
+			for (int m = 0; m < inst->markers_triggered.Size; m++) {
+				inst->markers_triggered[m] = false;
+			}
+			// Reset prev_time to avoid triggering all markers at once after loop
+			inst->prev_time = (inst->dir_sign > 0) ? 0.0f : dur;
+		}
+
 		if (done) {
 			inst->playing = false;
 			inst->time = (inst->dir_sign > 0) ? dur : 0.0f;
@@ -1510,10 +1674,58 @@ void iam_clip_update(float dt) {
 			}
 			if (clip->cb_complete)
 				clip->cb_complete(inst->inst_id, clip->cb_complete_user);
+
+			// Start chained clip if any
+			if (inst->chain_next_clip_id != 0) {
+				ImGuiID next_clip = inst->chain_next_clip_id;
+				ImGuiID next_inst = inst->chain_next_inst_id;
+				float chain_delay = inst->chain_delay;
+
+				// Clear the chain to prevent re-triggering
+				inst->chain_next_clip_id = 0;
+				inst->chain_next_inst_id = 0;
+				inst->chain_delay = 0;
+
+				// Play the chained clip
+				iam_instance next = iam_play(next_clip, next_inst);
+				if (next.valid() && chain_delay > 0) {
+					// Apply chain delay
+					iam_instance_data* next_data = find_instance(next_inst);
+					if (next_data) {
+						next_data->delay_left += chain_delay;
+					}
+				}
+			}
 			continue;
 		}
 
+		// Check for markers crossed between prev_time and t
+		float prev_t = inst->prev_time;
 		inst->time = t;
+
+		// Initialize markers_triggered if needed
+		if (inst->markers_triggered.Size != clip->markers.Size) {
+			inst->markers_triggered.resize(clip->markers.Size);
+			for (int m = 0; m < inst->markers_triggered.Size; m++) {
+				inst->markers_triggered[m] = false;
+			}
+		}
+
+		// Fire markers that were crossed
+		// Handle both forward and backward playback
+		float t_min = (prev_t < t) ? prev_t : t;
+		float t_max = (prev_t < t) ? t : prev_t;
+		for (int m = 0; m < clip->markers.Size; m++) {
+			iam_marker const& marker = clip->markers[m];
+			if (!inst->markers_triggered[m] && marker.time >= t_min && marker.time <= t_max) {
+				inst->markers_triggered[m] = true;
+				if (marker.callback) {
+					marker.callback(inst->inst_id, marker.marker_id, marker.time, marker.user_data);
+				}
+			}
+		}
+
+		inst->prev_time = t;
 
 		// Evaluate all iam_tracks
 		for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
@@ -1574,6 +1786,18 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id) {
 	inst->dir_sign = (clip->direction == iam_dir_reverse) ? -1 : 1;
 	inst->loops_left = clip->loop_count;
 	inst->last_seen_frame = g_clip_sys.frame_counter;
+
+	// Initialize marker tracking
+	inst->prev_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
+	inst->markers_triggered.resize(clip->markers.Size);
+	for (int m = 0; m < inst->markers_triggered.Size; m++) {
+		inst->markers_triggered[m] = false;
+	}
+
+	// Reset chaining (can be set after iam_play using .then())
+	inst->chain_next_clip_id = 0;
+	inst->chain_next_inst_id = 0;
+	inst->chain_delay = 0;
 
 	return iam_instance(instance_id);  // Return iam_instance with ID
 }
@@ -1999,4 +2223,1092 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	fclose(f);
 	*out_clip_id = clip_id;
 	return iam_ok;
+}
+
+// ----------------------------------------------------
+// Debug Window
+// ----------------------------------------------------
+void iam_show_debug_window(bool* p_open) {
+	if (!ImGui::Begin("ImAnim Debug", p_open)) {
+		ImGui::End();
+		return;
+	}
+
+	// Time scale control
+	if (ImGui::CollapsingHeader("Time Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
+		float scale = iam_detail::g_time_scale;
+		ImGui::SliderFloat("Global Time Scale", &scale, 0.0f, 2.0f, "%.2fx");
+		if (scale != iam_detail::g_time_scale) {
+			iam_detail::g_time_scale = scale;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##timescale")) {
+			iam_detail::g_time_scale = 1.0f;
+		}
+
+		// Quick presets
+		ImGui::Text("Presets:");
+		ImGui::SameLine();
+		if (ImGui::SmallButton("0.1x")) iam_detail::g_time_scale = 0.1f;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("0.25x")) iam_detail::g_time_scale = 0.25f;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("0.5x")) iam_detail::g_time_scale = 0.5f;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("1x")) iam_detail::g_time_scale = 1.0f;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("2x")) iam_detail::g_time_scale = 2.0f;
+	}
+
+	// Tween stats
+	if (ImGui::CollapsingHeader("Tween Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text("Active Tweens:");
+		ImGui::Indent();
+		ImGui::Text("Float:  %d", iam_detail::g_float.pool.GetAliveCount());
+		ImGui::Text("Vec2:   %d", iam_detail::g_vec2.pool.GetAliveCount());
+		ImGui::Text("Vec4:   %d", iam_detail::g_vec4.pool.GetAliveCount());
+		ImGui::Text("Int:    %d", iam_detail::g_int.pool.GetAliveCount());
+		ImGui::Text("Color:  %d", iam_detail::g_color.pool.GetAliveCount());
+		int total = iam_detail::g_float.pool.GetAliveCount() +
+		            iam_detail::g_vec2.pool.GetAliveCount() +
+		            iam_detail::g_vec4.pool.GetAliveCount() +
+		            iam_detail::g_int.pool.GetAliveCount() +
+		            iam_detail::g_color.pool.GetAliveCount();
+		ImGui::Unindent();
+		ImGui::Text("Total:  %d", total);
+	}
+
+	// Clip system stats
+	if (ImGui::CollapsingHeader("Clip System Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+		using namespace iam_clip_detail;
+		ImGui::Text("Clips:     %d", g_clip_sys.clips.Size);
+		ImGui::Text("Instances: %d", g_clip_sys.instances.Size);
+
+		// Count active instances
+		int active = 0;
+		for (int i = 0; i < g_clip_sys.instances.Size; ++i) {
+			if (g_clip_sys.instances[i].playing) active++;
+		}
+		ImGui::Text("Playing:   %d", active);
+	}
+
+	// Custom easing slots
+	if (ImGui::CollapsingHeader("Custom Easing Slots")) {
+		for (int i = 0; i < 16; i++) {
+			bool registered = iam_detail::g_custom_ease[i] != nullptr;
+			ImGui::Text("Slot %2d: %s", i, registered ? "Registered" : "-");
+		}
+	}
+
+	ImGui::End();
+}
+
+// ----------------------------------------------------
+// Oscillators
+// ----------------------------------------------------
+namespace iam_osc_detail {
+
+struct osc_state {
+	float time;
+	unsigned last_frame;
+	osc_state() : time(0), last_frame(0) {}
+};
+
+static ImGuiStorage g_osc_map;
+
+static osc_state* get_osc(ImGuiID id) {
+	osc_state* s = (osc_state*)g_osc_map.GetVoidPtr(id);
+	if (!s) {
+		s = IM_NEW(osc_state)();
+		g_osc_map.SetVoidPtr(id, s);
+	}
+	return s;
+}
+
+static float eval_wave(int wave_type, float t) {
+	// t is in [0, 1) representing one period
+	t = t - ImFloor(t); // wrap to [0, 1)
+	switch (wave_type) {
+		case iam_wave_sine:
+			return sinf(t * 2.0f * IM_PI);
+		case iam_wave_triangle:
+			return (t < 0.5f) ? (4.0f * t - 1.0f) : (3.0f - 4.0f * t);
+		case iam_wave_sawtooth:
+			return 2.0f * t - 1.0f;
+		case iam_wave_square:
+			return (t < 0.5f) ? 1.0f : -1.0f;
+		default:
+			return sinf(t * 2.0f * IM_PI);
+	}
+}
+
+} // namespace iam_osc_detail
+
+float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt) {
+	using namespace iam_osc_detail;
+	dt *= iam_detail::g_time_scale;
+	osc_state* s = get_osc(id);
+	if (s->last_frame != iam_detail::g_frame) {
+		s->time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+	float t = s->time * frequency + phase;
+	return amplitude * eval_wave(wave_type, t);
+}
+
+ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt) {
+	using namespace iam_osc_detail;
+	dt *= iam_detail::g_time_scale;
+	osc_state* s = get_osc(id);
+	if (s->last_frame != iam_detail::g_frame) {
+		s->time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+	float tx = s->time * frequency.x + phase.x;
+	float ty = s->time * frequency.y + phase.y;
+	return ImVec2(amplitude.x * eval_wave(wave_type, tx), amplitude.y * eval_wave(wave_type, ty));
+}
+
+ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt) {
+	using namespace iam_osc_detail;
+	dt *= iam_detail::g_time_scale;
+	osc_state* s = get_osc(id);
+	if (s->last_frame != iam_detail::g_frame) {
+		s->time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+	float tx = s->time * frequency.x + phase.x;
+	float ty = s->time * frequency.y + phase.y;
+	float tz = s->time * frequency.z + phase.z;
+	float tw = s->time * frequency.w + phase.w;
+	return ImVec4(
+		amplitude.x * eval_wave(wave_type, tx),
+		amplitude.y * eval_wave(wave_type, ty),
+		amplitude.z * eval_wave(wave_type, tz),
+		amplitude.w * eval_wave(wave_type, tw)
+	);
+}
+
+ImVec4 iam_oscillate_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt) {
+	using namespace iam_osc_detail;
+	dt *= iam_detail::g_time_scale;
+	osc_state* s = get_osc(id);
+	if (s->last_frame != iam_detail::g_frame) {
+		s->time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+	float t = s->time * frequency + phase;
+	float wave = eval_wave(wave_type, t);
+
+	// Convert base color to target color space, apply oscillation, convert back
+	ImVec4 working;
+	switch (color_space) {
+		case iam_col_srgb_linear:
+			working = iam_detail::color::srgb_to_linear(base_color);
+			working.x += amplitude.x * wave;
+			working.y += amplitude.y * wave;
+			working.z += amplitude.z * wave;
+			working.w += amplitude.w * wave;
+			return iam_detail::color::linear_to_srgb(working);
+		case iam_col_hsv:
+			working = iam_detail::color::srgb_to_hsv(base_color);
+			working.x = ImFmod(working.x + amplitude.x * wave + 1.0f, 1.0f);
+			working.y = ImClamp(working.y + amplitude.y * wave, 0.0f, 1.0f);
+			working.z = ImClamp(working.z + amplitude.z * wave, 0.0f, 1.0f);
+			working.w = ImClamp(working.w + amplitude.w * wave, 0.0f, 1.0f);
+			return iam_detail::color::hsv_to_srgb(working);
+		case iam_col_oklab:
+			working = iam_detail::color::srgb_to_oklab(base_color);
+			working.x += amplitude.x * wave;
+			working.y += amplitude.y * wave;
+			working.z += amplitude.z * wave;
+			working.w += amplitude.w * wave;
+			return iam_detail::color::oklab_to_srgb(working);
+		case iam_col_oklch:
+			working = iam_detail::color::srgb_to_oklch(base_color);
+			working.x += amplitude.x * wave;
+			working.y += amplitude.y * wave;
+			working.z = ImFmod(working.z + amplitude.z * wave + 1.0f, 1.0f);
+			working.w += amplitude.w * wave;
+			return iam_detail::color::oklch_to_srgb(working);
+		default: // iam_col_srgb
+			return ImVec4(
+				ImClamp(base_color.x + amplitude.x * wave, 0.0f, 1.0f),
+				ImClamp(base_color.y + amplitude.y * wave, 0.0f, 1.0f),
+				ImClamp(base_color.z + amplitude.z * wave, 0.0f, 1.0f),
+				ImClamp(base_color.w + amplitude.w * wave, 0.0f, 1.0f)
+			);
+	}
+}
+
+// ----------------------------------------------------
+// Shake/Wiggle
+// ----------------------------------------------------
+namespace iam_shake_detail {
+
+struct shake_state {
+	float time_since_trigger;
+	float noise_time;
+	unsigned last_frame;
+	bool triggered;
+	// Simple noise state
+	float noise_val[4];
+	int noise_idx;
+	shake_state() : time_since_trigger(0), noise_time(0), last_frame(0), triggered(false), noise_idx(0) {
+		for (int i = 0; i < 4; i++) noise_val[i] = 0;
+	}
+};
+
+static ImGuiStorage g_shake_map;
+
+static shake_state* get_shake(ImGuiID id) {
+	shake_state* s = (shake_state*)g_shake_map.GetVoidPtr(id);
+	if (!s) {
+		s = IM_NEW(shake_state)();
+		g_shake_map.SetVoidPtr(id, s);
+	}
+	return s;
+}
+
+// Simple pseudo-random based on ID and time
+static float hash_noise(unsigned int seed) {
+	seed = (seed ^ 61) ^ (seed >> 16);
+	seed = seed + (seed << 3);
+	seed = seed ^ (seed >> 4);
+	seed = seed * 0x27d4eb2d;
+	seed = seed ^ (seed >> 15);
+	return ((float)(seed & 0xFFFF) / 32768.0f) - 1.0f; // [-1, 1]
+}
+
+} // namespace iam_shake_detail
+
+void iam_trigger_shake(ImGuiID id) {
+	using namespace iam_shake_detail;
+	shake_state* s = get_shake(id);
+	s->triggered = true;
+	s->time_since_trigger = 0;
+}
+
+float iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, float dt) {
+	using namespace iam_shake_detail;
+	dt *= iam_detail::g_time_scale;
+	shake_state* s = get_shake(id);
+
+	if (s->last_frame != iam_detail::g_frame) {
+		if (s->triggered) {
+			s->time_since_trigger += dt;
+		}
+		s->noise_time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+
+	if (!s->triggered || s->time_since_trigger >= decay_time) {
+		s->triggered = false;
+		return 0.0f;
+	}
+
+	// Decay factor
+	float decay = 1.0f - (s->time_since_trigger / decay_time);
+	decay = decay * decay; // quadratic decay
+
+	// Generate noise at frequency
+	float period = 1.0f / frequency;
+	int sample = (int)(s->noise_time / period);
+	float frac = (s->noise_time - sample * period) / period;
+
+	// Interpolate between noise samples
+	float n0 = hash_noise((unsigned int)id + sample);
+	float n1 = hash_noise((unsigned int)id + sample + 1);
+	float noise = n0 + (n1 - n0) * frac; // linear interpolation
+
+	return noise * intensity * decay;
+}
+
+ImVec2 iam_shake_vec2(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt) {
+	ImGuiID id_x = id;
+	ImGuiID id_y = id ^ 0x12345678;
+	return ImVec2(
+		iam_shake(id_x, intensity.x, frequency, decay_time, dt),
+		iam_shake(id_y, intensity.y, frequency, decay_time, dt)
+	);
+}
+
+ImVec4 iam_shake_vec4(ImGuiID id, ImVec4 intensity, float frequency, float decay_time, float dt) {
+	ImGuiID id_x = id;
+	ImGuiID id_y = id ^ 0x12345678;
+	ImGuiID id_z = id ^ 0x23456789;
+	ImGuiID id_w = id ^ 0x3456789A;
+	return ImVec4(
+		iam_shake(id_x, intensity.x, frequency, decay_time, dt),
+		iam_shake(id_y, intensity.y, frequency, decay_time, dt),
+		iam_shake(id_z, intensity.z, frequency, decay_time, dt),
+		iam_shake(id_w, intensity.w, frequency, decay_time, dt)
+	);
+}
+
+ImVec4 iam_shake_color(ImGuiID id, ImVec4 base_color, ImVec4 intensity, float frequency, float decay_time, int color_space, float dt) {
+	ImVec4 shake = iam_shake_vec4(id, intensity, frequency, decay_time, dt);
+
+	// Apply shake offset in the specified color space
+	ImVec4 working;
+	switch (color_space) {
+		case iam_col_srgb_linear:
+			working = iam_detail::color::srgb_to_linear(base_color);
+			working.x += shake.x;
+			working.y += shake.y;
+			working.z += shake.z;
+			working.w += shake.w;
+			return iam_detail::color::linear_to_srgb(working);
+		case iam_col_hsv:
+			working = iam_detail::color::srgb_to_hsv(base_color);
+			working.x = ImFmod(working.x + shake.x + 1.0f, 1.0f);
+			working.y = ImClamp(working.y + shake.y, 0.0f, 1.0f);
+			working.z = ImClamp(working.z + shake.z, 0.0f, 1.0f);
+			working.w = ImClamp(working.w + shake.w, 0.0f, 1.0f);
+			return iam_detail::color::hsv_to_srgb(working);
+		case iam_col_oklab:
+			working = iam_detail::color::srgb_to_oklab(base_color);
+			working.x += shake.x;
+			working.y += shake.y;
+			working.z += shake.z;
+			working.w += shake.w;
+			return iam_detail::color::oklab_to_srgb(working);
+		case iam_col_oklch:
+			working = iam_detail::color::srgb_to_oklch(base_color);
+			working.x += shake.x;
+			working.y += shake.y;
+			working.z = ImFmod(working.z + shake.z + 1.0f, 1.0f);
+			working.w += shake.w;
+			return iam_detail::color::oklch_to_srgb(working);
+		default: // iam_col_srgb
+			return ImVec4(
+				ImClamp(base_color.x + shake.x, 0.0f, 1.0f),
+				ImClamp(base_color.y + shake.y, 0.0f, 1.0f),
+				ImClamp(base_color.z + shake.z, 0.0f, 1.0f),
+				ImClamp(base_color.w + shake.w, 0.0f, 1.0f)
+			);
+	}
+}
+
+float iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt) {
+	using namespace iam_shake_detail;
+	dt *= iam_detail::g_time_scale;
+	shake_state* s = get_shake(id);
+
+	if (s->last_frame != iam_detail::g_frame) {
+		s->noise_time += dt;
+		s->last_frame = iam_detail::g_frame;
+	}
+
+	// Generate smooth continuous noise
+	float period = 1.0f / frequency;
+	int sample = (int)(s->noise_time / period);
+	float frac = (s->noise_time - sample * period) / period;
+
+	// Smoothstep interpolation for smoother movement
+	float t = frac * frac * (3.0f - 2.0f * frac);
+
+	float n0 = hash_noise((unsigned int)id + sample);
+	float n1 = hash_noise((unsigned int)id + sample + 1);
+
+	return amplitude * (n0 + (n1 - n0) * t);
+}
+
+ImVec2 iam_wiggle_vec2(ImGuiID id, ImVec2 amplitude, float frequency, float dt) {
+	ImGuiID id_x = id;
+	ImGuiID id_y = id ^ 0x12345678;
+	return ImVec2(
+		iam_wiggle(id_x, amplitude.x, frequency, dt),
+		iam_wiggle(id_y, amplitude.y, frequency, dt)
+	);
+}
+
+ImVec4 iam_wiggle_vec4(ImGuiID id, ImVec4 amplitude, float frequency, float dt) {
+	ImGuiID id_x = id;
+	ImGuiID id_y = id ^ 0x12345678;
+	ImGuiID id_z = id ^ 0x23456789;
+	ImGuiID id_w = id ^ 0x3456789A;
+	return ImVec4(
+		iam_wiggle(id_x, amplitude.x, frequency, dt),
+		iam_wiggle(id_y, amplitude.y, frequency, dt),
+		iam_wiggle(id_z, amplitude.z, frequency, dt),
+		iam_wiggle(id_w, amplitude.w, frequency, dt)
+	);
+}
+
+ImVec4 iam_wiggle_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int color_space, float dt) {
+	ImVec4 wiggle = iam_wiggle_vec4(id, amplitude, frequency, dt);
+
+	// Apply wiggle offset in the specified color space
+	ImVec4 working;
+	switch (color_space) {
+		case iam_col_srgb_linear:
+			working = iam_detail::color::srgb_to_linear(base_color);
+			working.x += wiggle.x;
+			working.y += wiggle.y;
+			working.z += wiggle.z;
+			working.w += wiggle.w;
+			return iam_detail::color::linear_to_srgb(working);
+		case iam_col_hsv:
+			working = iam_detail::color::srgb_to_hsv(base_color);
+			working.x = ImFmod(working.x + wiggle.x + 1.0f, 1.0f);
+			working.y = ImClamp(working.y + wiggle.y, 0.0f, 1.0f);
+			working.z = ImClamp(working.z + wiggle.z, 0.0f, 1.0f);
+			working.w = ImClamp(working.w + wiggle.w, 0.0f, 1.0f);
+			return iam_detail::color::hsv_to_srgb(working);
+		case iam_col_oklab:
+			working = iam_detail::color::srgb_to_oklab(base_color);
+			working.x += wiggle.x;
+			working.y += wiggle.y;
+			working.z += wiggle.z;
+			working.w += wiggle.w;
+			return iam_detail::color::oklab_to_srgb(working);
+		case iam_col_oklch:
+			working = iam_detail::color::srgb_to_oklch(base_color);
+			working.x += wiggle.x;
+			working.y += wiggle.y;
+			working.z = ImFmod(working.z + wiggle.z + 1.0f, 1.0f);
+			working.w += wiggle.w;
+			return iam_detail::color::oklch_to_srgb(working);
+		default: // iam_col_srgb
+			return ImVec4(
+				ImClamp(base_color.x + wiggle.x, 0.0f, 1.0f),
+				ImClamp(base_color.y + wiggle.y, 0.0f, 1.0f),
+				ImClamp(base_color.z + wiggle.z, 0.0f, 1.0f),
+				ImClamp(base_color.w + wiggle.w, 0.0f, 1.0f)
+			);
+	}
+}
+
+// ----------------------------------------------------
+// Scroll Animation
+// ----------------------------------------------------
+namespace iam_scroll_detail {
+
+struct scroll_anim {
+	ImGuiID window_id;
+	float start_x, start_y;
+	float target_x, target_y;
+	float duration;
+	float elapsed;
+	iam_ease_desc ease;
+	bool active_x, active_y;
+	unsigned last_frame;
+};
+
+static ImVector<scroll_anim> g_scroll_anims;
+
+static scroll_anim* find_or_create(ImGuiID window_id) {
+	for (int i = 0; i < g_scroll_anims.Size; i++) {
+		if (g_scroll_anims[i].window_id == window_id) {
+			return &g_scroll_anims[i];
+		}
+	}
+	scroll_anim sa;
+	sa.window_id = window_id;
+	sa.active_x = sa.active_y = false;
+	sa.elapsed = 0;
+	sa.last_frame = 0;
+	g_scroll_anims.push_back(sa);
+	return &g_scroll_anims.back();
+}
+
+} // namespace iam_scroll_detail
+
+void iam_scroll_to_y(float target_y, float duration, iam_ease_desc const& ez) {
+	using namespace iam_scroll_detail;
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	if (!window) return;
+
+	scroll_anim* sa = find_or_create(window->ID);
+	sa->start_y = window->Scroll.y;
+	sa->target_y = target_y;
+	sa->duration = duration;
+	sa->elapsed = 0;
+	sa->ease = ez;
+	sa->active_y = true;
+}
+
+void iam_scroll_to_x(float target_x, float duration, iam_ease_desc const& ez) {
+	using namespace iam_scroll_detail;
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	if (!window) return;
+
+	scroll_anim* sa = find_or_create(window->ID);
+	sa->start_x = window->Scroll.x;
+	sa->target_x = target_x;
+	sa->duration = duration;
+	sa->elapsed = 0;
+	sa->ease = ez;
+	sa->active_x = true;
+}
+
+void iam_scroll_to_top(float duration, iam_ease_desc const& ez) {
+	iam_scroll_to_y(0.0f, duration, ez);
+}
+
+void iam_scroll_to_bottom(float duration, iam_ease_desc const& ez) {
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	if (!window) return;
+	float max_y = window->ScrollMax.y;
+	iam_scroll_to_y(max_y, duration, ez);
+}
+
+// Call this in iam_update_begin_frame to process scroll animations
+static void iam_scroll_update_internal(float dt) {
+	using namespace iam_scroll_detail;
+	dt *= iam_detail::g_time_scale;
+
+	for (int i = g_scroll_anims.Size - 1; i >= 0; i--) {
+		scroll_anim& sa = g_scroll_anims[i];
+		if (!sa.active_x && !sa.active_y) {
+			g_scroll_anims.erase(&g_scroll_anims[i]);
+			continue;
+		}
+
+		sa.elapsed += dt;
+		float t = (sa.duration > 0) ? ImClamp(sa.elapsed / sa.duration, 0.0f, 1.0f) : 1.0f;
+		float eased_t = iam_detail::eval(sa.ease, t);
+
+		ImGuiWindow* window = ImGui::FindWindowByID(sa.window_id);
+		if (!window) {
+			sa.active_x = sa.active_y = false;
+			continue;
+		}
+
+		if (sa.active_y) {
+			float new_y = sa.start_y + (sa.target_y - sa.start_y) * eased_t;
+			window->Scroll.y = new_y;
+			if (t >= 1.0f) sa.active_y = false;
+		}
+
+		if (sa.active_x) {
+			float new_x = sa.start_x + (sa.target_x - sa.start_x) * eased_t;
+			window->Scroll.x = new_x;
+			if (t >= 1.0f) sa.active_x = false;
+		}
+	}
+}
+
+// ----------------------------------------------------
+// Motion Paths - animate along curves and splines
+// ----------------------------------------------------
+namespace iam_path_detail {
+
+// Evaluate quadratic bezier: B(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂
+static ImVec2 eval_quadratic(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t) {
+	float u = 1.0f - t;
+	float tt = t * t;
+	float uu = u * u;
+	float ut2 = 2.0f * u * t;
+	return ImVec2(
+		uu * p0.x + ut2 * p1.x + tt * p2.x,
+		uu * p0.y + ut2 * p1.y + tt * p2.y
+	);
+}
+
+// Derivative of quadratic bezier: B'(t) = 2(1-t)(P₁-P₀) + 2t(P₂-P₁)
+static ImVec2 eval_quadratic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t) {
+	float u = 1.0f - t;
+	return ImVec2(
+		2.0f * u * (p1.x - p0.x) + 2.0f * t * (p2.x - p1.x),
+		2.0f * u * (p1.y - p0.y) + 2.0f * t * (p2.y - p1.y)
+	);
+}
+
+// Evaluate cubic bezier: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+static ImVec2 eval_cubic(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t) {
+	float u = 1.0f - t;
+	float tt = t * t;
+	float ttt = tt * t;
+	float uu = u * u;
+	float uuu = uu * u;
+	return ImVec2(
+		uuu * p0.x + 3.0f * uu * t * p1.x + 3.0f * u * tt * p2.x + ttt * p3.x,
+		uuu * p0.y + 3.0f * uu * t * p1.y + 3.0f * u * tt * p2.y + ttt * p3.y
+	);
+}
+
+// Derivative of cubic bezier: B'(t) = 3(1-t)²(P₁-P₀) + 6(1-t)t(P₂-P₁) + 3t²(P₃-P₂)
+static ImVec2 eval_cubic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t) {
+	float u = 1.0f - t;
+	float uu = u * u;
+	float tt = t * t;
+	return ImVec2(
+		3.0f * uu * (p1.x - p0.x) + 6.0f * u * t * (p2.x - p1.x) + 3.0f * tt * (p3.x - p2.x),
+		3.0f * uu * (p1.y - p0.y) + 6.0f * u * t * (p2.y - p1.y) + 3.0f * tt * (p3.y - p2.y)
+	);
+}
+
+// Evaluate Catmull-Rom spline (goes through p1 and p2)
+static ImVec2 eval_catmull_rom(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension) {
+	float t2 = t * t;
+	float t3 = t2 * t;
+	float s = (1.0f - tension) / 2.0f;
+
+	// Catmull-Rom basis functions
+	float h1 = -s * t3 + 2.0f * s * t2 - s * t;
+	float h2 = (2.0f - s) * t3 + (s - 3.0f) * t2 + 1.0f;
+	float h3 = (s - 2.0f) * t3 + (3.0f - 2.0f * s) * t2 + s * t;
+	float h4 = s * t3 - s * t2;
+
+	return ImVec2(
+		h1 * p0.x + h2 * p1.x + h3 * p2.x + h4 * p3.x,
+		h1 * p0.y + h2 * p1.y + h3 * p2.y + h4 * p3.y
+	);
+}
+
+// Derivative of Catmull-Rom
+static ImVec2 eval_catmull_rom_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension) {
+	float t2 = t * t;
+	float s = (1.0f - tension) / 2.0f;
+
+	// Derivatives of basis functions
+	float dh1 = -3.0f * s * t2 + 4.0f * s * t - s;
+	float dh2 = 3.0f * (2.0f - s) * t2 + 2.0f * (s - 3.0f) * t;
+	float dh3 = 3.0f * (s - 2.0f) * t2 + 2.0f * (3.0f - 2.0f * s) * t + s;
+	float dh4 = 3.0f * s * t2 - 2.0f * s * t;
+
+	return ImVec2(
+		dh1 * p0.x + dh2 * p1.x + dh3 * p2.x + dh4 * p3.x,
+		dh1 * p0.y + dh2 * p1.y + dh3 * p2.y + dh4 * p3.y
+	);
+}
+
+// Path segment storage
+struct path_segment {
+	int type;           // iam_path_segment_type
+	ImVec2 p0, p1, p2, p3;  // Control points (usage depends on type)
+	float tension;      // For catmull-rom
+	float length;       // Approximate segment length
+
+	ImVec2 evaluate(float t) const {
+		switch (type) {
+			case iam_seg_line:
+				return ImVec2(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t);
+			case iam_seg_quadratic_bezier:
+				return eval_quadratic(p0, p1, p2, t);
+			case iam_seg_cubic_bezier:
+				return eval_cubic(p0, p1, p2, p3, t);
+			case iam_seg_catmull_rom:
+				return eval_catmull_rom(p0, p1, p2, p3, t, tension);
+			default:
+				return p0;
+		}
+	}
+
+	ImVec2 derivative(float t) const {
+		switch (type) {
+			case iam_seg_line:
+				return ImVec2(p1.x - p0.x, p1.y - p0.y);
+			case iam_seg_quadratic_bezier:
+				return eval_quadratic_deriv(p0, p1, p2, t);
+			case iam_seg_cubic_bezier:
+				return eval_cubic_deriv(p0, p1, p2, p3, t);
+			case iam_seg_catmull_rom:
+				return eval_catmull_rom_deriv(p0, p1, p2, p3, t, tension);
+			default:
+				return ImVec2(1, 0);
+		}
+	}
+};
+
+// Approximate segment length using subdivision
+static float approx_segment_length(path_segment const& seg, int subdivisions = 16) {
+	float len = 0.0f;
+	ImVec2 prev = seg.evaluate(0.0f);
+	for (int i = 1; i <= subdivisions; i++) {
+		float t = (float)i / (float)subdivisions;
+		ImVec2 cur = seg.evaluate(t);
+		float dx = cur.x - prev.x;
+		float dy = cur.y - prev.y;
+		len += ImSqrt(dx * dx + dy * dy);
+		prev = cur;
+	}
+	return len;
+}
+
+// Path data storage
+struct path_data {
+	ImVector<path_segment> segments;
+	ImVec2 start_point;
+	float total_length;
+	bool closed;
+
+	path_data() : start_point(0, 0), total_length(0), closed(false) {}
+
+	void compute_lengths() {
+		total_length = 0;
+		for (int i = 0; i < segments.Size; i++) {
+			segments[i].length = approx_segment_length(segments[i]);
+			total_length += segments[i].length;
+		}
+	}
+
+	// Find segment and local t for global t in [0,1]
+	void find_segment(float global_t, int* out_seg_idx, float* out_local_t) const {
+		if (segments.Size == 0) {
+			*out_seg_idx = -1;
+			*out_local_t = 0;
+			return;
+		}
+		if (global_t <= 0.0f) {
+			*out_seg_idx = 0;
+			*out_local_t = 0;
+			return;
+		}
+		if (global_t >= 1.0f) {
+			*out_seg_idx = segments.Size - 1;
+			*out_local_t = 1.0f;
+			return;
+		}
+
+		float target_dist = global_t * total_length;
+		float accum = 0;
+		for (int i = 0; i < segments.Size; i++) {
+			if (accum + segments[i].length >= target_dist) {
+				*out_seg_idx = i;
+				float local_dist = target_dist - accum;
+				*out_local_t = (segments[i].length > 0) ? (local_dist / segments[i].length) : 0;
+				return;
+			}
+			accum += segments[i].length;
+		}
+		// Fallback
+		*out_seg_idx = segments.Size - 1;
+		*out_local_t = 1.0f;
+	}
+
+	ImVec2 evaluate(float t) const {
+		int seg_idx;
+		float local_t;
+		find_segment(t, &seg_idx, &local_t);
+		if (seg_idx < 0) return start_point;
+		return segments[seg_idx].evaluate(local_t);
+	}
+
+	ImVec2 derivative(float t) const {
+		int seg_idx;
+		float local_t;
+		find_segment(t, &seg_idx, &local_t);
+		if (seg_idx < 0) return ImVec2(1, 0);
+		return segments[seg_idx].derivative(local_t);
+	}
+};
+
+// Global path storage
+static ImPool<path_data> g_paths;
+static ImGuiStorage g_path_map;
+
+// Currently building path
+static path_data* g_building_path = nullptr;
+static ImGuiID g_building_path_id = 0;
+static ImVec2 g_current_point;
+static ImVector<ImVec2> g_catmull_points;  // For collecting catmull-rom points
+
+static path_data* get_path(ImGuiID path_id) {
+	int idx = g_path_map.GetInt(path_id, -1);
+	if (idx < 0) return nullptr;
+	return g_paths.GetByIndex(idx);
+}
+
+} // namespace iam_path_detail
+
+// Public curve evaluation functions
+ImVec2 iam_bezier_quadratic(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t) {
+	return iam_path_detail::eval_quadratic(p0, p1, p2, t);
+}
+
+ImVec2 iam_bezier_cubic(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t) {
+	return iam_path_detail::eval_cubic(p0, p1, p2, p3, t);
+}
+
+ImVec2 iam_catmull_rom(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension) {
+	return iam_path_detail::eval_catmull_rom(p0, p1, p2, p3, t, tension);
+}
+
+ImVec2 iam_bezier_quadratic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t) {
+	return iam_path_detail::eval_quadratic_deriv(p0, p1, p2, t);
+}
+
+ImVec2 iam_bezier_cubic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t) {
+	return iam_path_detail::eval_cubic_deriv(p0, p1, p2, p3, t);
+}
+
+ImVec2 iam_catmull_rom_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension) {
+	return iam_path_detail::eval_catmull_rom_deriv(p0, p1, p2, p3, t, tension);
+}
+
+// iam_path fluent builder
+iam_path iam_path::begin(ImGuiID path_id, ImVec2 start) {
+	using namespace iam_path_detail;
+
+	// Clean up existing path if re-defining
+	int existing_idx = g_path_map.GetInt(path_id, -1);
+	if (existing_idx >= 0) {
+		g_paths.Remove(path_id, g_paths.GetByIndex(existing_idx));
+	}
+
+	// Create new path
+	g_building_path = g_paths.GetOrAddByKey(path_id);
+	g_building_path_id = path_id;
+	g_building_path->segments.clear();
+	g_building_path->start_point = start;
+	g_building_path->total_length = 0;
+	g_building_path->closed = false;
+	g_current_point = start;
+	g_catmull_points.clear();
+	g_catmull_points.push_back(start);
+
+	return iam_path(path_id);
+}
+
+iam_path& iam_path::line_to(ImVec2 end) {
+	using namespace iam_path_detail;
+	if (!g_building_path) return *this;
+
+	path_segment seg;
+	seg.type = iam_seg_line;
+	seg.p0 = g_current_point;
+	seg.p1 = end;
+	seg.tension = 0;
+	g_building_path->segments.push_back(seg);
+	g_current_point = end;
+	g_catmull_points.push_back(end);
+
+	return *this;
+}
+
+iam_path& iam_path::quadratic_to(ImVec2 ctrl, ImVec2 end) {
+	using namespace iam_path_detail;
+	if (!g_building_path) return *this;
+
+	path_segment seg;
+	seg.type = iam_seg_quadratic_bezier;
+	seg.p0 = g_current_point;
+	seg.p1 = ctrl;
+	seg.p2 = end;
+	seg.tension = 0;
+	g_building_path->segments.push_back(seg);
+	g_current_point = end;
+	g_catmull_points.push_back(end);
+
+	return *this;
+}
+
+iam_path& iam_path::cubic_to(ImVec2 ctrl1, ImVec2 ctrl2, ImVec2 end) {
+	using namespace iam_path_detail;
+	if (!g_building_path) return *this;
+
+	path_segment seg;
+	seg.type = iam_seg_cubic_bezier;
+	seg.p0 = g_current_point;
+	seg.p1 = ctrl1;
+	seg.p2 = ctrl2;
+	seg.p3 = end;
+	seg.tension = 0;
+	g_building_path->segments.push_back(seg);
+	g_current_point = end;
+	g_catmull_points.push_back(end);
+
+	return *this;
+}
+
+iam_path& iam_path::catmull_to(ImVec2 end, float tension) {
+	using namespace iam_path_detail;
+	if (!g_building_path) return *this;
+
+	// For catmull-rom, we need 4 points. Use previous points as context
+	int n = g_catmull_points.Size;
+	ImVec2 p0 = (n >= 2) ? g_catmull_points[n - 2] : g_current_point;
+	ImVec2 p1 = g_current_point;
+	ImVec2 p2 = end;
+	ImVec2 p3 = end;  // Will be updated by next point or mirror
+
+	path_segment seg;
+	seg.type = iam_seg_catmull_rom;
+	seg.p0 = p0;
+	seg.p1 = p1;
+	seg.p2 = p2;
+	seg.p3 = p3;
+	seg.tension = tension;
+	g_building_path->segments.push_back(seg);
+	g_current_point = end;
+	g_catmull_points.push_back(end);
+
+	// Update previous catmull-rom segment's p3 if any
+	int seg_count = g_building_path->segments.Size;
+	if (seg_count >= 2) {
+		path_segment& prev = g_building_path->segments[seg_count - 2];
+		if (prev.type == iam_seg_catmull_rom) {
+			prev.p3 = end;
+		}
+	}
+
+	return *this;
+}
+
+iam_path& iam_path::close() {
+	using namespace iam_path_detail;
+	if (!g_building_path) return *this;
+
+	// Add line back to start if not already there
+	if (g_current_point.x != g_building_path->start_point.x ||
+		g_current_point.y != g_building_path->start_point.y) {
+		line_to(g_building_path->start_point);
+	}
+	g_building_path->closed = true;
+
+	return *this;
+}
+
+void iam_path::end() {
+	using namespace iam_path_detail;
+	if (!g_building_path) return;
+
+	// Compute segment lengths
+	g_building_path->compute_lengths();
+
+	// Register in map
+	g_path_map.SetInt(g_building_path_id, g_paths.GetIndex(g_building_path));
+
+	g_building_path = nullptr;
+	g_building_path_id = 0;
+	g_catmull_points.clear();
+}
+
+// Path query functions
+bool iam_path_exists(ImGuiID path_id) {
+	return iam_path_detail::get_path(path_id) != nullptr;
+}
+
+float iam_path_length(ImGuiID path_id) {
+	iam_path_detail::path_data* p = iam_path_detail::get_path(path_id);
+	return p ? p->total_length : 0.0f;
+}
+
+ImVec2 iam_path_evaluate(ImGuiID path_id, float t) {
+	iam_path_detail::path_data* p = iam_path_detail::get_path(path_id);
+	return p ? p->evaluate(t) : ImVec2(0, 0);
+}
+
+ImVec2 iam_path_tangent(ImGuiID path_id, float t) {
+	iam_path_detail::path_data* p = iam_path_detail::get_path(path_id);
+	if (!p) return ImVec2(1, 0);
+
+	ImVec2 d = p->derivative(t);
+	float len = ImSqrt(d.x * d.x + d.y * d.y);
+	if (len > 1e-6f) {
+		d.x /= len;
+		d.y /= len;
+	}
+	return d;
+}
+
+float iam_path_angle(ImGuiID path_id, float t) {
+	ImVec2 tangent = iam_path_tangent(path_id, t);
+	return atan2f(tangent.y, tangent.x);
+}
+
+// Tween along path
+ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	using namespace iam_detail;
+
+	// Apply global time scale
+	dt *= g_time_scale;
+
+	// Get path
+	iam_path_detail::path_data* path = iam_path_detail::get_path(path_id);
+	if (!path || path->segments.Size == 0) {
+		return ImVec2(0, 0);
+	}
+
+	// Use float channel to track progress (0 to 1)
+	ImGuiID key = make_key(id, channel_id);
+	float_chan* c = g_float.get(key);
+
+	// Check if target changed (always 1.0 for path progress)
+	float target = 1.0f;
+	bool changed = (c->target != target);
+	if (changed) {
+		switch (c->policy) {
+			case iam_policy_cut:
+				c->current = 0.0f;  // Start from beginning
+				c->set(target, dur, ez, policy);
+				break;
+			case iam_policy_queue:
+				if (c->t < 1.0f && !c->has_pending) {
+					c->has_pending = 1;
+					c->pending_target = target;
+				} else {
+					c->set(target, dur, ez, policy);
+				}
+				break;
+			default: // crossfade
+				c->set(target, dur, ez, policy);
+				break;
+		}
+	}
+
+	c->tick(dt);
+
+	// Handle pending
+	if (c->has_pending && c->t >= 1.0f) {
+		c->set(c->pending_target, dur, ez, policy);
+		c->has_pending = 0;
+	}
+
+	// Evaluate path at current progress
+	float progress = c->current;
+	return path->evaluate(progress);
+}
+
+float iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	using namespace iam_detail;
+
+	// Apply global time scale
+	dt *= g_time_scale;
+
+	// Get path
+	iam_path_detail::path_data* path = iam_path_detail::get_path(path_id);
+	if (!path || path->segments.Size == 0) {
+		return 0.0f;
+	}
+
+	// Use float channel to track progress (0 to 1)
+	// Use different channel for angle to allow independent queries
+	ImGuiID angle_channel = ImHashStr("_angle", 0, channel_id);
+	ImGuiID key = make_key(id, angle_channel);
+	float_chan* c = g_float.get(key);
+
+	float target = 1.0f;
+	bool changed = (c->target != target);
+	if (changed) {
+		switch (c->policy) {
+			case iam_policy_cut:
+				c->current = 0.0f;
+				c->set(target, dur, ez, policy);
+				break;
+			case iam_policy_queue:
+				if (c->t < 1.0f && !c->has_pending) {
+					c->has_pending = 1;
+					c->pending_target = target;
+				} else {
+					c->set(target, dur, ez, policy);
+				}
+				break;
+			default:
+				c->set(target, dur, ez, policy);
+				break;
+		}
+	}
+
+	c->tick(dt);
+
+	if (c->has_pending && c->t >= 1.0f) {
+		c->set(c->pending_target, dur, ez, policy);
+		c->has_pending = 0;
+	}
+
+	return iam_path_angle(path_id, c->current);
 }

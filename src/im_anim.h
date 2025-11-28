@@ -30,7 +30,8 @@ enum iam_ease_type {
 	iam_ease_in_bounce,  iam_ease_out_bounce,  iam_ease_in_out_bounce,
 	iam_ease_steps,         // p0 = steps (>=1), p1 = 0:end 1:start 2:both
 	iam_ease_cubic_bezier,  // p0=x1 p1=y1 p2=x2 p3=y2
-	iam_ease_spring         // p0=mass p1=stiffness p2=damping p3=v0
+	iam_ease_spring,        // p0=mass p1=stiffness p2=damping p3=v0
+	iam_ease_custom         // User-defined easing function (use iam_ease_custom_fn)
 };
 
 enum iam_policy {
@@ -60,6 +61,9 @@ struct iam_ease_desc {
 	float	p0, p1, p2, p3;
 };
 
+// Custom easing function callback (t in [0,1], returns eased value)
+typedef float (*iam_ease_fn)(float t);
+
 // ----------------------------------------------------
 // Public API declarations
 // ----------------------------------------------------
@@ -69,6 +73,40 @@ void iam_update_begin_frame();                                                  
 void iam_gc(unsigned int max_age_frames = 600);                                     // Remove stale tween entries older than max_age_frames.
 void iam_reserve(int cap_float, int cap_vec2, int cap_vec4, int cap_int, int cap_color); // Pre-allocate pool capacity.
 void iam_set_ease_lut_samples(int count);                                           // Set LUT resolution for parametric easings (default: 256).
+
+// Global time scale (for slow-motion / fast-forward debugging)
+void  iam_set_global_time_scale(float scale);                                       // Set global time multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double).
+float iam_get_global_time_scale();                                                  // Get current global time scale.
+
+// Custom easing functions
+void iam_register_custom_ease(int slot, iam_ease_fn fn);                            // Register custom easing in slot 0-15. Use with iam_ease_custom_fn(slot).
+iam_ease_fn iam_get_custom_ease(int slot);                                          // Get registered custom easing function.
+
+// Debug UI
+void iam_show_debug_window(bool* p_open = nullptr);                                 // Show ImAnim debug window with stats and controls.
+
+// Oscillators - continuous periodic animations
+enum iam_wave_type {
+	iam_wave_sine = 0,      // Smooth sine wave
+	iam_wave_triangle,      // Triangle wave (linear up/down)
+	iam_wave_sawtooth,      // Sawtooth wave (linear up, instant reset)
+	iam_wave_square         // Square wave (on/off pulse)
+};
+float  iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt);       // Returns oscillating value [-amplitude, +amplitude].
+ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt); // 2D oscillation.
+ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt); // 4D oscillation.
+ImVec4 iam_oscillate_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt); // Color oscillation in specified color space.
+
+// Shake/Wiggle - procedural noise animations
+float  iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, float dt);       // Decaying random shake. Returns offset that decays to 0.
+ImVec2 iam_shake_vec2(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt); // 2D decaying shake.
+ImVec4 iam_shake_vec4(ImGuiID id, ImVec4 intensity, float frequency, float decay_time, float dt); // 4D decaying shake.
+ImVec4 iam_shake_color(ImGuiID id, ImVec4 base_color, ImVec4 intensity, float frequency, float decay_time, int color_space, float dt); // Color shake in specified color space.
+float  iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt);                        // Continuous smooth random movement.
+ImVec2 iam_wiggle_vec2(ImGuiID id, ImVec2 amplitude, float frequency, float dt);                  // 2D continuous wiggle.
+ImVec4 iam_wiggle_vec4(ImGuiID id, ImVec4 amplitude, float frequency, float dt);                  // 4D continuous wiggle.
+ImVec4 iam_wiggle_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int color_space, float dt); // Color wiggle in specified color space.
+void   iam_trigger_shake(ImGuiID id);                                                             // Trigger/restart a shake animation.
 
 // Easing evaluation
 float iam_eval_preset(int type, float t);                                           // Evaluate a preset easing function at time t (0-1).
@@ -116,6 +154,69 @@ inline iam_ease_desc iam_ease_steps_desc(int steps, int mode) { iam_ease_desc e 
 inline iam_ease_desc iam_ease_back(float overshoot) { iam_ease_desc e = { iam_ease_out_back, overshoot,0,0,0 }; return e; }                         // Create back easing with overshoot.
 inline iam_ease_desc iam_ease_elastic(float amplitude, float period) { iam_ease_desc e = { iam_ease_out_elastic, amplitude, period,0,0 }; return e; } // Create elastic easing.
 inline iam_ease_desc iam_ease_spring_desc(float mass, float stiffness, float damping, float v0) { iam_ease_desc e = { iam_ease_spring, mass, stiffness, damping, v0 }; return e; } // Create physics spring.
+inline iam_ease_desc iam_ease_custom_fn(int slot) { iam_ease_desc e = { iam_ease_custom, (float)slot,0,0,0 }; return e; }                                                         // Use registered custom easing (slot 0-15).
+
+// Scroll animation - smooth scrolling for ImGui windows
+void iam_scroll_to_y(float target_y, float duration, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));           // Scroll current window to Y position.
+void iam_scroll_to_x(float target_x, float duration, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));           // Scroll current window to X position.
+void iam_scroll_to_top(float duration = 0.3f, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));                  // Scroll to top of window.
+void iam_scroll_to_bottom(float duration = 0.3f, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));               // Scroll to bottom of window.
+
+// ----------------------------------------------------
+// Motion Paths - animate along curves and splines
+// ----------------------------------------------------
+
+// Path segment types
+enum iam_path_segment_type {
+	iam_seg_line = 0,            // Linear segment to endpoint
+	iam_seg_quadratic_bezier,    // Quadratic bezier (1 control point)
+	iam_seg_cubic_bezier,        // Cubic bezier (2 control points)
+	iam_seg_catmull_rom          // Catmull-rom spline segment
+};
+
+// Single-curve evaluation functions (stateless, for direct use)
+ImVec2 iam_bezier_quadratic(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t);                              // Evaluate quadratic bezier at t [0,1].
+ImVec2 iam_bezier_cubic(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t);                       // Evaluate cubic bezier at t [0,1].
+ImVec2 iam_catmull_rom(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension = 0.5f);  // Evaluate Catmull-Rom spline at t [0,1]. Points go through p1 and p2.
+
+// Derivatives (for tangent/velocity)
+ImVec2 iam_bezier_quadratic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t);                        // Derivative of quadratic bezier.
+ImVec2 iam_bezier_cubic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t);                 // Derivative of cubic bezier.
+ImVec2 iam_catmull_rom_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension = 0.5f); // Derivative of Catmull-Rom.
+
+// Forward declaration
+struct iam_path_data;
+
+// iam_path - fluent API for building multi-segment motion paths
+class iam_path {
+public:
+	static iam_path begin(ImGuiID path_id, ImVec2 start);                                           // Start building a path at position.
+
+	iam_path& line_to(ImVec2 end);                                                                  // Add linear segment to endpoint.
+	iam_path& quadratic_to(ImVec2 ctrl, ImVec2 end);                                                // Add quadratic bezier segment.
+	iam_path& cubic_to(ImVec2 ctrl1, ImVec2 ctrl2, ImVec2 end);                                     // Add cubic bezier segment.
+	iam_path& catmull_to(ImVec2 end, float tension = 0.5f);                                         // Add Catmull-Rom segment to endpoint.
+	iam_path& close();                                                                              // Close path back to start point.
+
+	void end();                                                                                     // Finalize and register path.
+
+	ImGuiID id() const { return m_path_id; }
+
+private:
+	iam_path(ImGuiID path_id) : m_path_id(path_id) {}
+	ImGuiID m_path_id;
+};
+
+// Query path info
+bool   iam_path_exists(ImGuiID path_id);                                                            // Check if path exists.
+float  iam_path_length(ImGuiID path_id);                                                            // Get approximate path length.
+ImVec2 iam_path_evaluate(ImGuiID path_id, float t);                                                 // Sample path at t [0,1].
+ImVec2 iam_path_tangent(ImGuiID path_id, float t);                                                  // Get tangent (normalized direction) at t.
+float  iam_path_angle(ImGuiID path_id, float t);                                                    // Get rotation angle (radians) at t.
+
+// Tween along a path
+ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate position along path.
+float  iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt); // Animate rotation angle along path.
 
 // ============================================================
 // CLIP-BASED ANIMATION SYSTEM
@@ -159,6 +260,9 @@ struct iam_instance_data;
 // Callback types (use instance ID instead of pointer for safety)
 typedef void (*iam_clip_callback)(ImGuiID inst_id, void* user_data);
 
+// Marker callback (includes marker name/id for identification)
+typedef void (*iam_marker_callback)(ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user_data);
+
 // ----------------------------------------------------
 // iam_clip - fluent API for authoring animations
 // ----------------------------------------------------
@@ -176,11 +280,15 @@ public:
 	// Spring-based keyframe (float only)
 	iam_clip& key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring);
 
-	// Timeline grouping (for future expansion)
-	iam_clip& seq_begin();
+	// Timeline grouping - sequential and parallel keyframe blocks
+	iam_clip& seq_begin();  // Start sequential block (keyframes after seq_end start after this block)
 	iam_clip& seq_end();
-	iam_clip& par_begin();
+	iam_clip& par_begin();  // Start parallel block (keyframes play at same time offset)
 	iam_clip& par_end();
+
+	// Timeline markers - callbacks at specific times during playback
+	iam_clip& marker(float time, ImGuiID marker_id, iam_marker_callback cb, void* user = nullptr);  // Add marker at specific time.
+	iam_clip& marker(float time, iam_marker_callback cb, void* user = nullptr);                     // Add marker (auto-generated ID).
 
 	// Clip options
 	iam_clip& set_loop(bool loop, int direction = iam_dir_normal, int loop_count = -1);
@@ -219,6 +327,11 @@ public:
 	void seek(float time);
 	void set_time_scale(float scale);
 	void set_weight(float weight);  // for layering/blending
+
+	// Animation chaining - play another clip when this one completes
+	iam_instance& then(ImGuiID next_clip_id);                                        // Chain another clip to play after this one.
+	iam_instance& then(ImGuiID next_clip_id, ImGuiID next_instance_id);              // Chain with specific instance ID.
+	iam_instance& then_delay(float delay);                                           // Set delay before chained clip starts.
 
 	// Query state
 	float time() const;
