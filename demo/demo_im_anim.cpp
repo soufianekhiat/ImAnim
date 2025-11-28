@@ -408,6 +408,104 @@ static void ShowEasingDemo()
 }
 
 // ============================================================
+// SECTION: Custom Easing
+// ============================================================
+
+// Example custom easing functions
+static float CustomEaseSmooth(float t) {
+	// Attempt a smoothstep-like ease
+	return t * t * (3.0f - 2.0f * t);
+}
+
+static float CustomEaseBouncy(float t) {
+	// Custom bouncy effect
+	float n = 7.5625f;
+	float d = 2.75f;
+	if (t < 1.0f / d) return n * t * t;
+	if (t < 2.0f / d) { t -= 1.5f / d; return n * t * t + 0.75f; }
+	if (t < 2.5f / d) { t -= 2.25f / d; return n * t * t + 0.9375f; }
+	t -= 2.625f / d;
+	return n * t * t + 0.984375f;
+}
+
+static float CustomEaseWobble(float t) {
+	// Wobble with overshoot
+	return t + sinf(t * 3.14159f * 3.0f) * (1.0f - t) * 0.3f;
+}
+
+static void ShowCustomEasingDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped(
+		"Register your own easing functions using iam_register_custom_ease(). "
+		"You get 16 slots (0-15) for custom easing callbacks.");
+
+	// Register custom easings (safe to call every frame - just overwrites)
+	static bool initialized = false;
+	if (!initialized) {
+		iam_register_custom_ease(0, CustomEaseSmooth);
+		iam_register_custom_ease(1, CustomEaseBouncy);
+		iam_register_custom_ease(2, CustomEaseWobble);
+		initialized = true;
+	}
+
+	ImGui::Spacing();
+
+	// Show registered slots
+	ImGui::Text("Registered Custom Easings:");
+	ImGui::BulletText("Slot 0: Smooth (smoothstep)");
+	ImGui::BulletText("Slot 1: Bouncy (bounce variation)");
+	ImGui::BulletText("Slot 2: Wobble (overshoot with sine)");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+
+	// Interactive demo
+	static int selected_slot = 0;
+	static bool playing = false;
+	static float target = 0.0f;
+
+	ImGui::Text("Test Custom Easing:");
+	ImGui::RadioButton("Smooth##custom", &selected_slot, 0); ImGui::SameLine();
+	ImGui::RadioButton("Bouncy##custom", &selected_slot, 1); ImGui::SameLine();
+	ImGui::RadioButton("Wobble##custom", &selected_slot, 2);
+
+	if (ImGui::Button(playing ? "Reset##custom" : "Play##custom")) {
+		playing = !playing;
+		target = playing ? 1.0f : 0.0f;
+	}
+
+	ImGuiID id = ImHashStr("custom_ease_demo");
+	float value = iam_tween_float(id, ImHashStr("pos"), target, 1.0f,
+		iam_ease_custom_fn(selected_slot), iam_policy_crossfade, dt);
+
+	// Draw animated bar
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	float canvas_w = ImGui::GetContentRegionAvail().x;
+	float canvas_h = 30.0f;
+	ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+	draw_list->AddRectFilled(canvas_pos,
+		ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+		IM_COL32(40, 42, 48, 255), 4.0f);
+
+	float bar_w = value * (canvas_w - 10.0f);
+	draw_list->AddRectFilled(
+		ImVec2(canvas_pos.x + 5, canvas_pos.y + 5),
+		ImVec2(canvas_pos.x + 5 + bar_w, canvas_pos.y + canvas_h - 5),
+		IM_COL32(100, 180, 255, 255), 3.0f);
+
+	ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+
+	// Show code example
+	ImGui::Spacing();
+	ImGui::TextDisabled("Usage:");
+	ImGui::TextDisabled("  iam_register_custom_ease(0, MyEaseFunc);");
+	ImGui::TextDisabled("  iam_tween_float(id, ch, target, dur, iam_ease_custom_fn(0), policy, dt);");
+}
+
+// ============================================================
 // SECTION: Basic Tweens
 // ============================================================
 static void ShowBasicTweensDemo()
@@ -2875,6 +2973,577 @@ static void ShowDrawListDemo()
 }
 
 // ============================================================
+// OSCILLATORS DEMO
+// ============================================================
+static void ShowOscillatorsDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Oscillators provide continuous periodic animations without managing state. "
+		"Four wave types available: sine, triangle, sawtooth, and square.");
+
+	// Wave type selector
+	static int wave_type = iam_wave_sine;
+	ImGui::Combo("Wave Type", &wave_type, "Sine\0Triangle\0Sawtooth\0Square\0");
+
+	static float frequency = 1.0f;
+	static float amplitude = 50.0f;
+	ImGui::SliderFloat("Frequency", &frequency, 0.1f, 5.0f, "%.1f Hz");
+	ImGui::SliderFloat("Amplitude", &amplitude, 10.0f, 100.0f, "%.0f px");
+
+	// Visual demo - oscillating circles
+	ImGui::Separator();
+	ImGui::Text("Visual Demo (4 circles with different phases):");
+
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120.0f);
+	ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+	// Background
+	draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+		IM_COL32(30, 30, 40, 255), 4.0f);
+
+	// Center line
+	float center_y = canvas_pos.y + canvas_size.y * 0.5f;
+	draw_list->AddLine(ImVec2(canvas_pos.x, center_y), ImVec2(canvas_pos.x + canvas_size.x, center_y),
+		IM_COL32(100, 100, 100, 100), 1.0f);
+
+	// Draw 4 circles with different phases
+	ImU32 colors[] = {
+		IM_COL32(255, 100, 100, 255),
+		IM_COL32(100, 255, 100, 255),
+		IM_COL32(100, 100, 255, 255),
+		IM_COL32(255, 255, 100, 255)
+	};
+
+	for (int i = 0; i < 4; i++) {
+		float phase = i * 0.25f;
+		float x = canvas_pos.x + 50.0f + i * (canvas_size.x - 100.0f) / 3.0f;
+		char id_buf[32];
+		snprintf(id_buf, sizeof(id_buf), "osc_demo_%d", i);
+		float offset_y = iam_oscillate(ImGui::GetID(id_buf),
+			amplitude, frequency, wave_type, phase, dt);
+		draw_list->AddCircleFilled(ImVec2(x, center_y + offset_y), 12.0f, colors[i]);
+		draw_list->AddCircle(ImVec2(x, center_y + offset_y), 12.0f, IM_COL32(255,255,255,100), 0, 2.0f);
+	}
+
+	ImGui::Dummy(canvas_size);
+
+	// Vec2 oscillation demo
+	if (ImGui::TreeNode("2D Oscillation (Lissajous)")) {
+		static ImVec2 freq_2d(1.0f, 2.0f);
+		static ImVec2 amp_2d(40.0f, 40.0f);
+		ImGui::SliderFloat2("Frequency X/Y", &freq_2d.x, 0.5f, 4.0f, "%.1f");
+		ImGui::SliderFloat2("Amplitude X/Y", &amp_2d.x, 10.0f, 60.0f, "%.0f");
+
+		ImVec2 canvas_pos2 = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size2(200.0f, 200.0f);
+		ImVec2 center(canvas_pos2.x + canvas_size2.x * 0.5f, canvas_pos2.y + canvas_size2.y * 0.5f);
+
+		draw_list->AddRectFilled(canvas_pos2, ImVec2(canvas_pos2.x + canvas_size2.x, canvas_pos2.y + canvas_size2.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		ImVec2 offset = iam_oscillate_vec2(ImGui::GetID("lissajous"), amp_2d, freq_2d, iam_wave_sine, ImVec2(0, 0), dt);
+		draw_list->AddCircleFilled(ImVec2(center.x + offset.x, center.y + offset.y), 10.0f, IM_COL32(100, 200, 255, 255));
+
+		ImGui::Dummy(canvas_size2);
+		ImGui::TreePop();
+	}
+
+	// Practical UI example
+	if (ImGui::TreeNode("Practical: Pulsing Button")) {
+		float pulse = iam_oscillate(ImGui::GetID("pulse_btn"), 0.1f, 2.0f, iam_wave_sine, 0.0f, dt);
+		float scale = 1.0f + pulse;
+
+		ImGui::SetWindowFontScale(scale);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f + pulse * 0.5f, 0.5f, 0.8f, 1.0f));
+		ImGui::Button("Click Me!", ImVec2(120 * scale, 40 * scale));
+		ImGui::PopStyleColor();
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::SameLine();
+		ImGui::TextDisabled("Button pulses continuously");
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// SHAKE/WIGGLE DEMO
+// ============================================================
+static void ShowShakeWiggleDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Shake provides decaying random motion (for error feedback, impacts). "
+		"Wiggle provides continuous smooth random movement (for idle animations, organic feel).");
+
+	// Shake demo
+	if (ImGui::TreeNodeEx("Shake (Decaying)", ImGuiTreeNodeFlags_DefaultOpen)) {
+		static float shake_intensity = 10.0f;
+		static float shake_frequency = 20.0f;
+		static float shake_decay = 0.5f;
+
+		ImGui::SliderFloat("Intensity", &shake_intensity, 1.0f, 30.0f, "%.0f px");
+		ImGui::SliderFloat("Frequency", &shake_frequency, 5.0f, 50.0f, "%.0f Hz");
+		ImGui::SliderFloat("Decay Time", &shake_decay, 0.1f, 2.0f, "%.1f s");
+
+		ImGuiID shake_id = ImGui::GetID("shake_demo");
+		if (ImGui::Button("Trigger Shake!")) {
+			iam_trigger_shake(shake_id);
+		}
+
+		ImVec2 offset = iam_shake_vec2(shake_id, ImVec2(shake_intensity, shake_intensity),
+			shake_frequency, shake_decay, dt);
+
+		// Visual
+		ImVec2 box_pos = ImGui::GetCursorScreenPos();
+		ImVec2 box_size(100.0f, 60.0f);
+		ImVec2 center(box_pos.x + 150.0f + offset.x, box_pos.y + 40.0f + offset.y);
+
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+		draw_list->AddRectFilled(
+			ImVec2(center.x - box_size.x * 0.5f, center.y - box_size.y * 0.5f),
+			ImVec2(center.x + box_size.x * 0.5f, center.y + box_size.y * 0.5f),
+			IM_COL32(255, 100, 100, 255), 8.0f);
+		draw_list->AddText(ImVec2(center.x - 25, center.y - 8), IM_COL32(255, 255, 255, 255), "SHAKE");
+
+		ImGui::Dummy(ImVec2(300, 100));
+		ImGui::TreePop();
+	}
+
+	// Wiggle demo
+	if (ImGui::TreeNode("Wiggle (Continuous)")) {
+		static float wiggle_amplitude = 5.0f;
+		static float wiggle_frequency = 3.0f;
+
+		ImGui::SliderFloat("Amplitude##wiggle", &wiggle_amplitude, 1.0f, 20.0f, "%.0f px");
+		ImGui::SliderFloat("Frequency##wiggle", &wiggle_frequency, 0.5f, 10.0f, "%.1f Hz");
+
+		ImVec2 offset = iam_wiggle_vec2(ImGui::GetID("wiggle_demo"),
+			ImVec2(wiggle_amplitude, wiggle_amplitude), wiggle_frequency, dt);
+
+		// Visual - floating icon
+		ImVec2 icon_pos = ImGui::GetCursorScreenPos();
+		ImVec2 center(icon_pos.x + 150.0f + offset.x, icon_pos.y + 40.0f + offset.y);
+
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+		draw_list->AddCircleFilled(center, 30.0f, IM_COL32(100, 200, 100, 255));
+		draw_list->AddCircle(center, 30.0f, IM_COL32(255, 255, 255, 150), 0, 2.0f);
+		draw_list->AddText(ImVec2(center.x - 10, center.y - 8), IM_COL32(255, 255, 255, 255), ":)");
+
+		ImGui::Dummy(ImVec2(300, 100));
+		ImGui::SameLine();
+		ImGui::TextDisabled("Continuous organic movement");
+		ImGui::TreePop();
+	}
+
+	// Practical example
+	if (ImGui::TreeNode("Practical: Error Feedback")) {
+		static char input_buf[64] = "";
+		static bool show_error = false;
+		ImGuiID error_shake_id = ImGui::GetID("error_shake");
+
+		float shake_offset = iam_shake(error_shake_id, 8.0f, 30.0f, 0.3f, dt);
+
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + shake_offset);
+		ImGui::PushItemWidth(200);
+
+		if (show_error) {
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+		}
+
+		ImGui::InputText("##email", input_buf, sizeof(input_buf));
+
+		if (show_error) {
+			ImGui::PopStyleColor(2);
+		}
+		ImGui::PopItemWidth();
+
+		ImGui::SameLine();
+		if (ImGui::Button("Validate")) {
+			show_error = (strlen(input_buf) == 0 || strchr(input_buf, '@') == nullptr);
+			if (show_error) {
+				iam_trigger_shake(error_shake_id);
+			}
+		}
+
+		if (show_error) {
+			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Invalid email format!");
+		}
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// SCROLL ANIMATION DEMO
+// ============================================================
+static void ShowScrollDemo()
+{
+	ImGui::TextWrapped("Smooth animated scrolling within ImGui windows. "
+		"Use iam_scroll_to_y() for custom positions or convenience functions for common cases.");
+
+	// Create a child window to demonstrate scrolling
+	ImGui::Text("Scroll Controls:");
+
+	static float scroll_duration = 0.5f;
+	ImGui::SliderFloat("Duration", &scroll_duration, 0.1f, 2.0f, "%.1f s");
+
+	if (ImGui::Button("Scroll to Top")) {
+		// Will be called inside the child window
+	}
+	bool scroll_top = ImGui::IsItemClicked();
+
+	ImGui::SameLine();
+	if (ImGui::Button("Scroll to Middle")) {
+	}
+	bool scroll_middle = ImGui::IsItemClicked();
+
+	ImGui::SameLine();
+	if (ImGui::Button("Scroll to Bottom")) {
+	}
+	bool scroll_bottom = ImGui::IsItemClicked();
+
+	ImGui::Separator();
+
+	// Scrollable child window
+	ImGui::BeginChild("ScrollDemoChild", ImVec2(0, 300), ImGuiChildFlags_Borders);
+
+	// Apply scroll commands inside the child window
+	if (scroll_top) {
+		iam_scroll_to_top(scroll_duration);
+	}
+	if (scroll_middle) {
+		iam_scroll_to_y(500.0f, scroll_duration);  // Roughly middle
+	}
+	if (scroll_bottom) {
+		iam_scroll_to_bottom(scroll_duration);
+	}
+
+	// Content - many items to scroll through
+	for (int i = 0; i < 50; i++) {
+		bool is_special = (i == 0 || i == 24 || i == 49);
+		if (is_special) {
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+		}
+
+		if (i == 0) ImGui::Text(">>> TOP - Item %d <<<", i);
+		else if (i == 24) ImGui::Text(">>> MIDDLE - Item %d <<<", i);
+		else if (i == 49) ImGui::Text(">>> BOTTOM - Item %d <<<", i);
+		else ImGui::Text("Item %d - Some content here", i);
+
+		if (is_special) {
+			ImGui::PopStyleColor();
+		}
+
+		// Add scroll-to buttons for specific items
+		if (i == 10 || i == 30) {
+			ImGui::SameLine();
+			char btn_label[32];
+			snprintf(btn_label, sizeof(btn_label), "Scroll Here##%d", i);
+			if (ImGui::SmallButton(btn_label)) {
+				iam_scroll_to_y(ImGui::GetCursorPosY() - 50.0f, scroll_duration);
+			}
+		}
+	}
+
+	ImGui::EndChild();
+
+	ImGui::TextDisabled("Current scroll Y: %.0f", ImGui::GetScrollY());
+}
+
+// ============================================================
+// MOTION PATHS DEMO
+// ============================================================
+static void ShowMotionPathsDemo()
+{
+	ImGui::TextWrapped("Motion paths allow animating positions along bezier curves and Catmull-Rom splines.");
+
+	static bool paths_initialized = false;
+	static ImGuiID bezier_path_id = ImHashStr("bezier_demo_path");
+	static ImGuiID catmull_path_id = ImHashStr("catmull_demo_path");
+	static ImGuiID complex_path_id = ImHashStr("complex_demo_path");
+
+	// Initialize paths once
+	if (!paths_initialized) {
+		// Quadratic bezier path
+		iam_path::begin(bezier_path_id, ImVec2(50, 100))
+			.quadratic_to(ImVec2(150, 20), ImVec2(250, 100))
+			.quadratic_to(ImVec2(350, 180), ImVec2(450, 100))
+			.end();
+
+		// Catmull-Rom spline path
+		iam_path::begin(catmull_path_id, ImVec2(50, 50))
+			.catmull_to(ImVec2(150, 120))
+			.catmull_to(ImVec2(250, 30))
+			.catmull_to(ImVec2(350, 100))
+			.catmull_to(ImVec2(450, 50))
+			.end();
+
+		// Complex cubic bezier path
+		iam_path::begin(complex_path_id, ImVec2(50, 80))
+			.cubic_to(ImVec2(100, 10), ImVec2(150, 150), ImVec2(200, 80))
+			.cubic_to(ImVec2(250, 10), ImVec2(300, 150), ImVec2(350, 80))
+			.line_to(ImVec2(450, 80))
+			.end();
+
+		paths_initialized = true;
+	}
+
+	static float path_duration = 2.0f;
+	static int selected_ease = iam_ease_in_out_cubic;
+	ImGui::SliderFloat("Duration", &path_duration, 0.5f, 5.0f);
+
+	static const char* ease_names[] = { "Linear", "In Quad", "Out Quad", "InOut Quad",
+		"In Cubic", "Out Cubic", "InOut Cubic", "In Quart", "Out Quart", "InOut Quart" };
+	ImGui::Combo("Easing", &selected_ease, ease_names, IM_ARRAYSIZE(ease_names));
+
+	// Animation state: elapsed time for each path (-1 = not playing)
+	static float path_elapsed[3] = { -1.0f, -1.0f, -1.0f };
+
+	if (ImGui::Button("Play Bezier")) path_elapsed[0] = 0.0f;
+	ImGui::SameLine();
+	if (ImGui::Button("Play Catmull-Rom")) path_elapsed[1] = 0.0f;
+	ImGui::SameLine();
+	if (ImGui::Button("Play Complex")) path_elapsed[2] = 0.0f;
+
+	// Draw area
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_size(500, 180);
+	ImDrawList* draw = ImGui::GetWindowDrawList();
+	draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+	ImGui::Dummy(canvas_size);
+
+	float dt = GetSafeDeltaTime();
+
+	// Draw paths and animate
+	auto draw_path = [&](ImGuiID path_id, ImU32 path_color, float& elapsed, int idx) {
+		// Draw the path
+		for (float t = 0; t < 1.0f; t += 0.01f) {
+			ImVec2 p1 = iam_path_evaluate(path_id, t);
+			ImVec2 p2 = iam_path_evaluate(path_id, t + 0.01f);
+			draw->AddLine(
+				ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y + idx * 60),
+				ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y + idx * 60),
+				path_color, 2.0f);
+		}
+
+		// Animate object along path using timer + easing
+		if (elapsed >= 0.0f) {
+			elapsed += dt;
+			float t = elapsed / path_duration;
+			if (t > 1.0f) {
+				t = 1.0f;
+				elapsed = -1.0f;  // Stop animation
+			}
+			// Apply easing
+			float eased_t = iam_eval_preset(selected_ease, t);
+			ImVec2 pos = iam_path_evaluate(path_id, eased_t);
+			draw->AddCircleFilled(
+				ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y + idx * 60),
+				8.0f, IM_COL32(255, 255, 255, 255));
+		}
+	};
+
+	draw_path(bezier_path_id, IM_COL32(100, 200, 255, 255), path_elapsed[0], 0);
+	draw_path(catmull_path_id, IM_COL32(100, 255, 100, 255), path_elapsed[1], 1);
+	draw_path(complex_path_id, IM_COL32(255, 150, 100, 255), path_elapsed[2], 2);
+
+	// Labels
+	draw->AddText(ImVec2(canvas_pos.x + 5, canvas_pos.y + 5), IM_COL32(100, 200, 255, 255), "Quadratic Bezier");
+	draw->AddText(ImVec2(canvas_pos.x + 5, canvas_pos.y + 65), IM_COL32(100, 255, 100, 255), "Catmull-Rom");
+	draw->AddText(ImVec2(canvas_pos.x + 5, canvas_pos.y + 125), IM_COL32(255, 150, 100, 255), "Cubic Bezier + Line");
+
+	ImGui::TextDisabled("Paths can mix bezier curves, Catmull-Rom splines, and lines.");
+}
+
+// ============================================================
+// TIMELINE MARKERS DEMO
+// ============================================================
+static void ShowTimelineMarkersDemo()
+{
+	ImGui::TextWrapped("Timeline markers trigger callbacks at specific times during clip playback.");
+
+	static bool clip_initialized = false;
+	static ImGuiID marker_clip_id = ImHashStr("marker_demo_clip");
+	static ImVector<const char*> marker_log;
+	static float marker_log_time = 0;
+
+	// Marker callback
+	static auto marker_callback = [](ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user_data) {
+		char* msg = new char[64];
+		snprintf(msg, 64, "Marker at %.2fs", marker_time);
+		marker_log.push_back(msg);
+		marker_log_time = 3.0f;  // Show for 3 seconds
+	};
+
+	// Initialize clip with markers
+	if (!clip_initialized) {
+		iam_clip::begin(marker_clip_id)
+			.key_float(ImHashStr("progress"), 0.0f, 0.0f, iam_ease_linear)
+			.key_float(ImHashStr("progress"), 3.0f, 1.0f, iam_ease_linear)
+			.marker(0.5f, marker_callback)
+			.marker(1.0f, marker_callback)
+			.marker(1.5f, marker_callback)
+			.marker(2.0f, marker_callback)
+			.marker(2.5f, marker_callback)
+			.end();
+		clip_initialized = true;
+	}
+
+	static iam_instance marker_inst;
+
+	if (ImGui::Button("Play Clip with Markers")) {
+		// Clear log
+		for (int i = 0; i < marker_log.Size; i++) delete[] marker_log[i];
+		marker_log.clear();
+		marker_inst = iam_play(marker_clip_id, ImHashStr("marker_inst"));
+	}
+
+	// Progress bar
+	float progress = 0.0f;
+	if (marker_inst.valid()) {
+		marker_inst.get_float(ImHashStr("progress"), &progress);
+	}
+	ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+
+	// Show markers on timeline
+	ImVec2 bar_pos = ImGui::GetItemRectMin();
+	ImVec2 bar_size = ImGui::GetItemRectSize();
+	ImDrawList* draw = ImGui::GetWindowDrawList();
+	float marker_times[] = { 0.5f, 1.0f, 1.5f, 2.0f, 2.5f };
+	for (int i = 0; i < 5; i++) {
+		float t = marker_times[i] / 3.0f;  // Normalize to 0-1
+		float x = bar_pos.x + bar_size.x * t;
+		draw->AddLine(ImVec2(x, bar_pos.y), ImVec2(x, bar_pos.y + bar_size.y), IM_COL32(255, 200, 100, 255), 2.0f);
+	}
+
+	// Marker log
+	ImGui::Text("Marker Events:");
+	marker_log_time -= GetSafeDeltaTime();
+	if (marker_log_time > 0) {
+		for (int i = 0; i < marker_log.Size; i++) {
+			ImGui::BulletText("%s", marker_log[i]);
+		}
+	}
+
+	ImGui::TextDisabled("Orange lines show marker positions on the timeline.");
+}
+
+// ============================================================
+// ANIMATION CHAINING DEMO
+// ============================================================
+static void ShowAnimationChainingDemo()
+{
+	ImGui::TextWrapped("Animation chaining allows clips to automatically trigger another clip when they complete.");
+
+	static bool clips_initialized = false;
+	static ImGuiID clip_a = ImHashStr("chain_clip_a");
+	static ImGuiID clip_b = ImHashStr("chain_clip_b");
+	static ImGuiID clip_c = ImHashStr("chain_clip_c");
+
+	// Initialize clips
+	if (!clips_initialized) {
+		// Clip A: Move right
+		iam_clip::begin(clip_a)
+			.key_float(ImHashStr("x"), 0.0f, 50.0f, iam_ease_out_cubic)
+			.key_float(ImHashStr("x"), 0.5f, 200.0f, iam_ease_out_cubic)
+			.key_vec4(ImHashStr("color"), 0.0f, ImVec4(1, 0.3f, 0.3f, 1), iam_ease_linear)
+			.key_vec4(ImHashStr("color"), 0.5f, ImVec4(1, 0.3f, 0.3f, 1), iam_ease_linear)
+			.end();
+
+		// Clip B: Move down
+		iam_clip::begin(clip_b)
+			.key_float(ImHashStr("y"), 0.0f, 30.0f, iam_ease_out_cubic)
+			.key_float(ImHashStr("y"), 0.5f, 100.0f, iam_ease_out_cubic)
+			.key_vec4(ImHashStr("color"), 0.0f, ImVec4(0.3f, 1, 0.3f, 1), iam_ease_linear)
+			.key_vec4(ImHashStr("color"), 0.5f, ImVec4(0.3f, 1, 0.3f, 1), iam_ease_linear)
+			.end();
+
+		// Clip C: Move diagonally back
+		iam_clip::begin(clip_c)
+			.key_float(ImHashStr("x"), 0.0f, 200.0f, iam_ease_out_cubic)
+			.key_float(ImHashStr("x"), 0.5f, 50.0f, iam_ease_out_cubic)
+			.key_float(ImHashStr("y"), 0.0f, 100.0f, iam_ease_out_cubic)
+			.key_float(ImHashStr("y"), 0.5f, 30.0f, iam_ease_out_cubic)
+			.key_vec4(ImHashStr("color"), 0.0f, ImVec4(0.3f, 0.3f, 1, 1), iam_ease_linear)
+			.key_vec4(ImHashStr("color"), 0.5f, ImVec4(0.3f, 0.3f, 1, 1), iam_ease_linear)
+			.end();
+
+		clips_initialized = true;
+	}
+
+	static float chain_delay = 0.1f;
+	ImGui::SliderFloat("Delay Between Clips", &chain_delay, 0.0f, 0.5f);
+
+	static bool b_chain_set = false;
+
+	if (ImGui::Button("Play A -> B -> C (Chained)")) {
+		// Destroy any existing instances to start fresh
+		iam_instance old_a = iam_get_instance(ImHashStr("chain_inst_a"));
+		iam_instance old_b = iam_get_instance(ImHashStr("chain_inst_b"));
+		iam_instance old_c = iam_get_instance(ImHashStr("chain_inst_c"));
+		if (old_a.valid()) old_a.destroy();
+		if (old_b.valid()) old_b.destroy();
+		if (old_c.valid()) old_c.destroy();
+		b_chain_set = false;
+
+		// Start clip A with chain to B
+		iam_instance inst_a = iam_play(clip_a, ImHashStr("chain_inst_a"));
+		inst_a.then(clip_b, ImHashStr("chain_inst_b")).then_delay(chain_delay);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(with .then())");
+
+	// Get instances
+	iam_instance inst_a = iam_get_instance(ImHashStr("chain_inst_a"));
+	iam_instance inst_b = iam_get_instance(ImHashStr("chain_inst_b"));
+	iam_instance inst_c = iam_get_instance(ImHashStr("chain_inst_c"));
+
+	// Set up B -> C chain when B starts (can't do this upfront since B doesn't exist yet)
+	if (inst_b.valid() && inst_b.is_playing() && !b_chain_set) {
+		inst_b.then(clip_c, ImHashStr("chain_inst_c")).then_delay(chain_delay);
+		b_chain_set = true;
+	}
+
+	// Draw animated object
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_size(300, 150);
+	ImDrawList* draw = ImGui::GetWindowDrawList();
+	draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+
+	// Determine which instance is active and get values from it
+	float x = 50.0f, y = 30.0f;
+	ImVec4 color(0.5f, 0.5f, 0.5f, 1.0f);
+
+	// Only read from the currently active (or most recently finished) instance
+	if (inst_c.valid()) {
+		inst_c.get_float(ImHashStr("x"), &x);
+		inst_c.get_float(ImHashStr("y"), &y);
+		inst_c.get_vec4(ImHashStr("color"), &color);
+	} else if (inst_b.valid()) {
+		// Get x from A's final value
+		if (inst_a.valid()) inst_a.get_float(ImHashStr("x"), &x);
+		inst_b.get_float(ImHashStr("y"), &y);
+		inst_b.get_vec4(ImHashStr("color"), &color);
+	} else if (inst_a.valid()) {
+		inst_a.get_float(ImHashStr("x"), &x);
+		inst_a.get_vec4(ImHashStr("color"), &color);
+	}
+
+	ImU32 obj_color = ImGui::ColorConvertFloat4ToU32(color);
+	draw->AddCircleFilled(ImVec2(canvas_pos.x + x, canvas_pos.y + y), 15.0f, obj_color);
+
+	ImGui::Dummy(canvas_size);
+
+	// Status
+	ImGui::Text("Instance Status:");
+	ImGui::BulletText("A: %s", inst_a.valid() ? (inst_a.is_playing() ? "Playing" : "Done") : "Not started");
+	ImGui::BulletText("B: %s", inst_b.valid() ? (inst_b.is_playing() ? "Playing" : "Done") : "Not started");
+	ImGui::BulletText("C: %s", inst_c.valid() ? (inst_c.is_playing() ? "Playing" : "Done") : "Not started");
+}
+
+// ============================================================
 // MAIN DEMO WINDOW
 // ============================================================
 void ImAnimDemoWindow()
@@ -2891,11 +3560,22 @@ void ImAnimDemoWindow()
 
 	ImGui::Text("Anim %s", "1.0");
 	ImGui::TextDisabled("Animation helpers for Dear ImGui");
+
+	// Debug window toggle
+	static bool show_debug_window = false;
+	ImGui::Checkbox("Show Debug Window", &show_debug_window);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(time scale, stats)");
+
 	ImGui::Separator();
 
 	// Main sections as collapsing headers (like imgui_demo.cpp)
 	if (ImGui::CollapsingHeader("Easing Functions")) {
 		ShowEasingDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Custom Easing")) {
+		ShowCustomEasingDemo();
 	}
 
 	if (ImGui::CollapsingHeader("Basic Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -2930,9 +3610,38 @@ void ImAnimDemoWindow()
 		ShowDrawListDemo();
 	}
 
+	if (ImGui::CollapsingHeader("Oscillators")) {
+		ShowOscillatorsDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Shake & Wiggle")) {
+		ShowShakeWiggleDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Scroll Animation")) {
+		ShowScrollDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Motion Paths")) {
+		ShowMotionPathsDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Timeline Markers")) {
+		ShowTimelineMarkersDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Animation Chaining")) {
+		ShowAnimationChainingDemo();
+	}
+
 	// Footer
 	ImGui::Separator();
 	ImGui::TextDisabled("FPS: %.1f (dt: %.3f ms)", ImGui::GetIO().Framerate, ImGui::GetIO().DeltaTime * 1000.0f);
 
 	ImGui::End();
+
+	// Show debug window if enabled
+	if (show_debug_window) {
+		iam_show_debug_window(&show_debug_window);
+	}
 }
