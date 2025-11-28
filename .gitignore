@@ -47,3 +47,5 @@ tmp
 *.user
 *.exp
 *.map
+*.sln
+*.ini
