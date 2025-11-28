@@ -5082,6 +5082,447 @@ void iam_style_tween(ImGuiID id, ImGuiID target_style, float duration, iam_ease_
 }
 
 // ============================================================
+// GRADIENT INTERPOLATION
+// ============================================================
+
+ImVec4 iam_gradient::sample(float t, int color_space) const {
+	if (stop_count == 0) return ImVec4(1, 1, 1, 1);
+	if (stop_count == 1) return stops[0].color;
+
+	// Clamp t
+	if (t <= stops[0].position) return stops[0].color;
+	if (t >= stops[stop_count - 1].position) return stops[stop_count - 1].color;
+
+	// Find the two stops we're between
+	for (int i = 0; i < stop_count - 1; ++i) {
+		if (t >= stops[i].position && t <= stops[i + 1].position) {
+			float range = stops[i + 1].position - stops[i].position;
+			float local_t = (range > 1e-6f) ? (t - stops[i].position) / range : 0.0f;
+			return iam_detail::color::lerp_color(stops[i].color, stops[i + 1].color, local_t, color_space);
+		}
+	}
+
+	return stops[stop_count - 1].color;
+}
+
+iam_gradient iam_gradient::solid(ImVec4 color) {
+	iam_gradient g;
+	g.add(0.0f, color);
+	g.add(1.0f, color);
+	return g;
+}
+
+iam_gradient iam_gradient::two_color(ImVec4 start, ImVec4 end) {
+	iam_gradient g;
+	g.add(0.0f, start);
+	g.add(1.0f, end);
+	return g;
+}
+
+iam_gradient iam_gradient::three_color(ImVec4 start, ImVec4 mid, ImVec4 end) {
+	iam_gradient g;
+	g.add(0.0f, start);
+	g.add(0.5f, mid);
+	g.add(1.0f, end);
+	return g;
+}
+
+iam_gradient iam_gradient_lerp(iam_gradient const& a, iam_gradient const& b, float t, int color_space) {
+	// Strategy: sample both gradients at unified positions and blend
+	// Collect all unique positions from both gradients
+	float positions[IAM_GRADIENT_MAX_STOPS * 2];
+	int pos_count = 0;
+
+	for (int i = 0; i < a.stop_count; ++i) {
+		positions[pos_count++] = a.stops[i].position;
+	}
+	for (int i = 0; i < b.stop_count; ++i) {
+		// Add if not already present
+		bool found = false;
+		for (int j = 0; j < pos_count; ++j) {
+			if (fabsf(positions[j] - b.stops[i].position) < 1e-6f) {
+				found = true;
+				break;
+			}
+		}
+		if (!found && pos_count < IAM_GRADIENT_MAX_STOPS * 2) {
+			positions[pos_count++] = b.stops[i].position;
+		}
+	}
+
+	// Sort positions
+	for (int i = 0; i < pos_count - 1; ++i) {
+		for (int j = i + 1; j < pos_count; ++j) {
+			if (positions[j] < positions[i]) {
+				float tmp = positions[i];
+				positions[i] = positions[j];
+				positions[j] = tmp;
+			}
+		}
+	}
+
+	// Limit to max stops
+	if (pos_count > IAM_GRADIENT_MAX_STOPS) pos_count = IAM_GRADIENT_MAX_STOPS;
+
+	// Build result gradient by sampling and blending at each position
+	iam_gradient result;
+	for (int i = 0; i < pos_count; ++i) {
+		ImVec4 color_a = a.sample(positions[i], color_space);
+		ImVec4 color_b = b.sample(positions[i], color_space);
+		ImVec4 blended = iam_detail::color::lerp_color(color_a, color_b, t, color_space);
+		result.add(positions[i], blended);
+	}
+
+	return result;
+}
+
+// Gradient channel for tweening
+namespace iam_gradient_detail {
+
+struct gradient_chan {
+	iam_gradient current, start, target;
+	float dur, t;
+	iam_ease_desc ez;
+	int policy;
+	int color_space;
+	unsigned last_seen_frame;
+	unsigned sleeping;
+
+	gradient_chan() {
+		dur = 1e-6f; t = 1.0f;
+		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
+		policy = iam_policy_crossfade;
+		color_space = iam_col_oklab;
+		last_seen_frame = 0;
+		sleeping = 1;
+	}
+
+	void set(iam_gradient const& trg, float d, iam_ease_desc const& e, int pol, int cs) {
+		start = current;
+		target = trg;
+		dur = (d <= 1e-6f ? 1e-6f : d);
+		t = 0;
+		ez = e;
+		policy = pol;
+		color_space = cs;
+		sleeping = 0;
+	}
+
+	void tick(float dt) {
+		if (t >= 1.0f) { current = target; sleeping = 1; return; }
+		if (dt > 0) t += dt / dur;
+		float k = iam_detail::eval(ez, t);
+		current = iam_gradient_lerp(start, target, k, color_space);
+	}
+};
+
+static ImPool<gradient_chan> g_gradient_pool;
+static unsigned g_gradient_frame = 0;
+
+} // namespace iam_gradient_detail
+
+iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient const& target, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt) {
+	using namespace iam_gradient_detail;
+
+	dt *= iam_detail::g_time_scale;
+	ImGuiID key = iam_detail::make_key(id, channel_id);
+	gradient_chan* c = g_gradient_pool.GetOrAddByKey(key);
+	c->last_seen_frame = g_gradient_frame;
+
+	// Fast path: sleeping and target unchanged
+	if (c->sleeping && c->target.stop_count == target.stop_count) {
+		bool same = true;
+		for (int i = 0; i < target.stop_count && same; ++i) {
+			if (fabsf(c->target.stops[i].position - target.stops[i].position) > 1e-6f) same = false;
+			if (fabsf(c->target.stops[i].color.x - target.stops[i].color.x) > 1e-6f) same = false;
+			if (fabsf(c->target.stops[i].color.y - target.stops[i].color.y) > 1e-6f) same = false;
+			if (fabsf(c->target.stops[i].color.z - target.stops[i].color.z) > 1e-6f) same = false;
+			if (fabsf(c->target.stops[i].color.w - target.stops[i].color.w) > 1e-6f) same = false;
+		}
+		if (same) return c->current;
+	}
+
+	// Check if target changed
+	bool change = (c->policy != policy) || (c->ez.type != ez.type) ||
+	              (c->ez.p0 != ez.p0) || (c->ez.p1 != ez.p1) || (c->ez.p2 != ez.p2) || (c->ez.p3 != ez.p3) ||
+	              (c->t >= 1.0f) || (c->target.stop_count != target.stop_count);
+
+	if (!change) {
+		for (int i = 0; i < target.stop_count && !change; ++i) {
+			if (fabsf(c->target.stops[i].position - target.stops[i].position) > 1e-6f) change = true;
+			if (fabsf(c->target.stops[i].color.x - target.stops[i].color.x) > 1e-6f) change = true;
+			if (fabsf(c->target.stops[i].color.y - target.stops[i].color.y) > 1e-6f) change = true;
+			if (fabsf(c->target.stops[i].color.z - target.stops[i].color.z) > 1e-6f) change = true;
+			if (fabsf(c->target.stops[i].color.w - target.stops[i].color.w) > 1e-6f) change = true;
+		}
+	}
+
+	if (change) {
+		if (policy == iam_policy_cut) {
+			c->current = c->start = c->target = target;
+			c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->color_space = color_space;
+			c->sleeping = 1;
+		} else {
+			if (c->t < 1.0f && dt > 0) c->tick(dt);
+			c->set(target, dur, ez, policy, color_space);
+			c->tick(dt);
+		}
+	} else {
+		c->tick(dt);
+	}
+
+	return c->current;
+}
+
+// ============================================================
+// TRANSFORM INTERPOLATION
+// ============================================================
+
+iam_transform iam_transform::operator*(iam_transform const& other) const {
+	// Combine: first apply other, then this
+	// Result position = this.apply(other.position)
+	// Result rotation = this.rotation + other.rotation
+	// Result scale = this.scale * other.scale
+	iam_transform result;
+	result.scale = ImVec2(scale.x * other.scale.x, scale.y * other.scale.y);
+	result.rotation = rotation + other.rotation;
+
+	// Apply this transform to other's position
+	float c = cosf(rotation);
+	float s = sinf(rotation);
+	result.position.x = position.x + (other.position.x * c - other.position.y * s) * scale.x;
+	result.position.y = position.y + (other.position.x * s + other.position.y * c) * scale.y;
+
+	return result;
+}
+
+ImVec2 iam_transform::apply(ImVec2 point) const {
+	// Apply scale, then rotation, then translation
+	float c = cosf(rotation);
+	float s = sinf(rotation);
+	float sx = point.x * scale.x;
+	float sy = point.y * scale.y;
+	return ImVec2(
+		position.x + sx * c - sy * s,
+		position.y + sx * s + sy * c
+	);
+}
+
+iam_transform iam_transform::inverse() const {
+	iam_transform result;
+
+	// Inverse scale
+	result.scale = ImVec2(
+		fabsf(scale.x) > 1e-6f ? 1.0f / scale.x : 1.0f,
+		fabsf(scale.y) > 1e-6f ? 1.0f / scale.y : 1.0f
+	);
+
+	// Inverse rotation
+	result.rotation = -rotation;
+
+	// Inverse translation (apply inverse rotation and scale to negated position)
+	float c = cosf(-rotation);
+	float s = sinf(-rotation);
+	result.position.x = (-position.x * c + position.y * s) * result.scale.x;
+	result.position.y = (-position.x * s - position.y * c) * result.scale.y;
+
+	return result;
+}
+
+// Two-pi constant
+static const float TWO_PI = 6.28318530f;
+static const float PI = 3.14159265f;
+
+// Calculate rotation difference based on mode
+static float angle_diff_mode(float from, float to, int mode) {
+	// Normalize angles to [0, 2pi)
+	float from_n = fmodf(from, TWO_PI);
+	if (from_n < 0) from_n += TWO_PI;
+	float to_n = fmodf(to, TWO_PI);
+	if (to_n < 0) to_n += TWO_PI;
+
+	float diff = to_n - from_n;
+
+	switch (mode) {
+	case iam_rotation_shortest:
+		// Shortest path: wrap to [-pi, pi]
+		if (diff > PI) diff -= TWO_PI;
+		else if (diff < -PI) diff += TWO_PI;
+		break;
+
+	case iam_rotation_longest:
+		// Longest path: take the long way around
+		if (diff > 0 && diff < PI) diff -= TWO_PI;
+		else if (diff < 0 && diff > -PI) diff += TWO_PI;
+		break;
+
+	case iam_rotation_cw:
+		// Clockwise (positive): ensure diff is positive
+		if (diff < 0) diff += TWO_PI;
+		break;
+
+	case iam_rotation_ccw:
+		// Counter-clockwise (negative): ensure diff is negative
+		if (diff > 0) diff -= TWO_PI;
+		break;
+
+	case iam_rotation_direct:
+	default:
+		// Direct: use raw difference (to - from), no wrapping
+		diff = to - from;
+		break;
+	}
+
+	return diff;
+}
+
+// Legacy helper for internal use (shortest path)
+static float angle_diff(float from, float to) {
+	return angle_diff_mode(from, to, iam_rotation_shortest);
+}
+
+iam_transform iam_transform_lerp(iam_transform const& a, iam_transform const& b, float t, int rotation_mode) {
+	iam_transform result;
+
+	// Lerp position linearly
+	result.position.x = a.position.x + (b.position.x - a.position.x) * t;
+	result.position.y = a.position.y + (b.position.y - a.position.y) * t;
+
+	// Lerp scale linearly
+	result.scale.x = a.scale.x + (b.scale.x - a.scale.x) * t;
+	result.scale.y = a.scale.y + (b.scale.y - a.scale.y) * t;
+
+	// Lerp rotation using specified mode
+	float diff = angle_diff_mode(a.rotation, b.rotation, rotation_mode);
+	result.rotation = a.rotation + diff * t;
+
+	return result;
+}
+
+iam_transform iam_transform_from_matrix(float m00, float m01, float m10, float m11, float tx, float ty) {
+	iam_transform t;
+
+	// Extract translation
+	t.position = ImVec2(tx, ty);
+
+	// Extract scale
+	t.scale.x = sqrtf(m00 * m00 + m10 * m10);
+	t.scale.y = sqrtf(m01 * m01 + m11 * m11);
+
+	// Check for reflection (negative determinant)
+	float det = m00 * m11 - m01 * m10;
+	if (det < 0) t.scale.x = -t.scale.x;
+
+	// Extract rotation
+	t.rotation = atan2f(m10, m00);
+
+	return t;
+}
+
+void iam_transform_to_matrix(iam_transform const& t, float* out_matrix) {
+	float c = cosf(t.rotation);
+	float s = sinf(t.rotation);
+
+	// Row-major: [m00 m01 tx; m10 m11 ty]
+	out_matrix[0] = c * t.scale.x;  // m00
+	out_matrix[1] = -s * t.scale.y; // m01
+	out_matrix[2] = t.position.x;   // tx
+	out_matrix[3] = s * t.scale.x;  // m10
+	out_matrix[4] = c * t.scale.y;  // m11
+	out_matrix[5] = t.position.y;   // ty
+}
+
+// Transform channel for tweening
+namespace iam_transform_detail {
+
+struct transform_chan {
+	iam_transform current, start, target;
+	float dur, t;
+	iam_ease_desc ez;
+	int policy;
+	int rotation_mode;
+	unsigned last_seen_frame;
+	unsigned sleeping;
+
+	transform_chan() {
+		dur = 1e-6f; t = 1.0f;
+		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
+		policy = iam_policy_crossfade;
+		rotation_mode = iam_rotation_shortest;
+		last_seen_frame = 0;
+		sleeping = 1;
+	}
+
+	void set(iam_transform const& trg, float d, iam_ease_desc const& e, int pol, int rot_mode) {
+		start = current;
+		target = trg;
+		dur = (d <= 1e-6f ? 1e-6f : d);
+		t = 0;
+		ez = e;
+		policy = pol;
+		rotation_mode = rot_mode;
+		sleeping = 0;
+	}
+
+	void tick(float dt) {
+		if (t >= 1.0f) { current = target; sleeping = 1; return; }
+		if (dt > 0) t += dt / dur;
+		float k = iam_detail::eval(ez, t);
+		current = iam_transform_lerp(start, target, k, rotation_mode);
+	}
+};
+
+static ImPool<transform_chan> g_transform_pool;
+static unsigned g_transform_frame = 0;
+
+} // namespace iam_transform_detail
+
+iam_transform iam_tween_transform(ImGuiID id, ImGuiID channel_id, iam_transform const& target, float dur, iam_ease_desc const& ez, int policy, int rotation_mode, float dt) {
+	using namespace iam_transform_detail;
+
+	dt *= iam_detail::g_time_scale;
+	ImGuiID key = iam_detail::make_key(id, channel_id);
+	transform_chan* c = g_transform_pool.GetOrAddByKey(key);
+	c->last_seen_frame = g_transform_frame;
+
+	// Fast path: sleeping and target unchanged
+	if (c->sleeping) {
+		float pos_diff = fabsf(c->target.position.x - target.position.x) + fabsf(c->target.position.y - target.position.y);
+		float rot_diff = fabsf(angle_diff(c->target.rotation, target.rotation));
+		float scale_diff = fabsf(c->target.scale.x - target.scale.x) + fabsf(c->target.scale.y - target.scale.y);
+		if (pos_diff <= 1e-6f && rot_diff <= 1e-6f && scale_diff <= 1e-6f) {
+			return c->current;
+		}
+	}
+
+	// Check if target changed
+	float pos_diff = fabsf(c->target.position.x - target.position.x) + fabsf(c->target.position.y - target.position.y);
+	float rot_diff = fabsf(angle_diff(c->target.rotation, target.rotation));
+	float scale_diff = fabsf(c->target.scale.x - target.scale.x) + fabsf(c->target.scale.y - target.scale.y);
+
+	bool change = (c->policy != policy) || (c->rotation_mode != rotation_mode) || (c->ez.type != ez.type) ||
+	              (c->ez.p0 != ez.p0) || (c->ez.p1 != ez.p1) || (c->ez.p2 != ez.p2) || (c->ez.p3 != ez.p3) ||
+	              (pos_diff > 1e-6f) || (rot_diff > 1e-6f) || (scale_diff > 1e-6f) || (c->t >= 1.0f);
+
+	if (change) {
+		if (policy == iam_policy_cut) {
+			c->current = c->start = c->target = target;
+			c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy;
+			c->rotation_mode = rotation_mode;
+			c->sleeping = 1;
+		} else {
+			if (c->t < 1.0f && dt > 0) c->tick(dt);
+			c->set(target, dur, ez, policy, rotation_mode);
+			c->tick(dt);
+		}
+	} else {
+		c->tick(dt);
+	}
+
+	return c->current;
+}
+
+// ============================================================
 // ANIMATION INSPECTOR - Debug visualization
 // ============================================================
 

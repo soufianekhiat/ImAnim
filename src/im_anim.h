@@ -484,6 +484,106 @@ bool iam_style_exists(ImGuiID style_id);
 void iam_style_unregister(ImGuiID style_id);
 
 // ----------------------------------------------------
+// Gradient Interpolation - animate between color gradients
+// ----------------------------------------------------
+
+// Maximum number of stops in a gradient
+#define IAM_GRADIENT_MAX_STOPS 8
+
+// Single color stop in a gradient
+struct iam_gradient_stop {
+	float position;              // Position along gradient [0,1]
+	ImVec4 color;                // Color at this position (sRGB)
+
+	iam_gradient_stop() : position(0), color(1, 1, 1, 1) {}
+	iam_gradient_stop(float pos, ImVec4 col) : position(pos), color(col) {}
+	iam_gradient_stop(float pos, ImU32 col) : position(pos) {
+		color = ImGui::ColorConvertU32ToFloat4(col);
+	}
+};
+
+// Color gradient with up to 8 stops
+struct iam_gradient {
+	iam_gradient_stop stops[IAM_GRADIENT_MAX_STOPS];
+	int stop_count;
+
+	iam_gradient() : stop_count(0) {}
+
+	// Add a stop to the gradient
+	iam_gradient& add(float position, ImVec4 color) {
+		if (stop_count < IAM_GRADIENT_MAX_STOPS) {
+			stops[stop_count++] = iam_gradient_stop(position, color);
+		}
+		return *this;
+	}
+	iam_gradient& add(float position, ImU32 color) {
+		return add(position, ImGui::ColorConvertU32ToFloat4(color));
+	}
+
+	// Sample the gradient at position t [0,1]
+	ImVec4 sample(float t, int color_space = iam_col_oklab) const;
+
+	// Create common gradients
+	static iam_gradient solid(ImVec4 color);
+	static iam_gradient two_color(ImVec4 start, ImVec4 end);
+	static iam_gradient three_color(ImVec4 start, ImVec4 mid, ImVec4 end);
+};
+
+// Blend between two gradients
+iam_gradient iam_gradient_lerp(iam_gradient const& a, iam_gradient const& b, float t, int color_space = iam_col_oklab);
+
+// Tween between gradients over time
+iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient const& target, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt);
+
+// ----------------------------------------------------
+// Transform Interpolation - animate 2D transforms
+// ----------------------------------------------------
+
+// Rotation interpolation modes
+enum iam_rotation_mode {
+	iam_rotation_shortest = 0,   // Shortest path (default) - never rotates more than 180 degrees
+	iam_rotation_longest,        // Longest path - always takes the long way around
+	iam_rotation_cw,             // Clockwise - always rotates clockwise (positive direction)
+	iam_rotation_ccw,            // Counter-clockwise - always rotates counter-clockwise
+	iam_rotation_direct          // Direct lerp - no angle unwrapping, can cause spinning for large deltas
+};
+
+// 2D transform (position, rotation, scale)
+struct iam_transform {
+	ImVec2 position;             // Translation
+	float rotation;              // Rotation in radians
+	ImVec2 scale;                // Scale (1,1 = identity)
+
+	iam_transform() : position(0, 0), rotation(0), scale(1, 1) {}
+	iam_transform(ImVec2 pos, float rot = 0, ImVec2 scl = ImVec2(1, 1))
+		: position(pos), rotation(rot), scale(scl) {}
+
+	// Create identity transform
+	static iam_transform identity() { return iam_transform(); }
+
+	// Combine transforms (this * other)
+	iam_transform operator*(iam_transform const& other) const;
+
+	// Apply transform to a point
+	ImVec2 apply(ImVec2 point) const;
+
+	// Get inverse transform
+	iam_transform inverse() const;
+};
+
+// Blend between two transforms with rotation interpolation
+iam_transform iam_transform_lerp(iam_transform const& a, iam_transform const& b, float t, int rotation_mode = iam_rotation_shortest);
+
+// Tween between transforms over time
+iam_transform iam_tween_transform(ImGuiID id, ImGuiID channel_id, iam_transform const& target, float dur, iam_ease_desc const& ez, int policy, int rotation_mode, float dt);
+
+// Decompose a 3x2 matrix into transform components
+iam_transform iam_transform_from_matrix(float m00, float m01, float m10, float m11, float tx, float ty);
+
+// Convert transform to 3x2 matrix (row-major: [m00 m01 tx; m10 m11 ty])
+void iam_transform_to_matrix(iam_transform const& t, float* out_matrix);
+
+// ----------------------------------------------------
 // Animation Inspector - debug visualization
 // ----------------------------------------------------
 
