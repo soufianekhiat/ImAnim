@@ -7,16 +7,21 @@ Animation helpers for [Dear ImGui](https://github.com/ocornut/imgui). Provides s
 - **Tween API** - Immediate-mode animation for floats, vec2, vec4, int, and colors
 - **Clip API** - Timeline-based keyframe animations (anime.js-style)
 - **Motion Paths** - Animate along bezier curves and Catmull-Rom splines
+- **Text Along Paths** - Render and animate text along curves with proper rotation
+- **Text Stagger** - Per-character animation effects (fade, scale, slide, rotate, bounce, wave)
 - **Timeline Markers** - Trigger callbacks at specific times within clips
 - **Animation Chaining** - Fluent `.then()` syntax to chain clips together
 - **Stagger Animations** - Cascading effects for lists, grids, and UI elements
 - **Oscillators** - Continuous sine, triangle, sawtooth, square wave generators
 - **Shake & Wiggle** - Procedural noise animations for feedback and organic movement
+- **Noise Channels** - Perlin/Simplex noise for organic procedural movement
+- **Style Interpolation** - Smooth animated transitions between ImGuiStyle themes
 - **Scroll Animation** - Smooth animated scrolling within ImGui windows
 - **30+ Easing Functions** - Standard presets plus cubic-bezier, steps, spring physics
 - **Color Blending** - sRGB, Linear, HSV, OKLAB, and OKLCH color spaces
 - **Tween Policies** - Crossfade, cut, or queue animations
 - **Layering** - Blend multiple animation instances together
+- **Animation Inspector** - Debug window for visualizing all active animations
 - **Resize-Aware** - Helpers for responsive layouts that survive window resizing
 - **Zero Dependencies** - Only requires Dear ImGui
 
@@ -278,6 +283,83 @@ ImVec2 p = iam_catmull_rom(p0, p1, p2, p3, t, tension);
 ImVec2 vel = iam_bezier_quadratic_deriv(p0, p1, p2, t);
 ImVec2 vel = iam_bezier_cubic_deriv(p0, p1, p2, p3, t);
 ImVec2 vel = iam_catmull_rom_deriv(p0, p1, p2, p3, t, tension);
+```
+
+## Text Along Paths
+
+Render text along curves with each character properly rotated to follow the path tangent.
+
+### Basic Text Along Path
+
+```cpp
+// First, create a path
+ImGuiID path_id = ImHashStr("my_text_path");
+iam_path::begin(path_id, ImVec2(50, 100))
+    .quadratic_to(ImVec2(150, 50), ImVec2(250, 100))
+    .quadratic_to(ImVec2(350, 150), ImVec2(450, 100))
+    .end();
+
+// Build arc-length LUT for accurate constant-speed text placement
+iam_path_build_arc_lut(path_id, 128);
+
+// Render static text along path
+iam_text_path(path_id, "Hello World!");
+
+// Render animated text (characters appear progressively)
+float progress = 0.5f;  // 0.0 to 1.0
+iam_text_path_animated(path_id, "Hello World!", progress);
+```
+
+### Text Path Options
+
+```cpp
+iam_text_path_opts opts;
+opts.origin = ImVec2(100, 200);         // Screen-space origin (path coords are offset by this)
+opts.offset = 10.0f;                    // Starting offset along path (pixels)
+opts.letter_spacing = 2.0f;             // Extra spacing between characters
+opts.align = iam_text_align_center;     // iam_text_align_start, _center, _end
+opts.flip_y = false;                    // Flip text for paths going right-to-left
+opts.color = IM_COL32(255, 200, 100, 255);
+opts.font = nullptr;                    // Use current font (or specify)
+opts.font_scale = 1.2f;                 // Scale text size
+
+iam_text_path(path_id, "Curved Text", opts);
+```
+
+### Arc-Length Parameterization
+
+For accurate constant-speed text placement, build an arc-length lookup table:
+
+```cpp
+// Build LUT with 128 samples (higher = more accurate)
+iam_path_build_arc_lut(path_id, 128);
+
+// Check if path has LUT
+if (iam_path_has_arc_lut(path_id)) {
+    // Use distance-based evaluation for constant speed
+    float distance = 100.0f;  // Distance along path in pixels
+    ImVec2 pos = iam_path_evaluate_at_distance(path_id, distance);
+    float angle = iam_path_angle_at_distance(path_id, distance);
+    ImVec2 tangent = iam_path_tangent_at_distance(path_id, distance);
+}
+
+// Convert distance to t parameter
+float t = iam_path_distance_to_t(path_id, distance);
+```
+
+### Helper Functions
+
+```cpp
+// Calculate total text width for layout
+float width = iam_text_path_width("Hello World!", opts);
+
+// Transform a quad (4 vertices) by rotation and translation
+ImVec2 quad[4] = { ... };
+iam_transform_quad(quad, center, angle_rad, translation);
+
+// Create a rotated quad for a glyph at a path position
+ImVec2 glyph_quad[4];
+iam_make_glyph_quad(glyph_quad, pos, angle, width, height, baseline_offset);
 ```
 
 ## Stagger Animations
@@ -640,6 +722,158 @@ void AnimatedButton(const char* label) {
 }
 ```
 
+## Text Stagger
+
+Per-character animation effects for text with various effect types.
+
+### Basic Text Stagger
+
+```cpp
+// Setup options
+iam_text_stagger_opts opts;
+opts.pos = ImVec2(100, 200);          // Base position
+opts.effect = iam_text_fx_fade;        // Fade in each character
+opts.char_delay = 0.05f;               // 50ms between characters
+opts.char_duration = 0.3f;             // 300ms per character animation
+opts.color = IM_COL32(255, 255, 255, 255);
+
+// Animate with progress (0.0 to 1.0)
+float progress = iam_tween_float(id, ImHashStr("progress"), 1.0f, 2.0f,
+                                 iam_ease_preset(iam_ease_linear), iam_policy_crossfade, dt);
+iam_text_stagger(ImHashStr("text"), "Hello World!", progress, opts);
+```
+
+### Available Effects
+
+```cpp
+iam_text_fx_none        // Instant appear
+iam_text_fx_fade        // Fade in alpha
+iam_text_fx_scale       // Scale from center
+iam_text_fx_slide_up    // Slide up from below
+iam_text_fx_slide_down  // Slide down from above
+iam_text_fx_slide_left  // Slide in from right
+iam_text_fx_slide_right // Slide in from left
+iam_text_fx_rotate      // Rotate in
+iam_text_fx_bounce      // Bounce in with overshoot
+iam_text_fx_wave        // Continuous wave motion
+iam_text_fx_typewriter  // Typewriter style (instant per char)
+```
+
+### Helper Functions
+
+```cpp
+// Get total text width
+float width = iam_text_stagger_width("Hello World!", opts);
+
+// Get total animation duration
+float duration = iam_text_stagger_duration("Hello World!", opts);
+```
+
+## Noise Channels
+
+Perlin and Simplex noise for organic, procedural movement.
+
+### Basic Noise Sampling
+
+```cpp
+// Sample 2D noise (returns value in [-1, 1])
+iam_noise_opts opts;
+opts.type = iam_noise_perlin;    // or iam_noise_simplex, iam_noise_value
+opts.octaves = 4;                 // Fractal detail
+opts.persistence = 0.5f;          // Amplitude decay per octave
+opts.lacunarity = 2.0f;           // Frequency increase per octave
+opts.seed = 42;                   // Random seed
+
+float noise_value = iam_noise(x, y, opts);
+float noise_3d = iam_noise_3d(x, y, z, opts);
+```
+
+### Animated Noise Channels
+
+```cpp
+// Continuous 1D noise that evolves over time
+float offset = iam_noise_channel(ImHashStr("wobble"),
+    0.5f,    // frequency
+    20.0f,   // amplitude
+    opts, dt);
+
+// 2D noise for organic movement
+ImVec2 wobble = iam_noise_channel_vec2(ImHashStr("pos"),
+    ImVec2(0.5f, 0.7f),   // frequency per axis
+    ImVec2(30.0f, 20.0f), // amplitude per axis
+    opts, dt);
+
+// Convenience function for simple smooth noise
+float simple_noise = iam_smooth_noise(ImHashStr("simple"), 10.0f, 0.5f, dt);
+ImVec2 simple_2d = iam_smooth_noise_vec2(ImHashStr("simple2d"), ImVec2(10.0f, 10.0f), 0.5f, dt);
+```
+
+## Style Interpolation
+
+Animate between ImGui style themes with smooth color transitions.
+
+### Registering Styles
+
+```cpp
+// Register the current style
+iam_style_register_current(ImHashStr("light_theme"));
+
+// Switch to dark theme and register it
+ImGui::StyleColorsDark();
+iam_style_register_current(ImHashStr("dark_theme"));
+
+// Or register a custom style
+ImGuiStyle my_style;
+// ... configure my_style ...
+iam_style_register(ImHashStr("custom"), my_style);
+```
+
+### Blending Styles
+
+```cpp
+// Direct blend between two styles (0.0 = style_a, 1.0 = style_b)
+iam_style_blend(ImHashStr("light_theme"), ImHashStr("dark_theme"), 0.5f, iam_col_oklab);
+
+// Animate style transitions
+static ImGuiID current_theme = ImHashStr("light_theme");
+if (ImGui::Button("Toggle Theme")) {
+    current_theme = (current_theme == ImHashStr("light_theme"))
+        ? ImHashStr("dark_theme")
+        : ImHashStr("light_theme");
+}
+
+// Smooth tween to target style
+iam_style_tween(ImHashStr("theme_tween"), current_theme, 0.5f,
+                iam_ease_preset(iam_ease_out_cubic), iam_col_oklab, dt);
+```
+
+### Color Space Options
+
+Uses existing `iam_color_space` enum for color blending:
+- `iam_col_srgb` - Direct sRGB blend
+- `iam_col_srgb_linear` - Linear RGB blend
+- `iam_col_hsv` - HSV blend (shortest hue arc)
+- `iam_col_oklab` - Perceptually uniform OKLAB (recommended)
+- `iam_col_oklch` - OKLCH cylindrical blend
+
+## Animation Inspector
+
+Debug window for visualizing and controlling all active animations.
+
+```cpp
+// Show the animation inspector window
+static bool show_inspector = true;
+iam_show_animation_inspector(&show_inspector);
+```
+
+The inspector provides:
+
+- **Tweens Tab**: Active channel counts, global time scale control
+- **Clips Tab**: Registered clips, active instances with playback controls and scrubbing
+- **Paths Tab**: Registered motion paths with segment info and arc-length LUT status
+- **Noise Tab**: Active noise channels with interactive noise preview and parameter controls
+- **Styles Tab**: Registered styles and active style tweens
+
 ## Building
 
 ImAnim is a single header+source pair. Add to your project:
@@ -669,6 +903,7 @@ The `demo/` folder contains a comprehensive demo application showing all feature
 - Shake & Wiggle (error feedback, continuous organic movement)
 - Scroll animation (smooth animated scrolling within windows)
 - Motion paths (bezier curves, Catmull-Rom splines, mixed path segments)
+- Text along paths (wave text, arc text, animated character reveal)
 - Timeline markers (callbacks at specific clip times, visual timeline)
 - Animation chaining (A->B->C clip sequences with delays)
 - Debug window with time scale control and stats

@@ -814,6 +814,172 @@ static void ShowColorTweensDemo()
 }
 
 // ============================================================
+// SECTION: Per-Axis Easing
+// ============================================================
+static void ShowPerAxisEasingDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped(
+		"Per-axis easing allows different easing functions for each axis of a vector or color. "
+		"This enables effects like elastic bounce on one axis while smooth motion on another.");
+
+	ImGui::Spacing();
+
+	// Demo 1: Vec2 with different X and Y easing
+	if (ImGui::TreeNode("Vec2 Per-Axis")) {
+		static int ease_x = 2;   // Out Cubic
+		static int ease_y = 10;  // Out Bounce
+		static ImVec2 target_pos(300, 100);
+		static bool toggle = false;
+
+		const char* ease_names[] = {
+			"Linear", "Out Quad", "Out Cubic", "Out Quart", "Out Quint",
+			"Out Sine", "Out Expo", "Out Circ", "Out Back", "Out Elastic", "Out Bounce"
+		};
+		int ease_vals[] = {
+			iam_ease_linear, iam_ease_out_quad, iam_ease_out_cubic, iam_ease_out_quart, iam_ease_out_quint,
+			iam_ease_out_sine, iam_ease_out_expo, iam_ease_out_circ, iam_ease_out_back, iam_ease_out_elastic, iam_ease_out_bounce
+		};
+
+		ImGui::SetNextItemWidth(150);
+		ImGui::Combo("X Easing##vec2", &ease_x, ease_names, IM_ARRAYSIZE(ease_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(150);
+		ImGui::Combo("Y Easing##vec2", &ease_y, ease_names, IM_ARRAYSIZE(ease_names));
+
+		if (ImGui::Button("Toggle Position##vec2")) {
+			toggle = !toggle;
+			target_pos = toggle ? ImVec2(400, 150) : ImVec2(50, 50);
+		}
+
+		// Draw area
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(500, 200);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Animate with per-axis easing
+		iam_ease_per_axis per_axis(
+			iam_ease_preset(ease_vals[ease_x]),
+			iam_ease_preset(ease_vals[ease_y])
+		);
+
+		ImGuiID id = ImHashStr("per_axis_vec2_demo");
+		ImVec2 pos = iam_tween_vec2_per_axis(id, 1, target_pos, 1.5f, per_axis, iam_policy_crossfade, dt);
+
+		// Draw animated circle
+		draw->AddCircleFilled(ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y), 15.0f, IM_COL32(100, 200, 255, 255));
+
+		// Draw ghost targets
+		draw->AddCircle(ImVec2(canvas_pos.x + 50, canvas_pos.y + 50), 18.0f, IM_COL32(100, 100, 100, 128), 0, 2.0f);
+		draw->AddCircle(ImVec2(canvas_pos.x + 400, canvas_pos.y + 150), 18.0f, IM_COL32(100, 100, 100, 128), 0, 2.0f);
+
+		ImGui::TextDisabled("Notice X uses %s, Y uses %s", ease_names[ease_x], ease_names[ease_y]);
+		ImGui::TreePop();
+	}
+
+	// Demo 2: Color with per-channel easing
+	if (ImGui::TreeNode("Color Per-Channel")) {
+		static int ease_r = 2;  // Out Cubic
+		static int ease_g = 5;  // Out Bounce
+		static int ease_b = 4;  // Out Elastic
+		static bool toggle_color = false;
+
+		const char* ease_names[] = {
+			"Linear", "Out Quad", "Out Cubic", "Out Back", "Out Elastic", "Out Bounce"
+		};
+		int ease_vals[] = {
+			iam_ease_linear, iam_ease_out_quad, iam_ease_out_cubic, iam_ease_out_back, iam_ease_out_elastic, iam_ease_out_bounce
+		};
+
+		ImGui::SetNextItemWidth(120);
+		ImGui::Combo("R Easing", &ease_r, ease_names, IM_ARRAYSIZE(ease_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(120);
+		ImGui::Combo("G Easing", &ease_g, ease_names, IM_ARRAYSIZE(ease_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(120);
+		ImGui::Combo("B Easing", &ease_b, ease_names, IM_ARRAYSIZE(ease_names));
+
+		if (ImGui::Button("Toggle Color##peraxis")) {
+			toggle_color = !toggle_color;
+		}
+
+		ImVec4 target_color = toggle_color ? ImVec4(1.0f, 0.8f, 0.0f, 1.0f) : ImVec4(0.2f, 0.4f, 1.0f, 1.0f);
+
+		iam_ease_per_axis per_axis(
+			iam_ease_preset(ease_vals[ease_r]),
+			iam_ease_preset(ease_vals[ease_g]),
+			iam_ease_preset(ease_vals[ease_b]),
+			iam_ease_preset(iam_ease_linear) // Alpha stays linear
+		);
+
+		ImGuiID id = ImHashStr("per_axis_color_demo");
+		ImVec4 color = iam_tween_color_per_axis(id, 1, target_color, 2.0f, per_axis, iam_policy_crossfade, iam_col_srgb, dt);
+
+		ImGui::ColorButton("##color_result", color, 0, ImVec2(200, 60));
+
+		ImGui::SameLine();
+		ImGui::BeginGroup();
+		ImGui::Text("R: %.2f (ease: %s)", color.x, ease_names[ease_r]);
+		ImGui::Text("G: %.2f (ease: %s)", color.y, ease_names[ease_g]);
+		ImGui::Text("B: %.2f (ease: %s)", color.z, ease_names[ease_b]);
+		ImGui::EndGroup();
+
+		ImGui::TextDisabled("Each color channel animates with its own easing function.");
+		ImGui::TreePop();
+	}
+
+	// Demo 3: Practical example - bounce landing effect
+	if (ImGui::TreeNode("Bounce Landing Effect")) {
+		static float drop_timer = 0.0f;
+		static bool dropping = false;
+
+		if (ImGui::Button("Drop!")) {
+			dropping = true;
+			drop_timer = 0.0f;
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 200);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+
+		// Ground line
+		float ground_y = canvas_pos.y + canvas_size.y - 30;
+		draw->AddLine(ImVec2(canvas_pos.x, ground_y), ImVec2(canvas_pos.x + canvas_size.x, ground_y), IM_COL32(100, 100, 100, 255), 2.0f);
+		ImGui::Dummy(canvas_size);
+
+		// Animate: X moves linearly, Y bounces on landing
+		ImVec2 start_pos(50, 20);
+		ImVec2 end_pos(350, canvas_size.y - 50);
+
+		iam_ease_per_axis per_axis(
+			iam_ease_preset(iam_ease_linear),      // X: linear motion
+			iam_ease_preset(iam_ease_out_bounce)   // Y: bounce on landing
+		);
+
+		ImVec2 target = dropping ? end_pos : start_pos;
+		ImGuiID id = ImHashStr("bounce_landing_demo");
+		ImVec2 pos = iam_tween_vec2_per_axis(id, 1, target, 1.2f, per_axis, iam_policy_crossfade, dt);
+
+		// Draw ball
+		draw->AddCircleFilled(ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y), 20.0f, IM_COL32(255, 100, 100, 255));
+
+		// Reset after animation
+		if (dropping) {
+			drop_timer += dt;
+			if (drop_timer > 2.0f) dropping = false;
+		}
+
+		ImGui::TextDisabled("X: linear motion, Y: bounce on landing - creates natural drop effect.");
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
 // SECTION: Tween Policies
 // ============================================================
 static void ShowPoliciesDemo()
@@ -3358,6 +3524,421 @@ static void ShowMotionPathsDemo()
 }
 
 // ============================================================
+// PATH MORPHING DEMO
+// ============================================================
+static void ShowPathMorphingDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped(
+		"Path morphing allows smooth interpolation between two different paths, even if they have "
+		"different numbers of control points. Useful for shape transitions and metamorphosis effects.");
+
+	ImGui::Spacing();
+
+	// Initialize paths
+	static bool paths_initialized = false;
+	static ImGuiID path_circle_id = ImHashStr("morph_circle_path");
+	static ImGuiID path_star_id = ImHashStr("morph_star_path");
+	static ImGuiID path_wave_id = ImHashStr("morph_wave_path");
+	static ImGuiID path_heart_id = ImHashStr("morph_heart_path");
+
+	if (!paths_initialized) {
+		// Circle-like path (using bezier approximation)
+		float cx = 200, cy = 100, r = 60;
+		float k = 0.5522847498f; // bezier circle constant
+		iam_path::begin(path_circle_id, ImVec2(cx + r, cy))
+			.cubic_to(ImVec2(cx + r, cy + r * k), ImVec2(cx + r * k, cy + r), ImVec2(cx, cy + r))
+			.cubic_to(ImVec2(cx - r * k, cy + r), ImVec2(cx - r, cy + r * k), ImVec2(cx - r, cy))
+			.cubic_to(ImVec2(cx - r, cy - r * k), ImVec2(cx - r * k, cy - r), ImVec2(cx, cy - r))
+			.cubic_to(ImVec2(cx + r * k, cy - r), ImVec2(cx + r, cy - r * k), ImVec2(cx + r, cy))
+			.end();
+
+		// Star-like path
+		float sr = 70, sir = 30; // outer and inner radius
+		ImVec2 star_points[10];
+		for (int i = 0; i < 10; i++) {
+			float angle = (float)i * IM_PI * 2.0f / 10.0f - IM_PI / 2.0f;
+			float rad = (i % 2 == 0) ? sr : sir;
+			star_points[i] = ImVec2(cx + rad * cosf(angle), cy + rad * sinf(angle));
+		}
+		iam_path::begin(path_star_id, star_points[0])
+			.line_to(star_points[1]).line_to(star_points[2]).line_to(star_points[3])
+			.line_to(star_points[4]).line_to(star_points[5]).line_to(star_points[6])
+			.line_to(star_points[7]).line_to(star_points[8]).line_to(star_points[9])
+			.line_to(star_points[0])
+			.end();
+
+		// Wave path
+		iam_path::begin(path_wave_id, ImVec2(100, cy))
+			.cubic_to(ImVec2(130, cy - 50), ImVec2(170, cy - 50), ImVec2(200, cy))
+			.cubic_to(ImVec2(230, cy + 50), ImVec2(270, cy + 50), ImVec2(300, cy))
+			.end();
+
+		// Heart-like path - starts at bottom point, goes up right side, over top, down left side
+		iam_path::begin(path_heart_id, ImVec2(cx, cy + 60))  // Bottom point
+			.cubic_to(ImVec2(cx + 5, cy + 40), ImVec2(cx + 40, cy + 20), ImVec2(cx + 60, cy - 10))   // Right lower curve
+			.cubic_to(ImVec2(cx + 75, cy - 35), ImVec2(cx + 55, cy - 55), ImVec2(cx + 30, cy - 55)) // Right lobe top
+			.cubic_to(ImVec2(cx + 10, cy - 55), ImVec2(cx, cy - 40), ImVec2(cx, cy - 30))           // Right to center top
+			.cubic_to(ImVec2(cx, cy - 40), ImVec2(cx - 10, cy - 55), ImVec2(cx - 30, cy - 55))      // Center to left lobe
+			.cubic_to(ImVec2(cx - 55, cy - 55), ImVec2(cx - 75, cy - 35), ImVec2(cx - 60, cy - 10)) // Left lobe top
+			.cubic_to(ImVec2(cx - 40, cy + 20), ImVec2(cx - 5, cy + 40), ImVec2(cx, cy + 60))       // Left lower curve back to point
+			.end();
+
+		paths_initialized = true;
+	}
+
+	// Demo 1: Manual blend slider
+	if (ImGui::TreeNode("Manual Morph Control")) {
+		static float blend = 0.0f;
+		static int path_a_idx = 0;
+		static int path_b_idx = 1;
+
+		const char* path_names[] = { "Circle", "Star", "Wave", "Heart" };
+		ImGuiID path_ids[] = { path_circle_id, path_star_id, path_wave_id, path_heart_id };
+
+		ImGui::SetNextItemWidth(100);
+		ImGui::Combo("Path A", &path_a_idx, path_names, IM_ARRAYSIZE(path_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100);
+		ImGui::Combo("Path B", &path_b_idx, path_names, IM_ARRAYSIZE(path_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(200);
+		ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
+
+		// Draw area
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 200);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Draw morphed path
+		ImGuiID pa = path_ids[path_a_idx];
+		ImGuiID pb = path_ids[path_b_idx];
+
+		iam_morph_opts opts;
+		opts.samples = 100;
+
+		ImVec2 prev_pt;
+		for (int i = 0; i <= 100; i++) {
+			float t = (float)i / 100.0f;
+			ImVec2 pt = iam_path_morph(pa, pb, t, blend, opts);
+			pt.x += canvas_pos.x;
+			pt.y += canvas_pos.y;
+			if (i > 0) {
+				// Color interpolation based on blend
+				ImU32 col = IM_COL32(
+					(int)(100 + 155 * blend),
+					(int)(200 - 100 * blend),
+					(int)(255 - 155 * blend),
+					255
+				);
+				draw->AddLine(prev_pt, pt, col, 3.0f);
+			}
+			prev_pt = pt;
+		}
+
+		ImGui::TextDisabled("Drag the blend slider to morph between shapes.");
+		ImGui::TreePop();
+	}
+
+	// Demo 2: Animated morph
+	if (ImGui::TreeNode("Animated Shape Morph")) {
+		static float morph_timer = 0.0f;
+		static bool animating = false;
+		static int from_shape = 0;
+		static int to_shape = 1;
+
+		const char* path_names[] = { "Circle", "Star", "Wave", "Heart" };
+		ImGuiID path_ids[] = { path_circle_id, path_star_id, path_wave_id, path_heart_id };
+
+		ImGui::SetNextItemWidth(100);
+		ImGui::Combo("From##anim", &from_shape, path_names, IM_ARRAYSIZE(path_names));
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100);
+		ImGui::Combo("To##anim", &to_shape, path_names, IM_ARRAYSIZE(path_names));
+		ImGui::SameLine();
+
+		if (ImGui::Button(animating ? "Reset" : "Morph!")) {
+			if (animating) {
+				animating = false;
+				morph_timer = 0.0f;
+			} else {
+				animating = true;
+				morph_timer = 0.0f;
+			}
+		}
+
+		// Animate blend
+		float duration = 2.0f;
+		float blend = 0.0f;
+		if (animating) {
+			morph_timer += dt;
+			float t = ImClamp(morph_timer / duration, 0.0f, 1.0f);
+			blend = iam_eval_preset(iam_ease_in_out_cubic, t);
+			if (morph_timer > duration + 0.5f) {
+				animating = false;
+				morph_timer = 0.0f;
+			}
+		}
+
+		// Draw area
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 200);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Draw morphed shape
+		ImGuiID pa = path_ids[from_shape];
+		ImGuiID pb = path_ids[to_shape];
+		iam_morph_opts opts;
+		opts.samples = 100;
+
+		ImVec2 prev_pt;
+		for (int i = 0; i <= 100; i++) {
+			float t = (float)i / 100.0f;
+			ImVec2 pt = iam_path_morph(pa, pb, t, blend, opts);
+			pt.x += canvas_pos.x;
+			pt.y += canvas_pos.y;
+			if (i > 0) {
+				draw->AddLine(prev_pt, pt, IM_COL32(100, 255, 150, 255), 3.0f);
+			}
+			prev_pt = pt;
+		}
+
+		ImGui::Text("Blend: %.2f", blend);
+		ImGui::TextDisabled("Click 'Morph!' to animate the shape transition.");
+		ImGui::TreePop();
+	}
+
+	// Demo 3: Object along morphing path
+	if (ImGui::TreeNode("Object Along Morphing Path")) {
+		static float path_t = 0.0f;
+		static float path_blend = 0.0f;
+		static bool animating_path = false;
+
+		ImGui::SliderFloat("Path T", &path_t, 0.0f, 1.0f);
+		ImGui::SliderFloat("Morph Blend", &path_blend, 0.0f, 1.0f);
+
+		if (ImGui::Button(animating_path ? "Stop" : "Animate Along Path")) {
+			animating_path = !animating_path;
+			if (animating_path) path_t = 0.0f;
+		}
+
+		if (animating_path) {
+			path_t += dt * 0.5f;
+			if (path_t > 1.0f) path_t = 0.0f;
+		}
+
+		// Draw area
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 200);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(30, 30, 40, 255));
+		ImGui::Dummy(canvas_size);
+
+		iam_morph_opts opts;
+		opts.samples = 100;
+
+		// Draw morphed path
+		ImVec2 prev_pt;
+		for (int i = 0; i <= 100; i++) {
+			float t = (float)i / 100.0f;
+			ImVec2 pt = iam_path_morph(path_circle_id, path_star_id, t, path_blend, opts);
+			pt.x += canvas_pos.x;
+			pt.y += canvas_pos.y;
+			if (i > 0) {
+				draw->AddLine(prev_pt, pt, IM_COL32(80, 80, 100, 255), 2.0f);
+			}
+			prev_pt = pt;
+		}
+
+		// Draw object at current position
+		ImVec2 obj_pos = iam_path_morph(path_circle_id, path_star_id, path_t, path_blend, opts);
+		obj_pos.x += canvas_pos.x;
+		obj_pos.y += canvas_pos.y;
+
+		// Get tangent for rotation
+		float angle = iam_path_morph_angle(path_circle_id, path_star_id, path_t, path_blend, opts);
+
+		// Draw rotated triangle
+		float size = 12.0f;
+		ImVec2 p1(obj_pos.x + size * cosf(angle), obj_pos.y + size * sinf(angle));
+		ImVec2 p2(obj_pos.x + size * cosf(angle + 2.5f), obj_pos.y + size * sinf(angle + 2.5f));
+		ImVec2 p3(obj_pos.x + size * cosf(angle - 2.5f), obj_pos.y + size * sinf(angle - 2.5f));
+		draw->AddTriangleFilled(p1, p2, p3, IM_COL32(255, 200, 100, 255));
+
+		ImGui::TextDisabled("Object follows the morphed path with proper rotation.");
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// TEXT ALONG MOTION PATHS DEMO
+// ============================================================
+static void ShowTextAlongPathDemo()
+{
+	ImGui::TextWrapped("Text can be animated along motion paths with proper character rotation and constant-speed placement.");
+
+	static bool paths_initialized = false;
+	static ImGuiID wave_path_id = ImHashStr("text_wave_path");
+	static ImGuiID arc_path_id = ImHashStr("text_arc_path");
+	static ImGuiID spiral_path_id = ImHashStr("text_spiral_path");
+
+	// Initialize paths once
+	if (!paths_initialized) {
+		// Wave path (sine wave using quadratic beziers)
+		iam_path::begin(wave_path_id, ImVec2(20, 60))
+			.quadratic_to(ImVec2(80, 20), ImVec2(140, 60))
+			.quadratic_to(ImVec2(200, 100), ImVec2(260, 60))
+			.quadratic_to(ImVec2(320, 20), ImVec2(380, 60))
+			.end();
+
+		// Arc path (half circle using cubic bezier approximation)
+		float r = 120.0f;
+		float cx = 200.0f, cy = 100.0f;
+		iam_path::begin(arc_path_id, ImVec2(cx - r, cy))
+			.cubic_to(ImVec2(cx - r, cy - r * 0.55f), ImVec2(cx - r * 0.55f, cy - r), ImVec2(cx, cy - r))
+			.cubic_to(ImVec2(cx + r * 0.55f, cy - r), ImVec2(cx + r, cy - r * 0.55f), ImVec2(cx + r, cy))
+			.end();
+
+		// Spiral path using catmull-rom
+		iam_path::begin(spiral_path_id, ImVec2(200, 80))
+			.catmull_to(ImVec2(280, 40))
+			.catmull_to(ImVec2(340, 80))
+			.catmull_to(ImVec2(280, 120))
+			.catmull_to(ImVec2(200, 80))
+			.catmull_to(ImVec2(140, 50))
+			.catmull_to(ImVec2(60, 80))
+			.end();
+
+		// Build arc-length LUTs for accurate text placement
+		iam_path_build_arc_lut(wave_path_id, 128);
+		iam_path_build_arc_lut(arc_path_id, 128);
+		iam_path_build_arc_lut(spiral_path_id, 128);
+
+		paths_initialized = true;
+	}
+
+	// Animation controls
+	static float animation_progress = 0.0f;
+	static bool auto_animate = false;
+	static float animation_speed = 0.5f;
+	static int selected_align = iam_text_align_start;
+	static float letter_spacing = 0.0f;
+	static float font_scale = 1.0f;
+
+	ImGui::Checkbox("Auto Animate", &auto_animate);
+	ImGui::SameLine();
+	ImGui::SliderFloat("Speed", &animation_speed, 0.1f, 2.0f);
+
+	if (!auto_animate) {
+		ImGui::SliderFloat("Progress", &animation_progress, 0.0f, 1.0f);
+	} else {
+		float dt = GetSafeDeltaTime();
+		animation_progress += dt * animation_speed;
+		if (animation_progress > 1.0f) animation_progress = 0.0f;
+	}
+
+	static const char* align_names[] = { "Start", "Center", "End" };
+	ImGui::Combo("Alignment", &selected_align, align_names, IM_ARRAYSIZE(align_names));
+	ImGui::SliderFloat("Letter Spacing", &letter_spacing, -2.0f, 10.0f);
+	ImGui::SliderFloat("Font Scale", &font_scale, 0.5f, 2.0f);
+
+	// Demo 1: Wave text
+	ImGui::Separator();
+	ImGui::Text("Wave Path:");
+	{
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 120);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(20, 25, 35, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Draw path
+		for (float t = 0; t < 1.0f; t += 0.01f) {
+			ImVec2 p1 = iam_path_evaluate(wave_path_id, t);
+			ImVec2 p2 = iam_path_evaluate(wave_path_id, t + 0.01f);
+			draw->AddLine(
+				ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y),
+				ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y),
+				IM_COL32(60, 60, 80, 255), 1.0f);
+		}
+
+		// Draw text along path
+		iam_text_path_opts opts;
+		opts.origin = canvas_pos;
+		opts.align = selected_align;
+		opts.letter_spacing = letter_spacing;
+		opts.font_scale = font_scale;
+		opts.color = IM_COL32(100, 200, 255, 255);
+		iam_text_path_animated(wave_path_id, "Hello World!", animation_progress, opts);
+	}
+
+	// Demo 2: Arc text
+	ImGui::Text("Arc Path:");
+	{
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 120);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(20, 25, 35, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Draw path
+		for (float t = 0; t < 1.0f; t += 0.01f) {
+			ImVec2 p1 = iam_path_evaluate(arc_path_id, t);
+			ImVec2 p2 = iam_path_evaluate(arc_path_id, t + 0.01f);
+			draw->AddLine(
+				ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y),
+				ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y),
+				IM_COL32(60, 60, 80, 255), 1.0f);
+		}
+
+		// Draw text along path
+		iam_text_path_opts opts;
+		opts.origin = canvas_pos;
+		opts.align = iam_text_align_center;
+		opts.letter_spacing = letter_spacing;
+		opts.font_scale = font_scale;
+		opts.color = IM_COL32(255, 200, 100, 255);
+		iam_text_path_animated(arc_path_id, "CURVED TEXT", animation_progress, opts);
+	}
+
+	// Demo 3: Spiral text (static, not animated)
+	ImGui::Text("Spiral Path (Static):");
+	{
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(400, 140);
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		draw->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(20, 25, 35, 255));
+		ImGui::Dummy(canvas_size);
+
+		// Draw path
+		for (float t = 0; t < 1.0f; t += 0.01f) {
+			ImVec2 p1 = iam_path_evaluate(spiral_path_id, t);
+			ImVec2 p2 = iam_path_evaluate(spiral_path_id, t + 0.01f);
+			draw->AddLine(
+				ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y),
+				ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y),
+				IM_COL32(60, 60, 80, 255), 1.0f);
+		}
+
+		// Draw text along path (static)
+		iam_text_path_opts opts;
+		opts.origin = canvas_pos;
+		opts.align = selected_align;
+		opts.letter_spacing = letter_spacing;
+		opts.font_scale = font_scale;
+		opts.color = IM_COL32(100, 255, 150, 255);
+		iam_text_path(spiral_path_id, "Following the winding path...", opts);
+	}
+
+	ImGui::TextDisabled("Text uses arc-length parameterization for constant character spacing.");
+}
+
+// ============================================================
 // TIMELINE MARKERS DEMO
 // ============================================================
 static void ShowTimelineMarkersDemo()
@@ -3544,6 +4125,556 @@ static void ShowAnimationChainingDemo()
 }
 
 // ============================================================
+// TEXT STAGGER DEMO
+// ============================================================
+static void ShowTextStaggerDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Text stagger animates text character-by-character with various effects. "
+		"Each character is animated individually with configurable delay and duration.");
+
+	// Effect selector
+	static int effect = iam_text_fx_fade;
+	const char* effect_names[] = {
+		"None", "Fade", "Scale", "Slide Up", "Slide Down",
+		"Slide Left", "Slide Right", "Rotate", "Bounce", "Wave", "Typewriter"
+	};
+	ImGui::Combo("Effect", &effect, effect_names, IM_ARRAYSIZE(effect_names));
+
+	// Parameters
+	static float char_delay = 0.05f;
+	static float char_duration = 0.3f;
+	static float intensity = 20.0f;
+	ImGui::SliderFloat("Char Delay", &char_delay, 0.01f, 0.2f, "%.2f s");
+	ImGui::SliderFloat("Char Duration", &char_duration, 0.1f, 1.0f, "%.2f s");
+	ImGui::SliderFloat("Intensity", &intensity, 5.0f, 50.0f, "%.0f");
+
+	// Animation control
+	static float progress = 0.0f;
+	static bool playing = false;
+	if (ImGui::Button(playing ? "Reset" : "Play")) {
+		playing = !playing;
+		progress = 0.0f;
+	}
+	ImGui::SameLine();
+	ImGui::SliderFloat("Progress", &progress, 0.0f, 1.0f);
+
+	if (playing) {
+		progress += dt * 0.5f; // 2 seconds for full animation
+		if (progress > 1.0f) {
+			progress = 1.0f;
+			playing = false;
+		}
+	}
+
+	// Demo text
+	const char* demo_text = "Hello, ImAnim!";
+
+	ImGui::Separator();
+
+	// Visual demo
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 80.0f);
+	ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+	draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+		IM_COL32(30, 30, 40, 255), 4.0f);
+
+	iam_text_stagger_opts opts;
+	opts.pos = ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + canvas_size.y * 0.5f - 10.0f);
+	opts.effect = effect;
+	opts.char_delay = char_delay;
+	opts.char_duration = char_duration;
+	opts.effect_intensity = intensity;
+	opts.color = IM_COL32(100, 200, 255, 255);
+
+	iam_text_stagger(ImGui::GetID("stagger_demo"), demo_text, progress, opts);
+
+	ImGui::Dummy(canvas_size);
+
+	// Duration info
+	float total_duration = iam_text_stagger_duration(demo_text, opts);
+	ImGui::Text("Total Duration: %.2f s", total_duration);
+
+	// Multiple effect comparison
+	if (ImGui::TreeNode("Effect Comparison")) {
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		ImVec2 size(ImGui::GetContentRegionAvail().x, 300.0f);
+		draw_list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(25, 25, 35, 255), 4.0f);
+
+		const char* texts[] = {"Fade In", "Scale Up", "Slide Up", "Bounce!", "Wave~"};
+		int effects[] = {iam_text_fx_fade, iam_text_fx_scale, iam_text_fx_slide_up, iam_text_fx_bounce, iam_text_fx_wave};
+
+		for (int i = 0; i < 5; i++) {
+			iam_text_stagger_opts o;
+			o.pos = ImVec2(pos.x + 20.0f, pos.y + 30.0f + i * 55.0f);
+			o.effect = effects[i];
+			o.char_delay = 0.04f;
+			o.char_duration = 0.25f;
+			o.color = IM_COL32(255 - i * 30, 150 + i * 20, 100 + i * 30, 255);
+
+			char id_buf[32];
+			snprintf(id_buf, sizeof(id_buf), "stagger_cmp_%d", i);
+			iam_text_stagger(ImGui::GetID(id_buf), texts[i], progress, o);
+		}
+
+		ImGui::Dummy(size);
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// NOISE CHANNELS DEMO
+// ============================================================
+static void ShowNoiseChannelsDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Noise channels provide organic, natural-looking movement using Perlin, Simplex, "
+		"or other noise algorithms. Great for idle animations and procedural effects.");
+
+	// Noise type selector
+	static int noise_type = iam_noise_perlin;
+	ImGui::Combo("Noise Type", &noise_type, "Perlin\0Simplex\0Value\0Worley\0");
+
+	// Noise parameters
+	static int octaves = 4;
+	static float persistence = 0.5f;
+	static float lacunarity = 2.0f;
+	ImGui::SliderInt("Octaves", &octaves, 1, 8);
+	ImGui::SliderFloat("Persistence", &persistence, 0.1f, 1.0f);
+	ImGui::SliderFloat("Lacunarity", &lacunarity, 1.0f, 4.0f);
+
+	static float frequency = 1.0f;
+	static float amplitude = 40.0f;
+	ImGui::SliderFloat("Frequency", &frequency, 0.1f, 5.0f, "%.1f Hz");
+	ImGui::SliderFloat("Amplitude", &amplitude, 10.0f, 100.0f, "%.0f px");
+
+	// 2D Noise visualization
+	if (ImGui::TreeNodeEx("2D Noise Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 200);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		// Draw noise texture preview
+		iam_noise_opts opts;
+		opts.type = noise_type;
+		opts.octaves = octaves;
+		opts.persistence = persistence;
+		opts.lacunarity = lacunarity;
+
+		static float time_offset = 0.0f;
+		time_offset += dt * 0.5f;
+
+		const int res = 50;
+		float cell_w = canvas_size.x / res;
+		float cell_h = canvas_size.y / res;
+
+		for (int y = 0; y < res; y++) {
+			for (int x = 0; x < res; x++) {
+				float nx = x * 0.1f + time_offset;
+				float ny = y * 0.1f;
+				float n = iam_noise(nx, ny, opts);
+				n = (n + 1.0f) * 0.5f; // Map from [-1,1] to [0,1]
+				ImU8 c = (ImU8)(n * 255);
+				ImVec2 p0(canvas_pos.x + x * cell_w, canvas_pos.y + y * cell_h);
+				ImVec2 p1(p0.x + cell_w, p0.y + cell_h);
+				draw_list->AddRectFilled(p0, p1, IM_COL32(c, c, c, 255));
+			}
+		}
+
+		draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(100, 100, 100, 255));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TreePop();
+	}
+
+	// Animated noise channel demo
+	if (ImGui::TreeNodeEx("Animated Noise Channel", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120.0f);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Center line
+		float center_y = canvas_pos.y + canvas_size.y * 0.5f;
+		draw_list->AddLine(ImVec2(canvas_pos.x, center_y), ImVec2(canvas_pos.x + canvas_size.x, center_y),
+			IM_COL32(80, 80, 80, 100));
+
+		iam_noise_opts opts;
+		opts.type = noise_type;
+		opts.octaves = octaves;
+		opts.persistence = persistence;
+		opts.lacunarity = lacunarity;
+
+		// Draw 4 balls with noise-based movement
+		ImU32 colors[] = {
+			IM_COL32(255, 100, 100, 255),
+			IM_COL32(100, 255, 100, 255),
+			IM_COL32(100, 100, 255, 255),
+			IM_COL32(255, 255, 100, 255)
+		};
+
+		for (int i = 0; i < 4; i++) {
+			float x = canvas_pos.x + 50.0f + i * (canvas_size.x - 100.0f) / 3.0f;
+			char id_buf[32];
+			snprintf(id_buf, sizeof(id_buf), "noise_demo_%d", i);
+
+			opts.seed = i * 12345;
+			float offset = iam_noise_channel(ImGui::GetID(id_buf), frequency, amplitude, opts, dt);
+
+			draw_list->AddCircleFilled(ImVec2(x, center_y + offset), 12.0f, colors[i]);
+			draw_list->AddCircle(ImVec2(x, center_y + offset), 12.0f, IM_COL32(255, 255, 255, 100), 0, 2.0f);
+		}
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TreePop();
+	}
+
+	// 2D noise movement
+	if (ImGui::TreeNode("2D Noise Movement")) {
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200.0f, 200.0f);
+		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		ImVec2 offset = iam_smooth_noise_vec2(ImGui::GetID("smooth_2d"), ImVec2(amplitude, amplitude), frequency, dt);
+		draw_list->AddCircleFilled(ImVec2(center.x + offset.x, center.y + offset.y), 15.0f, IM_COL32(100, 200, 255, 255));
+
+		// Draw trail
+		draw_list->AddCircle(center, 3.0f, IM_COL32(100, 100, 100, 150));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// STYLE INTERPOLATION DEMO
+// ============================================================
+static void ShowStyleInterpolationDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	ImGui::TextWrapped("Style interpolation smoothly transitions between different ImGui themes. "
+		"Colors, padding, spacing, and rounding are all blended. Colors use perceptually uniform color spaces.");
+
+	// Register custom styles with varied parameters
+	static bool styles_registered = false;
+	static ImGuiID style_compact = ImHashStr("style_compact");
+	static ImGuiID style_spacious = ImHashStr("style_spacious");
+	static ImGuiID style_rounded = ImHashStr("style_rounded");
+
+	if (!styles_registered) {
+		// Compact dark style - tight spacing, sharp corners, small padding
+		ImGuiStyle compact;
+		ImGui::StyleColorsDark(&compact);
+		compact.WindowPadding = ImVec2(4, 4);
+		compact.FramePadding = ImVec2(4, 2);
+		compact.CellPadding = ImVec2(2, 2);
+		compact.ItemSpacing = ImVec2(4, 2);
+		compact.ItemInnerSpacing = ImVec2(2, 2);
+		compact.IndentSpacing = 12.0f;
+		compact.ScrollbarSize = 10.0f;
+		compact.GrabMinSize = 8.0f;
+		compact.WindowRounding = 0.0f;
+		compact.ChildRounding = 0.0f;
+		compact.FrameRounding = 0.0f;
+		compact.PopupRounding = 0.0f;
+		compact.ScrollbarRounding = 0.0f;
+		compact.GrabRounding = 0.0f;
+		compact.TabRounding = 0.0f;
+		compact.WindowBorderSize = 1.0f;
+		compact.ChildBorderSize = 1.0f;
+		compact.FrameBorderSize = 0.0f;
+		compact.Colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.08f, 0.10f, 1.0f);
+		compact.Colors[ImGuiCol_ChildBg] = ImVec4(0.06f, 0.06f, 0.08f, 1.0f);
+		compact.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.28f, 1.0f);
+		compact.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.35f, 0.40f, 1.0f);
+		compact.Colors[ImGuiCol_ButtonActive] = ImVec4(0.45f, 0.45f, 0.50f, 1.0f);
+		compact.Colors[ImGuiCol_Header] = ImVec4(0.20f, 0.20f, 0.25f, 1.0f);
+		compact.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.30f, 0.35f, 1.0f);
+		compact.Colors[ImGuiCol_HeaderActive] = ImVec4(0.40f, 0.40f, 0.45f, 1.0f);
+		compact.Colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.18f, 1.0f);
+		compact.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.25f, 1.0f);
+		compact.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.28f, 0.28f, 0.32f, 1.0f);
+		compact.Colors[ImGuiCol_SliderGrab] = ImVec4(0.50f, 0.50f, 0.55f, 1.0f);
+		compact.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.65f, 0.65f, 0.70f, 1.0f);
+		compact.Colors[ImGuiCol_CheckMark] = ImVec4(0.70f, 0.70f, 0.75f, 1.0f);
+		compact.Colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.30f, 0.35f, 1.0f);
+		compact.Colors[ImGuiCol_Border] = ImVec4(0.25f, 0.25f, 0.30f, 1.0f);
+		iam_style_register(style_compact, compact);
+
+		// Spacious light style - generous spacing, subtle borders
+		ImGuiStyle spacious;
+		ImGui::StyleColorsLight(&spacious);
+		spacious.WindowPadding = ImVec2(16, 16);
+		spacious.FramePadding = ImVec2(12, 6);
+		spacious.CellPadding = ImVec2(8, 6);
+		spacious.ItemSpacing = ImVec2(12, 8);
+		spacious.ItemInnerSpacing = ImVec2(8, 6);
+		spacious.IndentSpacing = 24.0f;
+		spacious.ScrollbarSize = 16.0f;
+		spacious.GrabMinSize = 14.0f;
+		spacious.WindowRounding = 4.0f;
+		spacious.ChildRounding = 4.0f;
+		spacious.FrameRounding = 4.0f;
+		spacious.PopupRounding = 4.0f;
+		spacious.ScrollbarRounding = 4.0f;
+		spacious.GrabRounding = 4.0f;
+		spacious.TabRounding = 4.0f;
+		spacious.WindowBorderSize = 0.0f;
+		spacious.ChildBorderSize = 0.0f;
+		spacious.FrameBorderSize = 1.0f;
+		spacious.Colors[ImGuiCol_WindowBg] = ImVec4(0.96f, 0.96f, 0.98f, 1.0f);
+		spacious.Colors[ImGuiCol_ChildBg] = ImVec4(1.00f, 1.00f, 1.00f, 1.0f);
+		spacious.Colors[ImGuiCol_Button] = ImVec4(0.85f, 0.85f, 0.88f, 1.0f);
+		spacious.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.78f, 0.78f, 0.82f, 1.0f);
+		spacious.Colors[ImGuiCol_ButtonActive] = ImVec4(0.70f, 0.70f, 0.75f, 1.0f);
+		spacious.Colors[ImGuiCol_Header] = ImVec4(0.88f, 0.88f, 0.92f, 1.0f);
+		spacious.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.80f, 0.80f, 0.85f, 1.0f);
+		spacious.Colors[ImGuiCol_HeaderActive] = ImVec4(0.72f, 0.72f, 0.78f, 1.0f);
+		spacious.Colors[ImGuiCol_FrameBg] = ImVec4(1.00f, 1.00f, 1.00f, 1.0f);
+		spacious.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.95f, 0.95f, 0.98f, 1.0f);
+		spacious.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.90f, 0.90f, 0.95f, 1.0f);
+		spacious.Colors[ImGuiCol_SliderGrab] = ImVec4(0.55f, 0.55f, 0.60f, 1.0f);
+		spacious.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.40f, 0.40f, 0.45f, 1.0f);
+		spacious.Colors[ImGuiCol_CheckMark] = ImVec4(0.25f, 0.25f, 0.30f, 1.0f);
+		spacious.Colors[ImGuiCol_Text] = ImVec4(0.15f, 0.15f, 0.20f, 1.0f);
+		spacious.Colors[ImGuiCol_Separator] = ImVec4(0.80f, 0.80f, 0.85f, 1.0f);
+		spacious.Colors[ImGuiCol_Border] = ImVec4(0.75f, 0.75f, 0.80f, 1.0f);
+		iam_style_register(style_spacious, spacious);
+
+		// Rounded colorful style - pill shapes, vibrant colors
+		ImGuiStyle rounded;
+		ImGui::StyleColorsDark(&rounded);
+		rounded.WindowPadding = ImVec2(12, 12);
+		rounded.FramePadding = ImVec2(10, 5);
+		rounded.CellPadding = ImVec2(6, 4);
+		rounded.ItemSpacing = ImVec2(10, 6);
+		rounded.ItemInnerSpacing = ImVec2(6, 4);
+		rounded.IndentSpacing = 20.0f;
+		rounded.ScrollbarSize = 14.0f;
+		rounded.GrabMinSize = 12.0f;
+		rounded.WindowRounding = 12.0f;
+		rounded.ChildRounding = 12.0f;
+		rounded.FrameRounding = 12.0f;
+		rounded.PopupRounding = 12.0f;
+		rounded.ScrollbarRounding = 12.0f;
+		rounded.GrabRounding = 12.0f;
+		rounded.TabRounding = 12.0f;
+		rounded.WindowBorderSize = 0.0f;
+		rounded.ChildBorderSize = 0.0f;
+		rounded.FrameBorderSize = 0.0f;
+		rounded.Colors[ImGuiCol_WindowBg] = ImVec4(0.12f, 0.08f, 0.18f, 1.0f);
+		rounded.Colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.10f, 0.22f, 1.0f);
+		rounded.Colors[ImGuiCol_Button] = ImVec4(0.45f, 0.25f, 0.70f, 1.0f);
+		rounded.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.55f, 0.35f, 0.80f, 1.0f);
+		rounded.Colors[ImGuiCol_ButtonActive] = ImVec4(0.65f, 0.45f, 0.90f, 1.0f);
+		rounded.Colors[ImGuiCol_Header] = ImVec4(0.40f, 0.22f, 0.60f, 1.0f);
+		rounded.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.50f, 0.30f, 0.70f, 1.0f);
+		rounded.Colors[ImGuiCol_HeaderActive] = ImVec4(0.60f, 0.40f, 0.80f, 1.0f);
+		rounded.Colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.14f, 0.30f, 1.0f);
+		rounded.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.28f, 0.20f, 0.40f, 1.0f);
+		rounded.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.25f, 0.50f, 1.0f);
+		rounded.Colors[ImGuiCol_SliderGrab] = ImVec4(0.70f, 0.45f, 0.95f, 1.0f);
+		rounded.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.85f, 0.60f, 1.00f, 1.0f);
+		rounded.Colors[ImGuiCol_CheckMark] = ImVec4(0.85f, 0.55f, 1.00f, 1.0f);
+		rounded.Colors[ImGuiCol_Text] = ImVec4(0.95f, 0.92f, 1.00f, 1.0f);
+		rounded.Colors[ImGuiCol_Separator] = ImVec4(0.50f, 0.35f, 0.70f, 1.0f);
+		rounded.Colors[ImGuiCol_Border] = ImVec4(0.45f, 0.30f, 0.65f, 1.0f);
+		iam_style_register(style_rounded, rounded);
+
+		styles_registered = true;
+	}
+
+	// Style selector
+	static int from_style = 0;
+	static int to_style = 2;
+	const char* style_names[] = {"Compact Dark", "Spacious Light", "Rounded Colorful"};
+	ImGuiID style_ids[] = {style_compact, style_spacious, style_rounded};
+
+	ImGui::Combo("From Style", &from_style, style_names, 3);
+	ImGui::Combo("To Style", &to_style, style_names, 3);
+
+	// Color space selector (matches iam_color_space enum order)
+	static int color_space = iam_col_oklab;
+	ImGui::Combo("Color Space", &color_space, "sRGB\0sRGB Linear\0HSV\0OKLAB\0OKLCH\0");
+
+	// Blend control
+	static float blend_t = 0.0f;
+	static bool animating = false;
+	static float anim_dir = 1.0f;
+
+	if (ImGui::Button("Animate")) {
+		animating = true;
+	}
+	ImGui::SameLine();
+	ImGui::SliderFloat("Blend", &blend_t, 0.0f, 1.0f);
+
+	if (animating) {
+		blend_t += dt * 0.5f * anim_dir;
+		if (blend_t >= 1.0f) { blend_t = 1.0f; anim_dir = -1.0f; }
+		if (blend_t <= 0.0f) { blend_t = 0.0f; anim_dir = 1.0f; animating = false; }
+	}
+
+	// Apply blended style to a child region
+	ImGui::Separator();
+	ImGui::Text("Preview (blended style applied to child window):");
+
+	// Get blended style
+	ImGuiStyle blended;
+	iam_style_blend_to(style_ids[from_style], style_ids[to_style], blend_t, &blended, color_space);
+
+	// Apply all style vars
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, blended.WindowPadding);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, blended.FramePadding);
+	ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, blended.CellPadding);
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, blended.ItemSpacing);
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, blended.ItemInnerSpacing);
+	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, blended.IndentSpacing);
+	ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, blended.ScrollbarSize);
+	ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, blended.GrabMinSize);
+	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, blended.ChildRounding);
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, blended.FrameRounding);
+	ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, blended.ScrollbarRounding);
+	ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, blended.GrabRounding);
+	ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, blended.ChildBorderSize);
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, blended.FrameBorderSize);
+
+	// Apply all colors
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, blended.Colors[ImGuiCol_ChildBg]);
+	ImGui::PushStyleColor(ImGuiCol_Button, blended.Colors[ImGuiCol_Button]);
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, blended.Colors[ImGuiCol_ButtonHovered]);
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, blended.Colors[ImGuiCol_ButtonActive]);
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, blended.Colors[ImGuiCol_FrameBg]);
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, blended.Colors[ImGuiCol_FrameBgHovered]);
+	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, blended.Colors[ImGuiCol_FrameBgActive]);
+	ImGui::PushStyleColor(ImGuiCol_Text, blended.Colors[ImGuiCol_Text]);
+	ImGui::PushStyleColor(ImGuiCol_Header, blended.Colors[ImGuiCol_Header]);
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, blended.Colors[ImGuiCol_HeaderHovered]);
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, blended.Colors[ImGuiCol_HeaderActive]);
+	ImGui::PushStyleColor(ImGuiCol_SliderGrab, blended.Colors[ImGuiCol_SliderGrab]);
+	ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, blended.Colors[ImGuiCol_SliderGrabActive]);
+	ImGui::PushStyleColor(ImGuiCol_CheckMark, blended.Colors[ImGuiCol_CheckMark]);
+	ImGui::PushStyleColor(ImGuiCol_Separator, blended.Colors[ImGuiCol_Separator]);
+	ImGui::PushStyleColor(ImGuiCol_Border, blended.Colors[ImGuiCol_Border]);
+
+	ImGui::BeginChild("StylePreview", ImVec2(0, 280), ImGuiChildFlags_Borders);
+
+	// Row 1: Buttons
+	ImGui::Text("Buttons");
+	ImGui::Button("Primary");
+	ImGui::SameLine();
+	ImGui::Button("Secondary");
+	ImGui::SameLine();
+	ImGui::SmallButton("Small");
+
+	ImGui::Separator();
+
+	// Row 2: Checkboxes and Radio
+	ImGui::Text("Toggles");
+	static bool check1 = true, check2 = false, check3 = true;
+	ImGui::Checkbox("Option A", &check1);
+	ImGui::SameLine();
+	ImGui::Checkbox("Option B", &check2);
+	ImGui::SameLine();
+	ImGui::Checkbox("Option C", &check3);
+
+	static int radio_val = 0;
+	ImGui::RadioButton("Choice 1", &radio_val, 0);
+	ImGui::SameLine();
+	ImGui::RadioButton("Choice 2", &radio_val, 1);
+	ImGui::SameLine();
+	ImGui::RadioButton("Choice 3", &radio_val, 2);
+
+	ImGui::Separator();
+
+	// Row 3: Sliders and Drags
+	ImGui::Text("Sliders & Inputs");
+	static float slider_val = 0.5f;
+	static int int_val = 50;
+	static float drag_val = 25.0f;
+	ImGui::SliderFloat("Float Slider", &slider_val, 0.0f, 1.0f);
+	ImGui::SliderInt("Int Slider", &int_val, 0, 100);
+	ImGui::DragFloat("Drag Float", &drag_val, 0.5f, 0.0f, 100.0f);
+
+	ImGui::Separator();
+
+	// Row 4: Text input and Combo
+	ImGui::Text("Text & Selection");
+	static char text_buf[64] = "Sample text";
+	ImGui::InputText("Text Input", text_buf, sizeof(text_buf));
+	static int combo_val = 1;
+	ImGui::Combo("Combo Box", &combo_val, "Item A\0Item B\0Item C\0Item D\0");
+
+	ImGui::Separator();
+
+	// Row 5: Collapsing header
+	if (ImGui::CollapsingHeader("Collapsible Section")) {
+		ImGui::Text("Content inside collapsing header");
+		ImGui::BulletText("Bullet point 1");
+		ImGui::BulletText("Bullet point 2");
+	}
+
+	ImGui::EndChild();
+
+	ImGui::PopStyleColor(16);
+	ImGui::PopStyleVar(14);
+
+	// Show current interpolated values
+	if (ImGui::TreeNode("Interpolated Values")) {
+		ImGui::Text("Rounding: Frame=%.1f, Child=%.1f, Grab=%.1f",
+			blended.FrameRounding, blended.ChildRounding, blended.GrabRounding);
+		ImGui::Text("Padding: Frame=(%.0f,%.0f), Item=(%.0f,%.0f)",
+			blended.FramePadding.x, blended.FramePadding.y,
+			blended.ItemSpacing.x, blended.ItemSpacing.y);
+		ImGui::Text("Borders: Frame=%.0f, Child=%.0f",
+			blended.FrameBorderSize, blended.ChildBorderSize);
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// ANIMATION INSPECTOR DEMO
+// ============================================================
+static void ShowAnimationInspectorDemo()
+{
+	ImGui::TextWrapped("The Animation Inspector provides a debug view of all active animations in your application. "
+		"It shows tweens, clips, paths, noise channels, and style transitions with detailed information.");
+
+	static bool show_inspector = false;
+	if (ImGui::Button("Open Animation Inspector")) {
+		show_inspector = true;
+	}
+
+	ImGui::SameLine();
+	ImGui::TextDisabled("(Opens in separate window)");
+
+	ImGui::Separator();
+	ImGui::Text("Features:");
+	ImGui::BulletText("View all active tweens with current values");
+	ImGui::BulletText("Monitor clip instances and playback state");
+	ImGui::BulletText("Visualize motion paths");
+	ImGui::BulletText("Track noise channels and style interpolations");
+	ImGui::BulletText("Performance metrics and memory usage");
+
+	ImGui::Separator();
+	ImGui::TextDisabled("Tip: Keep the inspector open while exploring other demos to see animations in real-time.");
+
+	if (show_inspector) {
+		iam_show_animation_inspector(&show_inspector);
+	}
+}
+
+// ============================================================
 // MAIN DEMO WINDOW
 // ============================================================
 void ImAnimDemoWindow()
@@ -3586,6 +4717,10 @@ void ImAnimDemoWindow()
 		ShowColorTweensDemo();
 	}
 
+	if (ImGui::CollapsingHeader("Per-Axis Easing")) {
+		ShowPerAxisEasingDemo();
+	}
+
 	if (ImGui::CollapsingHeader("Tween Policies")) {
 		ShowPoliciesDemo();
 	}
@@ -3626,12 +4761,36 @@ void ImAnimDemoWindow()
 		ShowMotionPathsDemo();
 	}
 
+	if (ImGui::CollapsingHeader("Path Morphing")) {
+		ShowPathMorphingDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Text Along Paths")) {
+		ShowTextAlongPathDemo();
+	}
+
 	if (ImGui::CollapsingHeader("Timeline Markers")) {
 		ShowTimelineMarkersDemo();
 	}
 
 	if (ImGui::CollapsingHeader("Animation Chaining")) {
 		ShowAnimationChainingDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Text Stagger")) {
+		ShowTextStaggerDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Noise Channels")) {
+		ShowNoiseChannelsDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Style Interpolation")) {
+		ShowStyleInterpolationDemo();
+	}
+
+	if (ImGui::CollapsingHeader("Animation Inspector")) {
+		ShowAnimationInspectorDemo();
 	}
 
 	// Footer

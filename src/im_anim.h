@@ -163,6 +163,36 @@ void iam_scroll_to_top(float duration = 0.3f, iam_ease_desc const& ez = iam_ease
 void iam_scroll_to_bottom(float duration = 0.3f, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));               // Scroll to bottom of window.
 
 // ----------------------------------------------------
+// Per-axis easing - different easing per component
+// ----------------------------------------------------
+
+// Per-axis easing descriptor (for vec2/vec4/color)
+struct iam_ease_per_axis {
+	iam_ease_desc x;             // Easing for X component
+	iam_ease_desc y;             // Easing for Y component
+	iam_ease_desc z;             // Easing for Z component (vec4/color only)
+	iam_ease_desc w;             // Easing for W/alpha component (vec4/color only)
+
+	iam_ease_per_axis()
+		: x(iam_ease_preset(iam_ease_linear)), y(iam_ease_preset(iam_ease_linear)),
+		  z(iam_ease_preset(iam_ease_linear)), w(iam_ease_preset(iam_ease_linear)) {}
+
+	iam_ease_per_axis(iam_ease_desc all)
+		: x(all), y(all), z(all), w(all) {}
+
+	iam_ease_per_axis(iam_ease_desc ex, iam_ease_desc ey)
+		: x(ex), y(ey), z(iam_ease_preset(iam_ease_linear)), w(iam_ease_preset(iam_ease_linear)) {}
+
+	iam_ease_per_axis(iam_ease_desc ex, iam_ease_desc ey, iam_ease_desc ez, iam_ease_desc ew)
+		: x(ex), y(ey), z(ez), w(ew) {}
+};
+
+// Tween with per-axis easing - each component uses its own easing curve
+ImVec2 iam_tween_vec2_per_axis(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
+ImVec4 iam_tween_vec4_per_axis(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
+ImVec4 iam_tween_color_per_axis(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_per_axis const& ez, int policy, int color_space, float dt);
+
+// ----------------------------------------------------
 // Motion Paths - animate along curves and splines
 // ----------------------------------------------------
 
@@ -217,6 +247,213 @@ float  iam_path_angle(ImGuiID path_id, float t);                                
 // Tween along a path
 ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate position along path.
 float  iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt); // Animate rotation angle along path.
+
+// ----------------------------------------------------
+// Arc-length parameterization (for constant-speed animation)
+// ----------------------------------------------------
+
+// Build arc-length lookup table for a path (call once per path, improves accuracy)
+void   iam_path_build_arc_lut(ImGuiID path_id, int subdivisions = 64);                              // Build LUT with specified resolution.
+bool   iam_path_has_arc_lut(ImGuiID path_id);                                                       // Check if path has precomputed LUT.
+
+// Distance-based path evaluation (uses arc-length LUT for constant speed)
+float  iam_path_distance_to_t(ImGuiID path_id, float distance);                                     // Convert arc-length distance to t parameter.
+ImVec2 iam_path_evaluate_at_distance(ImGuiID path_id, float distance);                              // Get position at arc-length distance.
+float  iam_path_angle_at_distance(ImGuiID path_id, float distance);                                 // Get rotation angle at arc-length distance.
+ImVec2 iam_path_tangent_at_distance(ImGuiID path_id, float distance);                               // Get tangent at arc-length distance.
+
+// ----------------------------------------------------
+// Path Morphing - interpolate between two paths
+// ----------------------------------------------------
+
+// Morph options for path interpolation
+struct iam_morph_opts {
+	int   samples;               // Number of sample points for resampling (default: 64)
+	bool  match_endpoints;       // Force endpoints to match exactly (default: true)
+	bool  use_arc_length;        // Use arc-length parameterization for smoother morphing (default: true)
+
+	iam_morph_opts() : samples(64), match_endpoints(true), use_arc_length(true) {}
+};
+
+// Evaluate morphed path at parameter t [0,1] with blend factor [0,1]
+// path_a at blend=0, path_b at blend=1
+// Paths can have different numbers of segments - they are resampled to match
+ImVec2 iam_path_morph(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
+
+// Get tangent of morphed path
+ImVec2 iam_path_morph_tangent(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
+
+// Get angle (radians) of morphed path
+float  iam_path_morph_angle(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
+
+// Tween along a morphing path - animates both position along path AND the morph blend
+ImVec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiID path_a, ImGuiID path_b,
+                            float target_blend, float dur, iam_ease_desc const& path_ease,
+                            iam_ease_desc const& morph_ease, int policy, float dt,
+                            iam_morph_opts const& opts = iam_morph_opts());
+
+// Get current morph blend value from a tween (for querying state)
+float  iam_get_morph_blend(ImGuiID id, ImGuiID channel_id);
+
+// ----------------------------------------------------
+// Text along motion paths
+// ----------------------------------------------------
+
+// Text alignment along path
+enum iam_text_path_align {
+	iam_text_align_start = 0,    // Text starts at path start (or offset)
+	iam_text_align_center,       // Text centered on path
+	iam_text_align_end           // Text ends at path end
+};
+
+// Text path options
+struct iam_text_path_opts {
+	ImVec2 origin;               // Screen-space origin for rendering (path coords are offset by this)
+	float offset;                // Starting offset along path (pixels)
+	float letter_spacing;        // Extra spacing between characters (pixels)
+	int   align;                 // iam_text_path_align value
+	bool  flip_y;                // Flip text vertically (for paths going right-to-left)
+	ImU32 color;                 // Text color (default: white)
+	ImFont* font;                // Font to use (nullptr = current font)
+	float font_scale;            // Additional font scale (1.0 = normal)
+
+	iam_text_path_opts() : origin(0, 0), offset(0), letter_spacing(0), align(iam_text_align_start),
+	                       flip_y(false), color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f) {}
+};
+
+// Render text along a path (static - no animation)
+void iam_text_path(ImGuiID path_id, const char* text, iam_text_path_opts const& opts = iam_text_path_opts());
+
+// Animated text along path (characters appear progressively)
+void iam_text_path_animated(ImGuiID path_id, const char* text, float progress, iam_text_path_opts const& opts = iam_text_path_opts());
+
+// Helper: Get text width for path layout calculations
+float iam_text_path_width(const char* text, iam_text_path_opts const& opts = iam_text_path_opts());
+
+// ----------------------------------------------------
+// Quad transform helpers (for advanced custom rendering)
+// ----------------------------------------------------
+
+// Transform a quad (4 vertices) by rotation and translation
+void iam_transform_quad(ImVec2* quad, ImVec2 center, float angle_rad, ImVec2 translation);
+
+// Create a rotated quad for a glyph at a position on the path
+void iam_make_glyph_quad(ImVec2* quad, ImVec2 pos, float angle_rad, float glyph_width, float glyph_height, float baseline_offset = 0.0f);
+
+// ----------------------------------------------------
+// Text Stagger - per-character animation effects
+// ----------------------------------------------------
+
+// Text stagger effect types
+enum iam_text_stagger_effect {
+	iam_text_fx_none = 0,        // No effect (instant appear)
+	iam_text_fx_fade,            // Fade in alpha
+	iam_text_fx_scale,           // Scale from center
+	iam_text_fx_slide_up,        // Slide up from below
+	iam_text_fx_slide_down,      // Slide down from above
+	iam_text_fx_slide_left,      // Slide in from right
+	iam_text_fx_slide_right,     // Slide in from left
+	iam_text_fx_rotate,          // Rotate in
+	iam_text_fx_bounce,          // Bounce in with overshoot
+	iam_text_fx_wave,            // Wave motion (continuous)
+	iam_text_fx_typewriter       // Typewriter style (instant per char)
+};
+
+// Text stagger options
+struct iam_text_stagger_opts {
+	ImVec2 pos;                  // Base position for text
+	int    effect;               // iam_text_stagger_effect
+	float  char_delay;           // Delay between each character (seconds)
+	float  char_duration;        // Duration of each character's animation (seconds)
+	float  effect_intensity;     // Intensity of effect (pixels for slide, degrees for rotate, scale factor)
+	iam_ease_desc ease;          // Easing for character animation
+	ImU32  color;                // Text color
+	ImFont* font;                // Font to use (nullptr = current)
+	float  font_scale;           // Font scale multiplier
+	float  letter_spacing;       // Extra spacing between characters
+
+	iam_text_stagger_opts()
+		: pos(0, 0), effect(iam_text_fx_fade), char_delay(0.05f), char_duration(0.3f),
+		  effect_intensity(20.0f), ease(iam_ease_preset(iam_ease_out_cubic)),
+		  color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f), letter_spacing(0.0f) {}
+};
+
+// Render text with per-character stagger animation
+void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_stagger_opts const& opts = iam_text_stagger_opts());
+
+// Get text width for layout calculations
+float iam_text_stagger_width(const char* text, iam_text_stagger_opts const& opts = iam_text_stagger_opts());
+
+// Get total animation duration for text (accounts for stagger delays)
+float iam_text_stagger_duration(const char* text, iam_text_stagger_opts const& opts = iam_text_stagger_opts());
+
+// ----------------------------------------------------
+// Noise Channels - Perlin/Simplex noise for organic movement
+// ----------------------------------------------------
+
+// Noise types
+enum iam_noise_type {
+	iam_noise_perlin = 0,        // Classic Perlin noise
+	iam_noise_simplex,           // Simplex noise (faster, fewer artifacts)
+	iam_noise_value,             // Value noise (blocky)
+	iam_noise_worley             // Worley/cellular noise
+};
+
+// Noise options
+struct iam_noise_opts {
+	int   type;                  // iam_noise_type
+	int   octaves;               // Number of octaves for fractal noise (1-8)
+	float persistence;           // Amplitude multiplier per octave (0.0-1.0)
+	float lacunarity;            // Frequency multiplier per octave (typically 2.0)
+	int   seed;                  // Random seed for noise generation
+
+	iam_noise_opts()
+		: type(iam_noise_perlin), octaves(4), persistence(0.5f), lacunarity(2.0f), seed(0) {}
+};
+
+// Sample noise at a point (returns value in [-1, 1])
+float  iam_noise(float x, float y, iam_noise_opts const& opts = iam_noise_opts());                    // 2D noise
+float  iam_noise_3d(float x, float y, float z, iam_noise_opts const& opts = iam_noise_opts());        // 3D noise
+
+// Animated noise channels - continuous noise that evolves over time
+float  iam_noise_channel(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt);       // 1D animated noise
+ImVec2 iam_noise_channel_vec2(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, iam_noise_opts const& opts, float dt); // 2D animated noise
+ImVec4 iam_noise_channel_vec4(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, iam_noise_opts const& opts, float dt); // 4D animated noise
+
+// Convenience: smooth random movement (like wiggle but using noise)
+float  iam_smooth_noise(ImGuiID id, float amplitude, float speed, float dt);                          // Simple 1D smooth noise
+ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt);                    // Simple 2D smooth noise
+
+// ----------------------------------------------------
+// Style Interpolation - animate between ImGuiStyle themes
+// ----------------------------------------------------
+
+// Register a named style for interpolation
+void iam_style_register(ImGuiID style_id, ImGuiStyle const& style);                                   // Register a style snapshot
+void iam_style_register_current(ImGuiID style_id);                                                    // Register current ImGui style
+
+// Blend between two registered styles (result applied to ImGui::GetStyle())
+// Uses iam_color_space for color blending mode (iam_col_oklab recommended)
+void iam_style_blend(ImGuiID style_a, ImGuiID style_b, float t, int color_space = iam_col_oklab);
+
+// Tween between styles over time
+void iam_style_tween(ImGuiID id, ImGuiID target_style, float duration, iam_ease_desc const& ease, int color_space, float dt);
+
+// Get interpolated style without applying
+void iam_style_blend_to(ImGuiID style_a, ImGuiID style_b, float t, ImGuiStyle* out_style, int color_space = iam_col_oklab);
+
+// Check if a style is registered
+bool iam_style_exists(ImGuiID style_id);
+
+// Remove a registered style
+void iam_style_unregister(ImGuiID style_id);
+
+// ----------------------------------------------------
+// Animation Inspector - debug visualization
+// ----------------------------------------------------
+
+// Show the animation inspector window
+void iam_show_animation_inspector(bool* p_open = nullptr);
 
 // ============================================================
 // CLIP-BASED ANIMATION SYSTEM
