@@ -1021,6 +1021,12 @@ static const ImGuiID CLIP_COMPLEX = 0x1004;
 static const ImGuiID CLIP_DELAYED = 0x1005;
 static const ImGuiID CLIP_WITH_CALLBACKS = 0x1006;
 static const ImGuiID CLIP_INT_ANIM = 0x1007;
+static const ImGuiID CLIP_SEQUENTIAL = 0x1008;
+static const ImGuiID CLIP_PARALLEL = 0x1009;
+static const ImGuiID CLIP_STAGGER = 0x100A;
+static const ImGuiID CLIP_STAGGER_LIST = 0x100B;
+static const ImGuiID CLIP_STAGGER_GRID = 0x100C;
+static const ImGuiID CLIP_STAGGER_CARDS = 0x100D;
 
 // Channel IDs for clips
 static const ImGuiID CLIP_CH_ALPHA = 0x2001;
@@ -1029,6 +1035,8 @@ static const ImGuiID CLIP_CH_OFFSET = 0x2003;
 static const ImGuiID CLIP_CH_COLOR = 0x2004;
 static const ImGuiID CLIP_CH_ROTATION = 0x2005;
 static const ImGuiID CLIP_CH_COUNTER = 0x2006;
+static const ImGuiID CLIP_CH_POS_X = 0x2007;
+static const ImGuiID CLIP_CH_POS_Y = 0x2008;
 
 // Callback state for demo
 static int s_callback_begin_count = 0;
@@ -1118,6 +1126,85 @@ static void InitDemoClips()
 	iam_clip::begin(CLIP_INT_ANIM)
 		.key_int(CLIP_CH_COUNTER, 0.0f, 0, iam_ease_linear)
 		.key_int(CLIP_CH_COUNTER, 2.0f, 100, iam_ease_out_cubic)
+		.end();
+
+	// Clip 8: Sequential timeline (animations play one after another)
+	// Total duration: 0.5 + 0.5 + 0.5 = 1.5s
+	iam_clip::begin(CLIP_SEQUENTIAL)
+		.seq_begin()
+			// First: move right
+			.key_float(CLIP_CH_POS_X, 0.0f, 0.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_POS_X, 0.5f, 100.0f, iam_ease_out_cubic)
+		.seq_end()
+		.seq_begin()
+			// Then: move down
+			.key_float(CLIP_CH_POS_Y, 0.0f, 0.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_POS_Y, 0.5f, 50.0f, iam_ease_out_cubic)
+		.seq_end()
+		.seq_begin()
+			// Finally: scale up
+			.key_float(CLIP_CH_SCALE, 0.0f, 1.0f, iam_ease_out_back)
+			.key_float(CLIP_CH_SCALE, 0.5f, 1.5f, iam_ease_out_back)
+		.seq_end()
+		.end();
+
+	// Clip 9: Parallel timeline (all animations start at the same time)
+	// Total duration: max(0.6, 0.6, 0.6) = 0.6s
+	iam_clip::begin(CLIP_PARALLEL)
+		.par_begin()
+			// All at once: move, scale, and fade
+			.key_float(CLIP_CH_POS_X, 0.0f, 0.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_POS_X, 0.6f, 100.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_POS_Y, 0.0f, 0.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_POS_Y, 0.6f, 50.0f, iam_ease_out_cubic)
+			.key_float(CLIP_CH_SCALE, 0.0f, 0.5f, iam_ease_out_elastic)
+			.key_float(CLIP_CH_SCALE, 0.6f, 1.2f, iam_ease_out_elastic)
+			.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+			.key_float(CLIP_CH_ALPHA, 0.6f, 1.0f, iam_ease_out_quad)
+		.par_end()
+		.end();
+
+	// Clip 10: Stagger animation - cascading wave effect
+	iam_clip::begin(CLIP_STAGGER)
+		// Pop in from below with scale
+		.key_float(CLIP_CH_POS_Y, 0.0f, 40.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_POS_Y, 0.5f, 0.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.0f, iam_ease_out_elastic)
+		.key_float(CLIP_CH_SCALE, 0.6f, 1.0f, iam_ease_out_elastic)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.3f, 1.0f, iam_ease_out_quad)
+		.set_stagger(12, 0.06f, 0.0f)  // 12 items, 60ms delay for smooth wave
+		.end();
+
+	// Clip 11: Stagger list items - slide in from left
+	iam_clip::begin(CLIP_STAGGER_LIST)
+		.key_float(CLIP_CH_POS_X, 0.0f, -50.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_POS_X, 0.4f, 0.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.3f, 1.0f, iam_ease_out_quad)
+		.set_stagger(6, 0.08f, 0.0f)
+		.end();
+
+	// Clip 12: Stagger grid - scale in with rotation feel
+	iam_clip::begin(CLIP_STAGGER_GRID)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_SCALE, 0.5f, 1.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.25f, 1.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ROTATION, 0.0f, -15.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_ROTATION, 0.5f, 0.0f, iam_ease_out_cubic)
+		.set_stagger(16, 0.04f, 0.0f)
+		.end();
+
+	// Clip 13: Stagger cards - drop from top with bounce
+	iam_clip::begin(CLIP_STAGGER_CARDS)
+		.key_float(CLIP_CH_POS_Y, 0.0f, -80.0f, iam_ease_out_bounce)
+		.key_float(CLIP_CH_POS_Y, 0.6f, 0.0f, iam_ease_out_bounce)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.2f, 1.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.8f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_SCALE, 0.4f, 1.0f, iam_ease_out_cubic)
+		.set_stagger(5, 0.12f, 0.0f)
 		.end();
 }
 
@@ -1427,6 +1514,440 @@ static void ShowClipSystemDemo()
 
 		ImGui::TreePop();
 	}
+
+	// Sequential Timeline demo
+	if (ImGui::TreeNode("Sequential Timeline (seq_begin/end)")) {
+		ImGui::TextWrapped(
+			"seq_begin()/seq_end() groups keyframes that play in sequence. "
+			"Each group starts after the previous one completes.");
+
+		static ImGuiID inst_id = ImHashStr("seq_inst");
+		if (ImGui::Button("Play Sequential")) {
+			iam_play(CLIP_SEQUENTIAL, inst_id);
+		}
+
+		iam_instance inst = iam_get_instance(inst_id);
+		float pos_x = 0.0f, pos_y = 0.0f, scale = 1.0f;
+		if (inst.valid()) {
+			inst.get_float(CLIP_CH_POS_X, &pos_x);
+			inst.get_float(CLIP_CH_POS_Y, &pos_y);
+			inst.get_float(CLIP_CH_SCALE, &scale);
+		}
+		if (scale < 0.1f) scale = 0.1f;
+		if (scale > 10.0f) scale = 10.0f;
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 100);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(40, 40, 45, 255));
+
+		// Draw animated square
+		float sq_size = 20.0f * scale;
+		ImVec2 sq_pos(canvas_pos.x + 20 + pos_x, canvas_pos.y + 20 + pos_y);
+		draw_list->AddRectFilled(sq_pos, ImVec2(sq_pos.x + sq_size, sq_pos.y + sq_size),
+			IM_COL32(100, 200, 255, 255), 4.0f);
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("Step 1: Move right | Step 2: Move down | Step 3: Scale up");
+		ImGui::Text("X: %.1f  Y: %.1f  Scale: %.2f", pos_x, pos_y, scale);
+
+		ImGui::TreePop();
+	}
+
+	// Parallel Timeline demo
+	if (ImGui::TreeNode("Parallel Timeline (par_begin/end)")) {
+		ImGui::TextWrapped(
+			"par_begin()/par_end() groups keyframes that play simultaneously. "
+			"All animations in the group start at the same time.");
+
+		static ImGuiID inst_id = ImHashStr("par_inst");
+		if (ImGui::Button("Play Parallel")) {
+			iam_play(CLIP_PARALLEL, inst_id);
+		}
+
+		iam_instance inst = iam_get_instance(inst_id);
+		float pos_x = 0.0f, pos_y = 0.0f, scale = 1.0f, alpha = 1.0f;
+		if (inst.valid()) {
+			inst.get_float(CLIP_CH_POS_X, &pos_x);
+			inst.get_float(CLIP_CH_POS_Y, &pos_y);
+			inst.get_float(CLIP_CH_SCALE, &scale);
+			inst.get_float(CLIP_CH_ALPHA, &alpha);
+		}
+		if (scale < 0.1f) scale = 0.1f;
+		if (scale > 10.0f) scale = 10.0f;
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 100);
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(40, 40, 45, 255));
+
+		// Draw animated circle
+		float radius = 15.0f * scale;
+		ImVec2 circ_pos(canvas_pos.x + 30 + pos_x, canvas_pos.y + 30 + pos_y);
+		int a = (int)(alpha * 255);
+		draw_list->AddCircleFilled(circ_pos, radius, IM_COL32(255, 150, 100, a));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("All at once: Move + Scale + Fade");
+		ImGui::Text("X: %.1f  Y: %.1f  Scale: %.2f  Alpha: %.2f", pos_x, pos_y, scale, alpha);
+
+		ImGui::TreePop();
+	}
+
+	// Stagger demo
+	if (ImGui::TreeNode("Stagger Animation")) {
+		ImGui::TextWrapped(
+			"set_stagger() applies progressive delays for animating multiple items. "
+			"Each element pops in with a cascading wave effect.");
+
+		static const int NUM_ITEMS = 12;
+		static ImGuiID inst_ids[NUM_ITEMS];
+		static bool initialized = false;
+		if (!initialized) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "stagger_dot_%d", i);
+				inst_ids[i] = ImHashStr(buf);
+			}
+			initialized = true;
+		}
+
+		if (ImGui::Button("Play Wave")) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				iam_play_stagger(CLIP_STAGGER, inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset")) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				iam_instance inst = iam_get_instance(inst_ids[i]);
+				if (inst.valid()) inst.stop();
+			}
+		}
+
+		ImGui::Spacing();
+
+		// Draw cascading circles with rainbow colors
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float const canvas_w = 400.0f;
+		float const canvas_h = 80.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(25, 25, 30, 255), 8.0f);
+
+		float spacing = canvas_w / (NUM_ITEMS + 1);
+		float base_y = canvas_pos.y + canvas_h * 0.5f;
+
+		for (int i = 0; i < NUM_ITEMS; i++) {
+			iam_instance inst = iam_get_instance(inst_ids[i]);
+			float alpha = 0.0f, pos_y = 40.0f, scale = 0.0f;
+			if (inst.valid()) {
+				inst.get_float(CLIP_CH_ALPHA, &alpha);
+				inst.get_float(CLIP_CH_POS_Y, &pos_y);
+				inst.get_float(CLIP_CH_SCALE, &scale);
+			}
+
+			float x = canvas_pos.x + spacing * (i + 1);
+			float y = base_y + pos_y;
+			float radius = 12.0f * scale;
+
+			// Rainbow hue based on index
+			float hue = (float)i / NUM_ITEMS;
+			ImVec4 col_hsv(hue, 0.8f, 0.9f, alpha);
+			ImVec4 col_rgb;
+			ImGui::ColorConvertHSVtoRGB(col_hsv.x, col_hsv.y, col_hsv.z, col_rgb.x, col_rgb.y, col_rgb.z);
+			col_rgb.w = alpha;
+
+			ImU32 col = ImGui::ColorConvertFloat4ToU32(col_rgb);
+
+			if (radius > 0.5f) {
+				// Glow effect
+				draw_list->AddCircleFilled(ImVec2(x, y), radius * 1.5f,
+					IM_COL32((int)(col_rgb.x*255), (int)(col_rgb.y*255), (int)(col_rgb.z*255), (int)(alpha * 40)));
+				// Main circle
+				draw_list->AddCircleFilled(ImVec2(x, y), radius, col);
+				// Highlight
+				draw_list->AddCircleFilled(ImVec2(x - radius*0.3f, y - radius*0.3f), radius * 0.25f,
+					IM_COL32(255, 255, 255, (int)(alpha * 150)));
+			}
+		}
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+
+		ImGui::TreePop();
+	}
+
+	// Stagger List demo
+	if (ImGui::TreeNode("Stagger: List Slide-In")) {
+		ImGui::TextWrapped(
+			"Classic list animation with items sliding in from the left.");
+
+		static const int NUM_LIST_ITEMS = 6;
+		static ImGuiID list_inst_ids[NUM_LIST_ITEMS];
+		static bool list_initialized = false;
+		if (!list_initialized) {
+			for (int i = 0; i < NUM_LIST_ITEMS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "stagger_list_%d", i);
+				list_inst_ids[i] = ImHashStr(buf);
+			}
+			list_initialized = true;
+		}
+
+		if (ImGui::Button("Play List")) {
+			for (int i = 0; i < NUM_LIST_ITEMS; i++) {
+				iam_play_stagger(CLIP_STAGGER_LIST, list_inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##list")) {
+			for (int i = 0; i < NUM_LIST_ITEMS; i++) {
+				iam_instance inst = iam_get_instance(list_inst_ids[i]);
+				if (inst.valid()) inst.stop();
+			}
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 list_canvas_pos = ImGui::GetCursorScreenPos();
+		float const list_canvas_w = 250.0f;
+		float const list_canvas_h = 170.0f;
+		ImDrawList* list_draw_list = ImGui::GetWindowDrawList();
+
+		list_draw_list->AddRectFilled(list_canvas_pos,
+			ImVec2(list_canvas_pos.x + list_canvas_w, list_canvas_pos.y + list_canvas_h),
+			IM_COL32(30, 32, 38, 255), 6.0f);
+
+		const char* list_labels[] = { "Dashboard", "Projects", "Tasks", "Calendar", "Settings", "Help" };
+		for (int i = 0; i < NUM_LIST_ITEMS; i++) {
+			iam_instance inst = iam_get_instance(list_inst_ids[i]);
+			float alpha = 0.0f, pos_x = -50.0f;
+			if (inst.valid()) {
+				inst.get_float(CLIP_CH_ALPHA, &alpha);
+				inst.get_float(CLIP_CH_POS_X, &pos_x);
+			}
+
+			float y = list_canvas_pos.y + 12.0f + i * 26.0f;
+			int a = (int)(alpha * 255);
+
+			// Draw list item background
+			list_draw_list->AddRectFilled(
+				ImVec2(list_canvas_pos.x + 8 + pos_x, y),
+				ImVec2(list_canvas_pos.x + list_canvas_w - 8 + pos_x, y + 22),
+				IM_COL32(50, 55, 65, a), 4.0f);
+
+			// Draw icon placeholder
+			list_draw_list->AddCircleFilled(
+				ImVec2(list_canvas_pos.x + 22 + pos_x, y + 11),
+				6.0f, IM_COL32(100, 140, 200, a));
+
+			// Draw label
+			list_draw_list->AddText(ImVec2(list_canvas_pos.x + 36 + pos_x, y + 4),
+				IM_COL32(220, 220, 230, a), list_labels[i]);
+		}
+
+		ImGui::Dummy(ImVec2(list_canvas_w, list_canvas_h));
+		ImGui::TreePop();
+	}
+
+	// Stagger Grid demo
+	if (ImGui::TreeNode("Stagger: Grid Reveal")) {
+		ImGui::TextWrapped(
+			"Grid items appearing with scale and subtle rotation.");
+
+		static const int GRID_COLS = 4;
+		static const int GRID_ROWS = 4;
+		static const int NUM_GRID_ITEMS = GRID_COLS * GRID_ROWS;
+		static ImGuiID grid_inst_ids[NUM_GRID_ITEMS];
+		static bool grid_initialized = false;
+		if (!grid_initialized) {
+			for (int i = 0; i < NUM_GRID_ITEMS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "stagger_grid_%d", i);
+				grid_inst_ids[i] = ImHashStr(buf);
+			}
+			grid_initialized = true;
+		}
+
+		if (ImGui::Button("Play Grid")) {
+			for (int i = 0; i < NUM_GRID_ITEMS; i++) {
+				iam_play_stagger(CLIP_STAGGER_GRID, grid_inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##grid")) {
+			for (int i = 0; i < NUM_GRID_ITEMS; i++) {
+				iam_instance inst = iam_get_instance(grid_inst_ids[i]);
+				if (inst.valid()) inst.stop();
+			}
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 grid_canvas_pos = ImGui::GetCursorScreenPos();
+		float const cell_size = 45.0f;
+		float const grid_spacing = 8.0f;
+		float const grid_canvas_w = GRID_COLS * (cell_size + grid_spacing) + grid_spacing;
+		float const grid_canvas_h = GRID_ROWS * (cell_size + grid_spacing) + grid_spacing;
+		ImDrawList* grid_draw_list = ImGui::GetWindowDrawList();
+
+		grid_draw_list->AddRectFilled(grid_canvas_pos,
+			ImVec2(grid_canvas_pos.x + grid_canvas_w, grid_canvas_pos.y + grid_canvas_h),
+			IM_COL32(25, 28, 35, 255), 8.0f);
+
+		for (int row = 0; row < GRID_ROWS; row++) {
+			for (int col = 0; col < GRID_COLS; col++) {
+				int idx = row * GRID_COLS + col;
+				iam_instance inst = iam_get_instance(grid_inst_ids[idx]);
+				float alpha = 0.0f, scale = 0.0f, rotation = 0.0f;
+				if (inst.valid()) {
+					inst.get_float(CLIP_CH_ALPHA, &alpha);
+					inst.get_float(CLIP_CH_SCALE, &scale);
+					inst.get_float(CLIP_CH_ROTATION, &rotation);
+				}
+
+				float cx = grid_canvas_pos.x + grid_spacing + col * (cell_size + grid_spacing) + cell_size * 0.5f;
+				float cy = grid_canvas_pos.y + grid_spacing + row * (cell_size + grid_spacing) + cell_size * 0.5f;
+
+				int a = (int)(alpha * 255);
+				float half = cell_size * 0.5f * scale;
+
+				// Pastel colors based on position
+				float hue = (float)(row * GRID_COLS + col) / NUM_GRID_ITEMS;
+				ImVec4 col_hsv(hue, 0.5f, 0.85f, alpha);
+				ImVec4 col_rgb;
+				ImGui::ColorConvertHSVtoRGB(col_hsv.x, col_hsv.y, col_hsv.z, col_rgb.x, col_rgb.y, col_rgb.z);
+
+				if (scale > 0.01f) {
+					// Draw rotated rounded rect
+					float rad = rotation * 3.14159f / 180.0f;
+					ImVec2 corners[4];
+					float corner_angles[4] = { -0.785f, 0.785f, 2.356f, 3.927f }; // 45, 135, 225, 315 degrees
+					for (int c = 0; c < 4; c++) {
+						float ca = corner_angles[c] + rad;
+						float dist = half * 1.414f;
+						corners[c] = ImVec2(cx + ImCos(ca) * dist, cy + ImSin(ca) * dist);
+					}
+					grid_draw_list->AddQuadFilled(corners[0], corners[1], corners[2], corners[3],
+						IM_COL32((int)(col_rgb.x*255), (int)(col_rgb.y*255), (int)(col_rgb.z*255), a));
+				}
+			}
+		}
+
+		ImGui::Dummy(ImVec2(grid_canvas_w, grid_canvas_h));
+		ImGui::TreePop();
+	}
+
+	// Stagger Cards demo
+	if (ImGui::TreeNode("Stagger: Dropping Cards")) {
+		ImGui::TextWrapped(
+			"Cards dropping in from above with a bounce effect.");
+
+		static const int NUM_CARDS = 5;
+		static ImGuiID card_inst_ids[NUM_CARDS];
+		static bool cards_initialized = false;
+		if (!cards_initialized) {
+			for (int i = 0; i < NUM_CARDS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "stagger_card_%d", i);
+				card_inst_ids[i] = ImHashStr(buf);
+			}
+			cards_initialized = true;
+		}
+
+		if (ImGui::Button("Drop Cards")) {
+			for (int i = 0; i < NUM_CARDS; i++) {
+				iam_play_stagger(CLIP_STAGGER_CARDS, card_inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##cards")) {
+			for (int i = 0; i < NUM_CARDS; i++) {
+				iam_instance inst = iam_get_instance(card_inst_ids[i]);
+				if (inst.valid()) inst.stop();
+			}
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 cards_canvas_pos = ImGui::GetCursorScreenPos();
+		float const card_w = 70.0f;
+		float const card_h = 90.0f;
+		float const card_spacing = 12.0f;
+		float const cards_canvas_w = NUM_CARDS * (card_w + card_spacing) + card_spacing;
+		float const cards_canvas_h = card_h + 100.0f; // Extra space for drop animation
+		ImDrawList* cards_draw_list = ImGui::GetWindowDrawList();
+
+		cards_draw_list->AddRectFilled(cards_canvas_pos,
+			ImVec2(cards_canvas_pos.x + cards_canvas_w, cards_canvas_pos.y + cards_canvas_h),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		// Card suits for visual interest
+		const char* suits[] = { "A", "K", "Q", "J", "10" };
+		ImU32 card_colors[] = {
+			IM_COL32(220, 60, 60, 255),   // Red
+			IM_COL32(40, 40, 50, 255),    // Black
+			IM_COL32(220, 60, 60, 255),   // Red
+			IM_COL32(40, 40, 50, 255),    // Black
+			IM_COL32(220, 60, 60, 255),   // Red
+		};
+
+		for (int i = 0; i < NUM_CARDS; i++) {
+			iam_instance inst = iam_get_instance(card_inst_ids[i]);
+			float alpha = 0.0f, pos_y = -80.0f, scale = 0.8f;
+			if (inst.valid()) {
+				inst.get_float(CLIP_CH_ALPHA, &alpha);
+				inst.get_float(CLIP_CH_POS_Y, &pos_y);
+				inst.get_float(CLIP_CH_SCALE, &scale);
+			}
+
+			float x = cards_canvas_pos.x + card_spacing + i * (card_w + card_spacing);
+			float y = cards_canvas_pos.y + 80.0f + pos_y;
+
+			float scaled_w = card_w * scale;
+			float scaled_h = card_h * scale;
+			float offset_x = (card_w - scaled_w) * 0.5f;
+			float offset_y = (card_h - scaled_h) * 0.5f;
+
+			int a = (int)(alpha * 255);
+
+			if (alpha > 0.01f) {
+				// Card shadow
+				cards_draw_list->AddRectFilled(
+					ImVec2(x + offset_x + 3, y + offset_y + 3),
+					ImVec2(x + offset_x + scaled_w + 3, y + offset_y + scaled_h + 3),
+					IM_COL32(0, 0, 0, a / 3), 6.0f);
+
+				// Card background
+				cards_draw_list->AddRectFilled(
+					ImVec2(x + offset_x, y + offset_y),
+					ImVec2(x + offset_x + scaled_w, y + offset_y + scaled_h),
+					IM_COL32(250, 250, 245, a), 6.0f);
+
+				// Card border
+				cards_draw_list->AddRect(
+					ImVec2(x + offset_x, y + offset_y),
+					ImVec2(x + offset_x + scaled_w, y + offset_y + scaled_h),
+					IM_COL32(180, 180, 175, a), 6.0f, 0, 1.5f);
+
+				// Suit text
+				ImU32 text_col = (card_colors[i] & 0x00FFFFFF) | ((a & 0xFF) << 24);
+				cards_draw_list->AddText(
+					ImVec2(x + offset_x + 8, y + offset_y + 6),
+					text_col, suits[i]);
+			}
+		}
+
+		ImGui::Dummy(ImVec2(cards_canvas_w, cards_canvas_h));
+		ImGui::TreePop();
+	}
+
 }
 
 // ============================================================
@@ -1843,24 +2364,26 @@ static void ShowLayeringDemo()
 		ImGui::SliderFloat("Weight B", &weight_b, 0.0f, 1.0f);
 		ImGui::SliderFloat("Weight C", &weight_c, 0.0f, 1.0f);
 
-		// Normalize weights
-		float total = weight_a + weight_b + weight_c;
-		if (total < 0.001f) total = 1.0f;
-		float norm_a = weight_a / total;
-		float norm_b = weight_b / total;
-		float norm_c = weight_c / total;
-
 		iam_instance a = iam_get_instance(inst_a);
 		iam_instance b = iam_get_instance(inst_b);
 		iam_instance c = iam_get_instance(inst_c);
 
+		// Get individual values for visualization
 		float x_a = 100.0f, x_b = 100.0f, x_c = 100.0f;
 		if (a.valid()) a.get_float(LAYER_CH_X, &x_a);
 		if (b.valid()) b.get_float(LAYER_CH_X, &x_b);
 		if (c.valid()) c.get_float(LAYER_CH_X, &x_c);
 
-		// Manual blending (layer_begin/add/end would do this automatically)
-		float blended_x = x_a * norm_a + x_b * norm_b + x_c * norm_c;
+		// Use the layering API to blend animations
+		static ImGuiID composite_id = ImHashStr("layer_composite");
+		iam_layer_begin(composite_id);
+		if (a.valid()) iam_layer_add(a, weight_a);
+		if (b.valid()) iam_layer_add(b, weight_b);
+		if (c.valid()) iam_layer_add(c, weight_c);
+		iam_layer_end(composite_id);
+
+		float blended_x = 100.0f;
+		iam_get_blended_float(composite_id, LAYER_CH_X, &blended_x);
 
 		// Draw visualization
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
@@ -1896,7 +2419,10 @@ static void ShowLayeringDemo()
 		draw_list->AddText(ImVec2(canvas_pos.x + vis_width + 10, y_row - 6), IM_COL32(100, 255, 100, 255), "Blended");
 
 		ImGui::Dummy(ImVec2(vis_width + text_width, canvas_size.y));
-		ImGui::Text("Weights: A=%.0f%% B=%.0f%% C=%.0f%%", norm_a * 100, norm_b * 100, norm_c * 100);
+		// Calculate normalized weights for display
+		float total = weight_a + weight_b + weight_c;
+		if (total < 0.001f) total = 1.0f;
+		ImGui::Text("Weights: A=%.0f%% B=%.0f%% C=%.0f%%", (weight_a/total) * 100, (weight_b/total) * 100, (weight_c/total) * 100);
 
 		ImGui::TreePop();
 	}
@@ -2318,10 +2844,10 @@ static void ShowDrawListDemo()
 
 		// Color based on current shape
 		ImU32 colors[] = {
-			IM_COL32(255, 100, 150, 255),  // Circle: pink
-			IM_COL32(100, 255, 150, 255),  // Triangle: green
-			IM_COL32(100, 150, 255, 255),  // Square: blue
-			IM_COL32(255, 200, 100, 255)   // Pentagon: orange
+			IM_COL32(255, 100, 150, 255), // Circle: pink
+			IM_COL32(100, 255, 150, 255), // Triangle: green
+			IM_COL32(100, 150, 255, 255), // Square: blue
+			IM_COL32(255, 200, 100, 255)  // Pentagon: orange
 		};
 		ImU32 col_from = colors[shape_from];
 		ImU32 col_to = colors[shape_to];

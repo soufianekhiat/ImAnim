@@ -99,10 +99,11 @@ Timeline-based animations with keyframes, looping, and callbacks.
 
 ```cpp
 // Define once at startup
+ImGuiID id = ImHashStr("scale");
 Clip::begin(ImHashStr("bounce_clip"))
-    .key_float(ImHashStr("scale"), 0.0f, 1.0f, im_anim_ease_out_elastic)
-    .key_float(ImHashStr("scale"), 1.0f, 1.5f, im_anim_ease_in_out_cubic)
-    .key_float(ImHashStr("scale"), 2.0f, 1.0f, im_anim_ease_out_bounce)
+    .key_float(id, 0.0f, 1.0f, im_anim_ease_out_elastic)
+    .key_float(id, 1.0f, 1.5f, im_anim_ease_in_out_cubic)
+    .key_float(id, 2.0f, 1.0f, im_anim_ease_out_bounce)
     .set_loop(true, im_anim_dir_alternate)
     .end();
 ```

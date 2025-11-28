@@ -81,7 +81,7 @@ int    iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_
 ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt); // Animate a color in specified color space.
 
 // Resize-friendly helpers
-ImVec2 iam_anchor_size(int space);                                                  // Get dimensions of anchor space (window, viewport, etc.).
+ImVec2 iam_anchor_size(int space); // Get dimensions of anchor space (window, viewport, etc.).
 
 // Relative target tweens (percent of anchor + pixel offset) - survive window resizes
 float  iam_tween_float_rel(ImGuiID id, ImGuiID channel_id, float percent, float px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, int axis, float dt);  // Float relative to anchor (axis: 0=x, 1=y).
@@ -215,6 +215,7 @@ public:
 	void pause();
 	void resume();
 	void stop();
+	void destroy();  // Remove instance from system (valid() will return false after this)
 	void seek(float time);
 	void set_time_scale(float scale);
 	void set_weight(float weight);  // for layering/blending
@@ -262,13 +263,21 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id);
 iam_instance iam_get_instance(ImGuiID instance_id);
 
 // Query clip info
-float iam_clip_duration(ImGuiID clip_id);
-bool iam_clip_exists(ImGuiID clip_id);
+float iam_clip_duration(ImGuiID clip_id);                                       // Get clip duration in seconds.
+bool iam_clip_exists(ImGuiID clip_id);                                          // Check if clip exists.
 
-// Layering support
-void iam_layer_begin(ImGuiID instance_id);
-void iam_layer_add(iam_instance inst, float weight);
-void iam_layer_end(ImGuiID instance_id);
+// Stagger helpers - compute delay for indexed instances
+float iam_stagger_delay(ImGuiID clip_id, int index);                            // Get stagger delay for element at index.
+iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index); // Play with stagger delay applied.
+
+// Layering support - blend multiple animation instances
+void iam_layer_begin(ImGuiID instance_id);                                      // Start blending into target instance.
+void iam_layer_add(iam_instance inst, float weight);                            // Add source instance with weight.
+void iam_layer_end(ImGuiID instance_id);                                        // Finalize blending and normalize weights.
+bool iam_get_blended_float(ImGuiID instance_id, ImGuiID channel, float* out);   // Get blended float value.
+bool iam_get_blended_vec2(ImGuiID instance_id, ImGuiID channel, ImVec2* out);   // Get blended vec2 value.
+bool iam_get_blended_vec4(ImGuiID instance_id, ImGuiID channel, ImVec4* out);   // Get blended vec4 value.
+bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out);       // Get blended int value.
 
 // Persistence (optional)
 iam_result iam_clip_save(ImGuiID clip_id, char const* path);

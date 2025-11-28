@@ -6,6 +6,8 @@
 #include "im_anim.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include <stdio.h>
+#include <string.h>
 
 // ----------------------------------------------------
 // Internal: parameterized easing LUT cache (ImPool)
@@ -785,9 +787,24 @@ struct iam_clip_data {
 	// Build-time state
 	ImVector<iam_clip_detail::keyframe>	build_keys;
 
+	// Seq/par grouping state (build-time)
+	struct group_state {
+		float	base_time;		// base time offset for this group
+		float	max_time;		// max time seen in this group (for seq_end)
+		bool	is_seq;			// true = sequential, false = parallel
+	};
+	ImVector<group_state>	group_stack;
+	float					build_time_offset;	// current time offset for keyframes
+
+	// Stagger state
+	int						stagger_count;
+	float					stagger_delay;
+	float					stagger_center_bias;
+
 	iam_clip_data() : id(0), delay(0), duration(0), loop_count(0), direction(iam_dir_normal),
 		cb_begin(nullptr), cb_update(nullptr), cb_complete(nullptr),
-		cb_begin_user(nullptr), cb_update_user(nullptr), cb_complete_user(nullptr) {}
+		cb_begin_user(nullptr), cb_update_user(nullptr), cb_complete_user(nullptr),
+		build_time_offset(0), stagger_count(0), stagger_delay(0), stagger_center_bias(0) {}
 };
 
 // iam_instance_data definition
@@ -814,8 +831,16 @@ struct iam_instance_data {
 	ImVector<vec2_entry> values_vec2;
 	ImVector<vec4_entry> values_vec4;
 
+	// Layered blending output (written by iam_layer_end)
+	ImGuiStorage	blended_float;
+	ImGuiStorage	blended_int;
+	ImVector<vec2_entry> blended_vec2;
+	ImVector<vec4_entry> blended_vec4;
+	bool			has_blended;	// true if blended values are valid
+
 	iam_instance_data() : inst_id(0), clip_id(0), time(0), time_scale(1.0f), weight(1.0f),
-		delay_left(0), playing(false), paused(false), begin_called(false), dir_sign(1), loops_left(0), last_seen_frame(0) {}
+		delay_left(0), playing(false), paused(false), begin_called(false), dir_sign(1), loops_left(0), last_seen_frame(0),
+		has_blended(false) {}
 };
 
 namespace iam_clip_detail {
@@ -1002,20 +1027,37 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	// Reset for building
 	clip->build_keys.clear();
 	clip->iam_tracks.clear();
+	clip->group_stack.clear();
 	clip->duration = 0;
 	clip->delay = 0;
 	clip->loop_count = 0;
 	clip->direction = iam_dir_normal;
+	clip->build_time_offset = 0;
+	clip->stagger_count = 0;
+	clip->stagger_delay = 0;
+	clip->stagger_center_bias = 0;
 
 	return iam_clip(clip_id);
+}
+
+// Helper to compute actual keyframe time and update group state
+static float compute_key_time(iam_clip_data* clip, float time) {
+	float actual_time = time + clip->build_time_offset;
+	// Update max_time in current group if any
+	if (clip->group_stack.Size > 0) {
+		iam_clip_data::group_state& gs = clip->group_stack.back();
+		if (actual_time > gs.max_time) gs.max_time = actual_time;
+	}
+	return actual_time;
 }
 
 iam_clip& iam_clip::key_float(ImGuiID channel, float time, float value, int ease_type, float const* bezier4) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
 	iam_clip_detail::keyframe k;
 	k.channel = channel;
-	k.time = time;
+	k.time = actual_time;
 	k.type = iam_chan_float;
 	k.ease_type = ease_type;
 	k.set_float(value);
@@ -1025,16 +1067,17 @@ iam_clip& iam_clip::key_float(ImGuiID channel, float time, float value, int ease
 		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
 	}
 	clip->build_keys.push_back(k);
-	if (time > clip->duration) clip->duration = time;
+	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
 }
 
 iam_clip& iam_clip::key_vec2(ImGuiID channel, float time, ImVec2 value, int ease_type, float const* bezier4) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
 	iam_clip_detail::keyframe k;
 	k.channel = channel;
-	k.time = time;
+	k.time = actual_time;
 	k.type = iam_chan_vec2;
 	k.ease_type = ease_type;
 	k.set_vec2(value);
@@ -1044,16 +1087,17 @@ iam_clip& iam_clip::key_vec2(ImGuiID channel, float time, ImVec2 value, int ease
 		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
 	}
 	clip->build_keys.push_back(k);
-	if (time > clip->duration) clip->duration = time;
+	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
 }
 
 iam_clip& iam_clip::key_vec4(ImGuiID channel, float time, ImVec4 value, int ease_type, float const* bezier4) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
 	iam_clip_detail::keyframe k;
 	k.channel = channel;
-	k.time = time;
+	k.time = actual_time;
 	k.type = iam_chan_vec4;
 	k.ease_type = ease_type;
 	k.set_vec4(value);
@@ -1063,44 +1107,85 @@ iam_clip& iam_clip::key_vec4(ImGuiID channel, float time, ImVec4 value, int ease
 		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
 	}
 	clip->build_keys.push_back(k);
-	if (time > clip->duration) clip->duration = time;
+	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
 }
 
 iam_clip& iam_clip::key_int(ImGuiID channel, float time, int value, int ease_type) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
 	iam_clip_detail::keyframe k;
 	k.channel = channel;
-	k.time = time;
+	k.time = actual_time;
 	k.type = iam_chan_int;
 	k.ease_type = ease_type;
 	k.set_int(value);
 	clip->build_keys.push_back(k);
-	if (time > clip->duration) clip->duration = time;
+	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
 }
 
 iam_clip& iam_clip::key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
 	iam_clip_detail::keyframe k;
 	k.channel = channel;
-	k.time = time;
+	k.time = actual_time;
 	k.type = iam_chan_float;
 	k.ease_type = iam_ease_spring;
 	k.is_spring = true;
 	k.spring = spring;
 	k.set_float(target);
 	clip->build_keys.push_back(k);
-	if (time > clip->duration) clip->duration = time;
+	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
 }
 
-iam_clip& iam_clip::seq_begin() { return *this; }  // Placeholder for future timeline features
-iam_clip& iam_clip::seq_end() { return *this; }
-iam_clip& iam_clip::par_begin() { return *this; }
-iam_clip& iam_clip::par_end() { return *this; }
+iam_clip& iam_clip::seq_begin() {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	iam_clip_data::group_state gs;
+	gs.base_time = clip->build_time_offset;
+	gs.max_time = clip->build_time_offset;
+	gs.is_seq = true;
+	clip->group_stack.push_back(gs);
+	return *this;
+}
+
+iam_clip& iam_clip::seq_end() {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip || clip->group_stack.Size == 0) return *this;
+	iam_clip_data::group_state gs = clip->group_stack.back();
+	clip->group_stack.pop_back();
+	// After seq_end, the time offset advances to max_time seen in the group
+	if (gs.is_seq) {
+		clip->build_time_offset = gs.max_time;
+	}
+	return *this;
+}
+
+iam_clip& iam_clip::par_begin() {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	iam_clip_data::group_state gs;
+	gs.base_time = clip->build_time_offset;
+	gs.max_time = clip->build_time_offset;
+	gs.is_seq = false;
+	clip->group_stack.push_back(gs);
+	return *this;
+}
+
+iam_clip& iam_clip::par_end() {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip || clip->group_stack.Size == 0) return *this;
+	iam_clip_data::group_state gs = clip->group_stack.back();
+	clip->group_stack.pop_back();
+	// After par_end, time offset advances to max_time (all parallel tracks complete)
+	clip->build_time_offset = gs.max_time;
+	return *this;
+}
 
 iam_clip& iam_clip::set_loop(bool loop, int direction, int loop_count) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
@@ -1118,8 +1203,11 @@ iam_clip& iam_clip::set_delay(float delay_seconds) {
 }
 
 iam_clip& iam_clip::set_stagger(int count, float each_delay, float from_center_bias) {
-	(void)count; (void)each_delay; (void)from_center_bias;
-	// Placeholder for future stagger implementation
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->stagger_count = count > 0 ? count : 1;
+	clip->stagger_delay = each_delay;
+	clip->stagger_center_bias = ImClamp(from_center_bias, 0.0f, 1.0f);
 	return *this;
 }
 
@@ -1212,6 +1300,24 @@ void iam_instance::resume() {
 void iam_instance::stop() {
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (inst) { inst->playing = false; inst->time = 0; }
+}
+
+void iam_instance::destroy() {
+	using namespace iam_clip_detail;
+	int idx = g_clip_sys.inst_map.GetInt(m_inst_id, 0);
+	if (idx == 0) return;
+	// Clear the instance data
+	iam_instance_data* inst = &g_clip_sys.instances[idx - 1];
+	inst->inst_id = 0;
+	inst->clip_id = 0;
+	inst->playing = false;
+	inst->values_float.Clear();
+	inst->values_vec2.clear();
+	inst->values_vec4.clear();
+	inst->values_int.Clear();
+	// Remove from map
+	g_clip_sys.inst_map.SetInt(m_inst_id, 0);
+	m_inst_id = 0;
 }
 
 void iam_instance::seek(float time) {
@@ -1489,33 +1595,408 @@ bool iam_clip_exists(ImGuiID clip_id) {
 	return find_clip(clip_id) != nullptr;
 }
 
-// Layering support (placeholder)
+// Stagger helpers
+float iam_stagger_delay(ImGuiID clip_id, int index) {
+	using namespace iam_clip_detail;
+	iam_clip_data* clip = find_clip(clip_id);
+	if (!clip || clip->stagger_count <= 1) return 0.0f;
+
+	int count = clip->stagger_count;
+	float delay = clip->stagger_delay;
+	float bias = clip->stagger_center_bias;
+
+	// Calculate delay based on index and center bias
+	// bias = 0: start from beginning (index 0 has 0 delay)
+	// bias = 1: start from center (center indices have 0 delay, edges have max delay)
+	// bias = 0.5: mixed
+	if (bias <= 0.0f) {
+		// Simple linear stagger from start
+		return (float)index * delay;
+	} else {
+		// Stagger from center
+		float center = (float)(count - 1) * 0.5f;
+		float dist_from_center = fabsf((float)index - center);
+		float max_dist = center;
+		if (max_dist > 0.0f) {
+			float linear_delay = (float)index * delay;
+			float center_delay = dist_from_center * delay * 2.0f / (float)count * (float)(count - 1);
+			return linear_delay * (1.0f - bias) + center_delay * bias;
+		}
+	}
+	return 0.0f;
+}
+
+iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
+	using namespace iam_clip_detail;
+	if (!g_clip_sys.initialized) iam_clip_init();
+
+	iam_clip_data* clip = find_clip(clip_id);
+	if (!clip) return iam_instance(0);
+
+	// Play with base delay + stagger delay
+	iam_instance inst = iam_play(clip_id, instance_id);
+	if (inst.valid()) {
+		iam_instance_data* inst_data = find_instance(instance_id);
+		if (inst_data) {
+			inst_data->delay_left = clip->delay + iam_stagger_delay(clip_id, index);
+		}
+	}
+	return inst;
+}
+
+// Layering support - blends multiple instance outputs into one
 static struct {
-	ImGuiID instance_id;
-	float acc_weight;
+	ImGuiID target_id;
+	float total_weight;
+	// Accumulated weighted values
+	ImGuiStorage acc_float;
+	ImGuiStorage acc_int;
+	ImVector<iam_instance_data::vec2_entry> acc_vec2;
+	ImVector<iam_instance_data::vec4_entry> acc_vec4;
+	// Weight sums per channel (for normalization)
+	ImGuiStorage weight_float;
+	ImGuiStorage weight_int;
+	ImVector<iam_instance_data::vec2_entry> weight_vec2;  // stores weight in v.x
+	ImVector<iam_instance_data::vec4_entry> weight_vec4;  // stores weight in v.x
 } g_layer_state = { 0, 0 };
 
 void iam_layer_begin(ImGuiID instance_id) {
-	g_layer_state.instance_id = instance_id;
-	g_layer_state.acc_weight = 0;
+	g_layer_state.target_id = instance_id;
+	g_layer_state.total_weight = 0.0f;
+	g_layer_state.acc_float.Clear();
+	g_layer_state.acc_int.Clear();
+	g_layer_state.acc_vec2.clear();
+	g_layer_state.acc_vec4.clear();
+	g_layer_state.weight_float.Clear();
+	g_layer_state.weight_int.Clear();
+	g_layer_state.weight_vec2.clear();
+	g_layer_state.weight_vec4.clear();
 }
 
 void iam_layer_add(iam_instance inst, float weight) {
-	(void)inst; (void)weight;
-	g_layer_state.acc_weight += weight;
+	using namespace iam_clip_detail;
+	if (!inst.valid() || weight <= 0.0f) return;
+
+	iam_instance_data* src = find_instance(inst.id());
+	if (!src) return;
+
+	g_layer_state.total_weight += weight;
+
+	// Accumulate float values
+	for (int i = 0; i < src->values_float.Data.Size; ++i) {
+		ImGuiStoragePair& p = src->values_float.Data[i];
+		ImGuiID ch = p.key;
+		float val = *(float*)&p.val_i;
+		float acc = g_layer_state.acc_float.GetFloat(ch, 0.0f);
+		float w = g_layer_state.weight_float.GetFloat(ch, 0.0f);
+		g_layer_state.acc_float.SetFloat(ch, acc + val * weight);
+		g_layer_state.weight_float.SetFloat(ch, w + weight);
+	}
+
+	// Accumulate int values
+	for (int i = 0; i < src->values_int.Data.Size; ++i) {
+		ImGuiStoragePair& p = src->values_int.Data[i];
+		ImGuiID ch = p.key;
+		int val = p.val_i;
+		float acc = (float)g_layer_state.acc_int.GetInt(ch, 0);
+		float w = g_layer_state.weight_int.GetFloat(ch, 0.0f);
+		g_layer_state.acc_int.SetInt(ch, (int)(acc + (float)val * weight));
+		g_layer_state.weight_int.SetFloat(ch, w + weight);
+	}
+
+	// Accumulate vec2 values
+	for (int i = 0; i < src->values_vec2.Size; ++i) {
+		iam_instance_data::vec2_entry& e = src->values_vec2[i];
+		// Find or create accumulator entry
+		int found = -1;
+		for (int j = 0; j < g_layer_state.acc_vec2.Size; ++j) {
+			if (g_layer_state.acc_vec2[j].ch == e.ch) { found = j; break; }
+		}
+		if (found < 0) {
+			iam_instance_data::vec2_entry acc_e = { e.ch, ImVec2(0, 0) };
+			iam_instance_data::vec2_entry w_e = { e.ch, ImVec2(0, 0) };
+			g_layer_state.acc_vec2.push_back(acc_e);
+			g_layer_state.weight_vec2.push_back(w_e);
+			found = g_layer_state.acc_vec2.Size - 1;
+		}
+		g_layer_state.acc_vec2[found].v.x += e.v.x * weight;
+		g_layer_state.acc_vec2[found].v.y += e.v.y * weight;
+		g_layer_state.weight_vec2[found].v.x += weight;
+	}
+
+	// Accumulate vec4 values
+	for (int i = 0; i < src->values_vec4.Size; ++i) {
+		iam_instance_data::vec4_entry& e = src->values_vec4[i];
+		int found = -1;
+		for (int j = 0; j < g_layer_state.acc_vec4.Size; ++j) {
+			if (g_layer_state.acc_vec4[j].ch == e.ch) { found = j; break; }
+		}
+		if (found < 0) {
+			iam_instance_data::vec4_entry acc_e = { e.ch, ImVec4(0, 0, 0, 0) };
+			iam_instance_data::vec4_entry w_e = { e.ch, ImVec4(0, 0, 0, 0) };
+			g_layer_state.acc_vec4.push_back(acc_e);
+			g_layer_state.weight_vec4.push_back(w_e);
+			found = g_layer_state.acc_vec4.Size - 1;
+		}
+		g_layer_state.acc_vec4[found].v.x += e.v.x * weight;
+		g_layer_state.acc_vec4[found].v.y += e.v.y * weight;
+		g_layer_state.acc_vec4[found].v.z += e.v.z * weight;
+		g_layer_state.acc_vec4[found].v.w += e.v.w * weight;
+		g_layer_state.weight_vec4[found].v.x += weight;
+	}
 }
 
 void iam_layer_end(ImGuiID instance_id) {
-	(void)instance_id;
+	using namespace iam_clip_detail;
+	if (g_layer_state.target_id != instance_id) return;
+	if (g_layer_state.total_weight <= 0.0f) return;
+
+	iam_instance_data* target = find_instance(instance_id);
+	if (!target) return;
+
+	// Normalize and write blended values
+	target->blended_float.Clear();
+	target->blended_int.Clear();
+	target->blended_vec2.clear();
+	target->blended_vec4.clear();
+
+	// Floats
+	for (int i = 0; i < g_layer_state.acc_float.Data.Size; ++i) {
+		ImGuiStoragePair& p = g_layer_state.acc_float.Data[i];
+		float w = g_layer_state.weight_float.GetFloat(p.key, 1.0f);
+		float val = *(float*)&p.val_i / (w > 0.0f ? w : 1.0f);
+		target->blended_float.SetFloat(p.key, val);
+	}
+
+	// Ints
+	for (int i = 0; i < g_layer_state.acc_int.Data.Size; ++i) {
+		ImGuiStoragePair& p = g_layer_state.acc_int.Data[i];
+		float w = g_layer_state.weight_int.GetFloat(p.key, 1.0f);
+		int val = (int)((float)p.val_i / (w > 0.0f ? w : 1.0f));
+		target->blended_int.SetInt(p.key, val);
+	}
+
+	// Vec2s
+	for (int i = 0; i < g_layer_state.acc_vec2.Size; ++i) {
+		iam_instance_data::vec2_entry& e = g_layer_state.acc_vec2[i];
+		float w = g_layer_state.weight_vec2[i].v.x;
+		if (w <= 0.0f) w = 1.0f;
+		iam_instance_data::vec2_entry out = { e.ch, ImVec2(e.v.x / w, e.v.y / w) };
+		target->blended_vec2.push_back(out);
+	}
+
+	// Vec4s
+	for (int i = 0; i < g_layer_state.acc_vec4.Size; ++i) {
+		iam_instance_data::vec4_entry& e = g_layer_state.acc_vec4[i];
+		float w = g_layer_state.weight_vec4[i].v.x;
+		if (w <= 0.0f) w = 1.0f;
+		iam_instance_data::vec4_entry out = { e.ch, ImVec4(e.v.x / w, e.v.y / w, e.v.z / w, e.v.w / w) };
+		target->blended_vec4.push_back(out);
+	}
+
+	target->has_blended = true;
+	g_layer_state.target_id = 0;
 }
 
-// Persistence (placeholder)
+bool iam_get_blended_float(ImGuiID instance_id, ImGuiID channel, float* out) {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst || !inst->has_blended || !out) return false;
+	// Check if channel exists in blended data
+	for (int i = 0; i < inst->blended_float.Data.Size; ++i) {
+		if (inst->blended_float.Data[i].key == channel) {
+			*out = *(float*)&inst->blended_float.Data[i].val_i;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool iam_get_blended_vec2(ImGuiID instance_id, ImGuiID channel, ImVec2* out) {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst || !inst->has_blended || !out) return false;
+	for (int i = 0; i < inst->blended_vec2.Size; ++i) {
+		if (inst->blended_vec2[i].ch == channel) {
+			*out = inst->blended_vec2[i].v;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool iam_get_blended_vec4(ImGuiID instance_id, ImGuiID channel, ImVec4* out) {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst || !inst->has_blended || !out) return false;
+	for (int i = 0; i < inst->blended_vec4.Size; ++i) {
+		if (inst->blended_vec4[i].ch == channel) {
+			*out = inst->blended_vec4[i].v;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst || !inst->has_blended || !out) return false;
+	for (int i = 0; i < inst->blended_int.Data.Size; ++i) {
+		if (inst->blended_int.Data[i].key == channel) {
+			*out = inst->blended_int.Data[i].val_i;
+			return true;
+		}
+	}
+	return false;
+}
+
+// Persistence - binary format
+// Header: "IAMC" (4 bytes) + version (4 bytes) + clip_id (4 bytes)
+// Clip data: duration, delay, loop_count, direction, stagger params
+// Tracks: count + for each: channel, type, num_keys, keys...
+
+static const char IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
+static const int IAM_CLIP_VERSION = 1;
+
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
-	(void)clip_id; (void)path;
-	return iam_err_not_found;  // Not implemented yet
+	using namespace iam_clip_detail;
+	iam_clip_data* clip = find_clip(clip_id);
+	if (!clip) return iam_err_not_found;
+	if (!path) return iam_err_bad_arg;
+
+	FILE* f = fopen(path, "wb");
+	if (!f) return iam_err_bad_arg;
+
+	// Write header
+	fwrite(IAM_CLIP_MAGIC, 1, 4, f);
+	int version = IAM_CLIP_VERSION;
+	fwrite(&version, sizeof(int), 1, f);
+	fwrite(&clip_id, sizeof(ImGuiID), 1, f);
+
+	// Write clip properties
+	fwrite(&clip->duration, sizeof(float), 1, f);
+	fwrite(&clip->delay, sizeof(float), 1, f);
+	fwrite(&clip->loop_count, sizeof(int), 1, f);
+	fwrite(&clip->direction, sizeof(int), 1, f);
+	fwrite(&clip->stagger_count, sizeof(int), 1, f);
+	fwrite(&clip->stagger_delay, sizeof(float), 1, f);
+	fwrite(&clip->stagger_center_bias, sizeof(float), 1, f);
+
+	// Write tracks
+	int track_count = clip->iam_tracks.Size;
+	fwrite(&track_count, sizeof(int), 1, f);
+
+	for (int t = 0; t < track_count; ++t) {
+		iam_track& trk = clip->iam_tracks[t];
+		fwrite(&trk.channel, sizeof(ImGuiID), 1, f);
+		fwrite(&trk.type, sizeof(int), 1, f);
+
+		int key_count = trk.keys.Size;
+		fwrite(&key_count, sizeof(int), 1, f);
+
+		for (int k = 0; k < key_count; ++k) {
+			keyframe& kf = trk.keys[k];
+			fwrite(&kf.time, sizeof(float), 1, f);
+			fwrite(&kf.ease_type, sizeof(int), 1, f);
+			fwrite(&kf.has_bezier, sizeof(bool), 1, f);
+			fwrite(kf.bezier, sizeof(float), 4, f);
+			fwrite(&kf.is_spring, sizeof(bool), 1, f);
+			fwrite(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fwrite(kf.value, sizeof(float), 4, f);
+		}
+	}
+
+	// Note: callbacks cannot be serialized
+
+	fclose(f);
+	return iam_ok;
 }
 
 iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
-	(void)path; (void)out_clip_id;
-	return iam_err_not_found;  // Not implemented yet
+	using namespace iam_clip_detail;
+	if (!path || !out_clip_id) return iam_err_bad_arg;
+
+	FILE* f = fopen(path, "rb");
+	if (!f) return iam_err_not_found;
+
+	// Read and verify header
+	char magic[4];
+	if (fread(magic, 1, 4, f) != 4 || memcmp(magic, IAM_CLIP_MAGIC, 4) != 0) {
+		fclose(f);
+		return iam_err_bad_arg;
+	}
+
+	int version;
+	if (fread(&version, sizeof(int), 1, f) != 1 || version != IAM_CLIP_VERSION) {
+		fclose(f);
+		return iam_err_bad_arg;
+	}
+
+	ImGuiID clip_id;
+	if (fread(&clip_id, sizeof(ImGuiID), 1, f) != 1) {
+		fclose(f);
+		return iam_err_bad_arg;
+	}
+
+	// Initialize system if needed
+	if (!g_clip_sys.initialized) iam_clip_init();
+
+	// Create or get clip
+	int idx = g_clip_sys.clip_map.GetInt(clip_id, 0);
+	iam_clip_data* clip;
+	if (idx == 0) {
+		g_clip_sys.clips.push_back(iam_clip_data());
+		clip = &g_clip_sys.clips.back();
+		clip->id = clip_id;
+		g_clip_sys.clip_map.SetInt(clip_id, g_clip_sys.clips.Size);
+	} else {
+		clip = &g_clip_sys.clips[idx - 1];
+		clip->iam_tracks.clear();
+	}
+
+	// Read clip properties
+	fread(&clip->duration, sizeof(float), 1, f);
+	fread(&clip->delay, sizeof(float), 1, f);
+	fread(&clip->loop_count, sizeof(int), 1, f);
+	fread(&clip->direction, sizeof(int), 1, f);
+	fread(&clip->stagger_count, sizeof(int), 1, f);
+	fread(&clip->stagger_delay, sizeof(float), 1, f);
+	fread(&clip->stagger_center_bias, sizeof(float), 1, f);
+
+	// Read tracks
+	int track_count;
+	if (fread(&track_count, sizeof(int), 1, f) != 1) {
+		fclose(f);
+		return iam_err_bad_arg;
+	}
+
+	for (int t = 0; t < track_count; ++t) {
+		iam_track trk;
+		fread(&trk.channel, sizeof(ImGuiID), 1, f);
+		fread(&trk.type, sizeof(int), 1, f);
+
+		int key_count;
+		fread(&key_count, sizeof(int), 1, f);
+
+		for (int k = 0; k < key_count; ++k) {
+			keyframe kf;
+			fread(&kf.time, sizeof(float), 1, f);
+			fread(&kf.ease_type, sizeof(int), 1, f);
+			fread(&kf.has_bezier, sizeof(bool), 1, f);
+			fread(kf.bezier, sizeof(float), 4, f);
+			fread(&kf.is_spring, sizeof(bool), 1, f);
+			fread(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fread(kf.value, sizeof(float), 4, f);
+			kf.channel = trk.channel;
+			kf.type = trk.type;
+			trk.keys.push_back(kf);
+		}
+
+		clip->iam_tracks.push_back(trk);
+	}
+
+	fclose(f);
+	*out_clip_id = clip_id;
+	return iam_ok;
 }
