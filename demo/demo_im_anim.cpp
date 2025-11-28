@@ -1625,7 +1625,7 @@ static void ShowClipSystemDemo()
 		if (ImGui::Button("Reset")) {
 			for (int i = 0; i < NUM_ITEMS; i++) {
 				iam_instance inst = iam_get_instance(inst_ids[i]);
-				if (inst.valid()) inst.stop();
+				if (inst.valid()) inst.destroy();
 			}
 		}
 
@@ -1709,15 +1709,19 @@ static void ShowClipSystemDemo()
 		if (ImGui::Button("Reset##list")) {
 			for (int i = 0; i < NUM_LIST_ITEMS; i++) {
 				iam_instance inst = iam_get_instance(list_inst_ids[i]);
-				if (inst.valid()) inst.stop();
+				if (inst.valid()) inst.destroy();
 			}
 		}
 
 		ImGui::Spacing();
 
-		ImVec2 list_canvas_pos = ImGui::GetCursorScreenPos();
+		float const frame_h = ImGui::GetFrameHeight();
+		float const item_spacing = 4.0f;
+		float const padding = 8.0f;
 		float const list_canvas_w = 250.0f;
-		float const list_canvas_h = 170.0f;
+		float const list_canvas_h = padding * 2 + NUM_LIST_ITEMS * frame_h + (NUM_LIST_ITEMS - 1) * item_spacing;
+
+		ImVec2 list_canvas_pos = ImGui::GetCursorScreenPos();
 		ImDrawList* list_draw_list = ImGui::GetWindowDrawList();
 
 		list_draw_list->AddRectFilled(list_canvas_pos,
@@ -1733,22 +1737,23 @@ static void ShowClipSystemDemo()
 				inst.get_float(CLIP_CH_POS_X, &pos_x);
 			}
 
-			float y = list_canvas_pos.y + 12.0f + i * 26.0f;
+			float y = list_canvas_pos.y + padding + i * (frame_h + item_spacing);
 			int a = (int)(alpha * 255);
 
 			// Draw list item background
 			list_draw_list->AddRectFilled(
-				ImVec2(list_canvas_pos.x + 8 + pos_x, y),
-				ImVec2(list_canvas_pos.x + list_canvas_w - 8 + pos_x, y + 22),
+				ImVec2(list_canvas_pos.x + padding + pos_x, y),
+				ImVec2(list_canvas_pos.x + list_canvas_w - padding + pos_x, y + frame_h),
 				IM_COL32(50, 55, 65, a), 4.0f);
 
 			// Draw icon placeholder
 			list_draw_list->AddCircleFilled(
-				ImVec2(list_canvas_pos.x + 22 + pos_x, y + 11),
+				ImVec2(list_canvas_pos.x + padding + 14 + pos_x, y + frame_h * 0.5f),
 				6.0f, IM_COL32(100, 140, 200, a));
 
 			// Draw label
-			list_draw_list->AddText(ImVec2(list_canvas_pos.x + 36 + pos_x, y + 4),
+			float text_y = y + (frame_h - ImGui::GetFontSize()) * 0.5f;
+			list_draw_list->AddText(ImVec2(list_canvas_pos.x + padding + 28 + pos_x, text_y),
 				IM_COL32(220, 220, 230, a), list_labels[i]);
 		}
 
@@ -1784,7 +1789,7 @@ static void ShowClipSystemDemo()
 		if (ImGui::Button("Reset##grid")) {
 			for (int i = 0; i < NUM_GRID_ITEMS; i++) {
 				iam_instance inst = iam_get_instance(grid_inst_ids[i]);
-				if (inst.valid()) inst.stop();
+				if (inst.valid()) inst.destroy();
 			}
 		}
 
@@ -1870,7 +1875,7 @@ static void ShowClipSystemDemo()
 		if (ImGui::Button("Reset##cards")) {
 			for (int i = 0; i < NUM_CARDS; i++) {
 				iam_instance inst = iam_get_instance(card_inst_ids[i]);
-				if (inst.valid()) inst.stop();
+				if (inst.valid()) inst.destroy();
 			}
 		}
 
