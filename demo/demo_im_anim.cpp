@@ -37,6 +37,221 @@ static void ApplyOpenAll()
 // HELPER: Use iam_eval_preset from im_anim API for easing evaluation
 
 // ============================================================
+// SECTION: Hero Animation (Showcase)
+// ============================================================
+static void ShowHeroAnimation()
+{
+	static float hero_time = 0.0f;
+	hero_time += GetSafeDeltaTime();
+
+	ImDrawList* draw_list = ImGui::GetWindowDrawList();
+	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 280.0f);
+	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+
+	// ===== Background gradient animation =====
+	float hue_shift = hero_time * 0.1f;
+
+	// Create animated gradient stops
+	ImVec4 col1 = ImVec4(0.08f + 0.02f * sinf(hue_shift), 0.08f, 0.15f + 0.05f * sinf(hue_shift * 0.7f), 1.0f);
+	ImVec4 col2 = ImVec4(0.12f + 0.03f * sinf(hue_shift * 1.3f), 0.10f, 0.20f + 0.05f * cosf(hue_shift), 1.0f);
+
+	// Draw gradient background
+	draw_list->AddRectFilledMultiColor(canvas_pos,
+		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+		ImGui::ColorConvertFloat4ToU32(col1),
+		ImGui::ColorConvertFloat4ToU32(col2),
+		ImGui::ColorConvertFloat4ToU32(col1),
+		ImGui::ColorConvertFloat4ToU32(col2));
+
+	// Subtle border
+	draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+		IM_COL32(100, 120, 180, 100), 8.0f, 0, 2.0f);
+
+	// ===== Orbiting particles with motion paths =====
+	const int num_orbiters = 5;
+	float orbit_radius_base = 90.0f;
+
+	for (int i = 0; i < num_orbiters; i++) {
+		float phase = (float)i / num_orbiters;
+		float orbit_speed = 0.3f + phase * 0.2f;
+		float angle = hero_time * orbit_speed + phase * 6.28318f;
+
+		// Apply easing to radius for pulsing effect
+		float pulse_t = fmodf(hero_time * 0.5f + phase, 1.0f);
+		float pulse = 1.0f + 0.15f * iam_eval_preset(iam_ease_in_out_sine, pulse_t);
+
+		float orbit_radius = orbit_radius_base * (0.6f + phase * 0.5f) * pulse;
+		float x = center.x + cosf(angle) * orbit_radius;
+		float y = center.y + sinf(angle) * orbit_radius * 0.6f; // Elliptical orbit
+
+		// Particle size with bounce easing
+		float size_t = fmodf(hero_time + phase * 2.0f, 2.0f);
+		if (size_t > 1.0f) size_t = 2.0f - size_t;
+		float size = 4.0f + 6.0f * iam_eval_preset(iam_ease_out_back, size_t);
+
+		// Color animation using smooth hue rotation
+		float hue = fmodf(phase + hero_time * 0.1f, 1.0f);
+		ImVec4 hsv_col = ImVec4(hue, 0.7f, 0.95f, 0.9f);
+		ImVec4 rgb_col;
+		ImGui::ColorConvertHSVtoRGB(hsv_col.x, hsv_col.y, hsv_col.z, rgb_col.x, rgb_col.y, rgb_col.z);
+		rgb_col.w = hsv_col.w;
+
+		// Draw glow
+		draw_list->AddCircleFilled(ImVec2(x, y), size * 2.5f, IM_COL32((int)(rgb_col.x * 255), (int)(rgb_col.y * 255), (int)(rgb_col.z * 255), 30));
+		draw_list->AddCircleFilled(ImVec2(x, y), size * 1.5f, IM_COL32((int)(rgb_col.x * 255), (int)(rgb_col.y * 255), (int)(rgb_col.z * 255), 80));
+		draw_list->AddCircleFilled(ImVec2(x, y), size, ImGui::ColorConvertFloat4ToU32(rgb_col));
+	}
+
+	// ===== Central pulsing ring with spring physics =====
+	float spring_t = fmodf(hero_time * 0.4f, 1.0f);
+	float spring_val = iam_eval_preset(iam_ease_out_elastic, spring_t);
+	float ring_radius = 35.0f + 15.0f * spring_val;
+	float ring_alpha = 0.6f + 0.3f * (1.0f - spring_t);
+
+	// Multiple concentric rings
+	for (int r = 0; r < 3; r++) {
+		float r_offset = r * 12.0f;
+		float r_alpha = ring_alpha * (1.0f - r * 0.25f);
+		ImU32 ring_col = IM_COL32(140, 180, 255, (int)(r_alpha * 255));
+		draw_list->AddCircle(center, ring_radius + r_offset, ring_col, 0, 2.0f - r * 0.5f);
+	}
+
+	// ===== Wave line using oscillators =====
+	float wave_y = canvas_pos.y + canvas_size.y - 50.0f;
+	ImVec2 prev_wave_pt = ImVec2(canvas_pos.x, wave_y);
+
+	for (int w = 0; w <= 60; w++) {
+		float wx = canvas_pos.x + (canvas_size.x * w / 60.0f);
+		float wave_phase = (float)w / 60.0f * 4.0f + hero_time * 2.0f;
+
+		// Combine multiple sine waves for organic feel
+		float wave_val = sinf(wave_phase) * 0.5f + sinf(wave_phase * 2.3f + 1.0f) * 0.3f + sinf(wave_phase * 0.7f - 0.5f) * 0.2f;
+		float wy = wave_y + wave_val * 15.0f;
+
+		// Gradient color along wave
+		float wave_hue = fmodf((float)w / 60.0f + hero_time * 0.1f, 1.0f);
+		ImVec4 wave_rgb;
+		ImGui::ColorConvertHSVtoRGB(wave_hue, 0.6f, 0.9f, wave_rgb.x, wave_rgb.y, wave_rgb.z);
+		ImU32 wave_col = IM_COL32((int)(wave_rgb.x * 255), (int)(wave_rgb.y * 255), (int)(wave_rgb.z * 255), 200);
+
+		if (w > 0) {
+			draw_list->AddLine(prev_wave_pt, ImVec2(wx, wy), wave_col, 2.5f);
+		}
+		prev_wave_pt = ImVec2(wx, wy);
+	}
+
+	// ===== Animated title text with stagger effect =====
+	const char* title = "ImAnim";
+	const int title_len = 6;
+	float base_font_size = ImGui::GetFontSize();
+	float title_scale = 2.5f; // Scale up the title
+
+	// Estimate character width for spacing
+	float avg_char_width = base_font_size * title_scale * 0.6f;
+	float title_width = avg_char_width * title_len;
+
+	float title_x = center.x - title_width * 0.5f;
+	float title_y = center.y - 40.0f;
+
+	// Draw each character with stagger animation
+	for (int char_idx = 0; char_idx < title_len; char_idx++) {
+		// Stagger timing per character
+		float char_delay = char_idx * 0.12f;
+		float char_t = fmodf(hero_time * 0.5f + 1.0f - char_delay, 2.0f);
+		if (char_t < 0.0f) char_t = 0.0f;
+		if (char_t > 1.0f) char_t = 1.0f;
+
+		// Bounce animation for Y offset
+		float bounce_y = -20.0f * iam_eval_preset(iam_ease_out_bounce, char_t) + 20.0f * (1.0f - char_t);
+
+		// Scale animation
+		float scale_t = ImClamp(char_t * 1.5f, 0.0f, 1.0f);
+		float scale = iam_eval_preset(iam_ease_out_back, scale_t);
+
+		// Alpha fade in
+		float alpha = ImClamp(char_t * 2.0f, 0.0f, 1.0f);
+
+		// Skip rendering if not visible yet
+		if (alpha < 0.01f || scale < 0.01f) continue;
+
+		// Color per character
+		float char_hue = fmodf((float)char_idx / 6.0f + hero_time * 0.15f, 1.0f);
+		ImVec4 char_rgb;
+		ImGui::ColorConvertHSVtoRGB(char_hue, 0.5f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
+		ImU32 char_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(alpha * 255));
+
+		// Character position
+		float char_x = title_x + char_idx * avg_char_width;
+		ImVec2 char_pos = ImVec2(char_x, title_y + bounce_y);
+
+		// Compute font sizes (ensure minimum)
+		float main_font_size = ImMax(1.0f, base_font_size * title_scale * scale);
+		float glow_font_size = main_font_size + 3.0f;
+
+		// Glow layer
+		ImU32 glow_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(alpha * 40));
+		char char_str[2] = { title[char_idx], '\0' };
+		draw_list->AddText(nullptr, glow_font_size, ImVec2(char_pos.x - 1, char_pos.y - 1), glow_col, char_str);
+
+		// Main character
+		draw_list->AddText(nullptr, main_font_size, char_pos, char_col, char_str);
+	}
+
+	// ===== Subtitle with fade =====
+	const char* subtitle = "Smooth animations for Dear ImGui";
+	ImVec2 subtitle_size = ImGui::CalcTextSize(subtitle);
+	float subtitle_alpha = 0.5f + 0.3f * sinf(hero_time * 1.5f);
+	ImU32 subtitle_col = IM_COL32(180, 190, 220, (int)(subtitle_alpha * 255));
+	draw_list->AddText(ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 15.0f), subtitle_col, subtitle);
+
+	// ===== Feature badges with elastic animation =====
+	const char* features[] = { "30+ Easings", "Spring Physics", "Motion Paths", "Color Blending" };
+	const int num_features = 4;
+	float badge_y = canvas_pos.y + canvas_size.y - 25.0f;
+	float badge_spacing = canvas_size.x / (num_features + 1);
+
+	for (int f = 0; f < num_features; f++) {
+		float badge_x = canvas_pos.x + badge_spacing * (f + 1);
+
+		// Elastic pop-in animation
+		float badge_delay = f * 0.2f;
+		float badge_t = fmodf(hero_time * 0.3f + 1.0f - badge_delay, 3.0f);
+		if (badge_t < 0.0f) badge_t = 0.0f;
+		if (badge_t > 1.0f) badge_t = 1.0f;
+
+		float pop_scale = iam_eval_preset(iam_ease_out_elastic, badge_t);
+		float badge_alpha = ImClamp(badge_t * 3.0f, 0.0f, 1.0f);
+
+		// Skip rendering if not visible yet
+		if (badge_alpha < 0.01f || pop_scale < 0.01f) continue;
+
+		ImVec2 text_size = ImGui::CalcTextSize(features[f]);
+		float pad_x = 8.0f * pop_scale;
+		float pad_y = 4.0f * pop_scale;
+
+		ImVec2 badge_min = ImVec2(badge_x - text_size.x * 0.5f * pop_scale - pad_x, badge_y - text_size.y * 0.5f * pop_scale - pad_y);
+		ImVec2 badge_max = ImVec2(badge_x + text_size.x * 0.5f * pop_scale + pad_x, badge_y + text_size.y * 0.5f * pop_scale + pad_y);
+
+		// Badge background
+		ImU32 badge_bg = IM_COL32(60, 80, 120, (int)(badge_alpha * 180));
+		ImU32 badge_border = IM_COL32(100, 140, 200, (int)(badge_alpha * 200));
+		draw_list->AddRectFilled(badge_min, badge_max, badge_bg, 4.0f * pop_scale);
+		draw_list->AddRect(badge_min, badge_max, badge_border, 4.0f * pop_scale);
+
+		// Badge text (ensure minimum font size)
+		float badge_font_size = ImMax(1.0f, ImGui::GetFontSize() * pop_scale);
+		ImU32 badge_text_col = IM_COL32(220, 230, 255, (int)(badge_alpha * 255));
+		ImVec2 text_pos = ImVec2(badge_x - text_size.x * 0.5f * pop_scale, badge_y - text_size.y * 0.5f * pop_scale);
+		draw_list->AddText(nullptr, badge_font_size, text_pos, badge_text_col, features[f]);
+	}
+
+	// Reserve space
+	ImGui::Dummy(canvas_size);
+	ImGui::Spacing();
+}
+
+// ============================================================
 // SECTION: Easing Functions
 // ============================================================
 static void ShowEasingDemo()
@@ -5628,49 +5843,65 @@ void ImAnimDemoWindow()
 	// Begin scrollable child for all demo content
 	ImGui::BeginChild("DemoContent", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 
-	// Main sections as collapsing headers (like imgui_demo.cpp)
+	// ========================================
+	// HERO ANIMATION (Showcase)
+	// ========================================
+	iam_profiler_begin("Hero Animation");
+	ShowHeroAnimation();
+	iam_profiler_end();
+
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// ========================================
+	// 1. EASING & TWEENS
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Easing Functions")) {
-		iam_profiler_begin("Easing Functions");
-		ShowEasingDemo();
+	if (ImGui::CollapsingHeader("Easing & Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
+		iam_profiler_begin("Easing & Tweens");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Easing Functions")) {
+			ShowEasingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Custom Easing")) {
+			ShowCustomEasingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Basic Tweens")) {
+			ShowBasicTweensDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Color Tweens")) {
+			ShowColorTweensDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Per-Axis Easing")) {
+			ShowPerAxisEasingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Tween Policies")) {
+			ShowPoliciesDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Custom Easing")) {
-		iam_profiler_begin("Custom Easing");
-		ShowCustomEasingDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Basic Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
-		iam_profiler_begin("Basic Tweens");
-		ShowBasicTweensDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Color Tweens")) {
-		iam_profiler_begin("Color Tweens");
-		ShowColorTweensDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Per-Axis Easing")) {
-		iam_profiler_begin("Per-Axis Easing");
-		ShowPerAxisEasingDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Tween Policies")) {
-		iam_profiler_begin("Tween Policies");
-		ShowPoliciesDemo();
-		iam_profiler_end();
-	}
-
+	// ========================================
+	// 2. INTERACTIVE WIDGETS
+	// ========================================
 	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Interactive Widgets", ImGuiTreeNodeFlags_DefaultOpen)) {
 		iam_profiler_begin("Interactive Widgets");
@@ -5678,135 +5909,170 @@ void ImAnimDemoWindow()
 		iam_profiler_end();
 	}
 
+	// ========================================
+	// 3. CLIP-BASED ANIMATIONS
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Clip System")) {
-		iam_profiler_begin("Clip System");
-		ShowClipSystemDemo();
+	if (ImGui::CollapsingHeader("Clip-Based Animations")) {
+		iam_profiler_begin("Clip-Based Animations");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Clip System")) {
+			ShowClipSystemDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Timeline Markers")) {
+			ShowTimelineMarkersDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Animation Chaining")) {
+			ShowAnimationChainingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Layering System")) {
+			ShowLayeringDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
+	// ========================================
+	// 4. PROCEDURAL ANIMATIONS
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Layering System")) {
-		iam_profiler_begin("Layering System");
-		ShowLayeringDemo();
+	if (ImGui::CollapsingHeader("Procedural Animations")) {
+		iam_profiler_begin("Procedural Animations");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Oscillators")) {
+			ShowOscillatorsDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Shake & Wiggle")) {
+			ShowShakeWiggleDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Noise Channels")) {
+			ShowNoiseChannelsDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Resize-Aware Helpers")) {
-		iam_profiler_begin("Resize Helpers");
-		ShowResizeHelpersDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("ImDrawList Animations")) {
-		iam_profiler_begin("DrawList Animations");
-		ShowDrawListDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Oscillators")) {
-		iam_profiler_begin("Oscillators");
-		ShowOscillatorsDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Shake & Wiggle")) {
-		iam_profiler_begin("Shake & Wiggle");
-		ShowShakeWiggleDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Scroll Animation")) {
-		iam_profiler_begin("Scroll Animation");
-		ShowScrollDemo();
-		iam_profiler_end();
-	}
-
+	// ========================================
+	// 5. MOTION PATHS
+	// ========================================
 	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Motion Paths")) {
 		iam_profiler_begin("Motion Paths");
-		ShowMotionPathsDemo();
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Path Basics")) {
+			ShowMotionPathsDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Path Morphing")) {
+			ShowPathMorphingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Text Along Paths")) {
+			ShowTextAlongPathDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
+	// ========================================
+	// 6. ADVANCED INTERPOLATION
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Path Morphing")) {
-		iam_profiler_begin("Path Morphing");
-		ShowPathMorphingDemo();
+	if (ImGui::CollapsingHeader("Advanced Interpolation")) {
+		iam_profiler_begin("Advanced Interpolation");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Gradient Keyframes")) {
+			ShowGradientKeyframesDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Transform Interpolation")) {
+			ShowTransformInterpolationDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Style Interpolation")) {
+			ShowStyleInterpolationDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Text Stagger")) {
+			ShowTextStaggerDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
+	// ========================================
+	// 7. UTILITIES
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Text Along Paths")) {
-		iam_profiler_begin("Text Along Paths");
-		ShowTextAlongPathDemo();
+	if (ImGui::CollapsingHeader("Utilities")) {
+		iam_profiler_begin("Utilities");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("ImDrawList Animations")) {
+			ShowDrawListDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Resize-Aware Helpers")) {
+			ShowResizeHelpersDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Scroll Animation")) {
+			ShowScrollDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Drag Feedback")) {
+			ShowDragFeedbackDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
+	// ========================================
+	// 8. DEBUG TOOLS
+	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Gradient Keyframes")) {
-		iam_profiler_begin("Gradient Keyframes");
-		ShowGradientKeyframesDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Transform Interpolation")) {
-		iam_profiler_begin("Transform Interpolation");
-		ShowTransformInterpolationDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Timeline Markers")) {
-		iam_profiler_begin("Timeline Markers");
-		ShowTimelineMarkersDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Animation Chaining")) {
-		iam_profiler_begin("Animation Chaining");
-		ShowAnimationChainingDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Text Stagger")) {
-		iam_profiler_begin("Text Stagger");
-		ShowTextStaggerDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Noise Channels")) {
-		iam_profiler_begin("Noise Channels");
-		ShowNoiseChannelsDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Style Interpolation")) {
-		iam_profiler_begin("Style Interpolation");
-		ShowStyleInterpolationDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Drag Feedback")) {
-		iam_profiler_begin("Drag Feedback");
-		ShowDragFeedbackDemo();
-		iam_profiler_end();
-	}
-
-	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Animation Inspector")) {
-		iam_profiler_begin("Animation Inspector");
+	if (ImGui::CollapsingHeader("Debug Tools")) {
+		iam_profiler_begin("Debug Tools");
 		ShowAnimationInspectorDemo();
 		iam_profiler_end();
 	}
