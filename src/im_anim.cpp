@@ -6053,11 +6053,10 @@ void iam_show_unified_inspector(bool* p_open) {
 						ImGui::TextDisabled("Use iam_profiler_begin(\"name\") and iam_profiler_end() in code.");
 					} else {
 						float avail_width = ImGui::GetContentRegionAvail().x;
-						float col0_width = 180.0f;  // Section name
-						float col1_width = 80.0f;   // Time
-						float col2_width = 50.0f;   // Calls
-						float col3_width = avail_width - col0_width - col1_width - col2_width - 20.0f;  // Graph (remaining)
-						if (col3_width < 100.0f) col3_width = 100.0f;
+						float col0_width = avail_width * 0.25f;  // Section name
+						float col1_width = avail_width * 0.125f; // Time
+						float col2_width = avail_width * 0.125f; // Calls
+						float col3_width = avail_width * 0.5f;   // Graph (remaining)
 
 						ImGui::Columns(4, "ProfilerSections");
 						ImGui::SetColumnWidth(0, col0_width);
@@ -6070,7 +6069,7 @@ void iam_show_unified_inspector(bool* p_open) {
 						ImGui::Text("Graph"); ImGui::NextColumn();
 						ImGui::Separator();
 
-						float row_height = 40.0f;
+						float row_height = ImGui::GetTextLineHeight() * 1.5f;
 						for (int i = 0; i < prof.section_count; i++) {
 							auto& sec = prof.sections[i];
 							// Calculate max for this section's history

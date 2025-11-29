@@ -71,14 +71,20 @@ static void ShowHeroAnimation()
 	ImU32 bg_color = IM_COL32((int)(8 * bg_reveal), (int)(10 * bg_reveal), (int)(18 * bg_reveal), 255);
 	draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), bg_color);
 
+	// === BRAND COLORS ===
+	// Main: #5BC2E7 (91, 194, 231) - Cyan
+	// Accent: #CC7858 (204, 120, 88) - Coral
+	const ImVec4 col_main = ImVec4(91/255.0f, 194/255.0f, 231/255.0f, 1.0f);
+	const ImVec4 col_accent = ImVec4(204/255.0f, 120/255.0f, 88/255.0f, 1.0f);
+
 	// === BEAT 1: TENSION - Pulsing dot in center ===
 	if (t < 0.75f) {
 		float pulse = sinf(t * 18.0f) * 0.5f + 0.5f;
 		float dot_size = 3.0f + pulse * 4.0f;
 		float dot_alpha = (t < 0.6f) ? (0.4f + pulse * 0.4f) : (1.0f - (t - 0.6f) / 0.15f);
 		if (dot_alpha > 0.0f) {
-			draw_list->AddCircleFilled(center, dot_size * 3, IM_COL32(100, 140, 255, (int)(dot_alpha * 30)));
-			draw_list->AddCircleFilled(center, dot_size, IM_COL32(150, 180, 255, (int)(dot_alpha * 255)));
+			draw_list->AddCircleFilled(center, dot_size * 3, IM_COL32(91, 194, 231, (int)(dot_alpha * 30)));
+			draw_list->AddCircleFilled(center, dot_size, IM_COL32(91, 194, 231, (int)(dot_alpha * 255)));
 		}
 	}
 
@@ -89,7 +95,7 @@ static void ShowHeroAnimation()
 		flash_alpha *= 0.7f;
 		if (flash_alpha > 0.01f) {
 			draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-				IM_COL32(200, 220, 255, (int)(flash_alpha * 255)));
+				IM_COL32(140, 210, 235, (int)(flash_alpha * 255)));
 		}
 	}
 
@@ -108,9 +114,10 @@ static void ShowHeroAnimation()
 			float particle_size = 3.0f * (1.0f - burst_t * 0.5f);
 
 			if (particle_alpha > 0.01f) {
-				ImU32 p_col = (i % 3 == 0) ? IM_COL32(100, 160, 255, (int)(particle_alpha * 255))
-					: (i % 3 == 1) ? IM_COL32(180, 140, 255, (int)(particle_alpha * 255))
-					: IM_COL32(80, 220, 230, (int)(particle_alpha * 255));
+				// Mix of main cyan and accent coral
+				ImU32 p_col = (i % 3 == 0) ? IM_COL32(91, 194, 231, (int)(particle_alpha * 255))   // Main cyan
+					: (i % 3 == 1) ? IM_COL32(204, 120, 88, (int)(particle_alpha * 255))          // Accent coral
+					: IM_COL32(130, 200, 220, (int)(particle_alpha * 255));                        // Light cyan
 				draw_list->AddCircleFilled(ImVec2(px, py), particle_size, p_col);
 			}
 		}
@@ -154,10 +161,13 @@ static void ShowHeroAnimation()
 			float char_alpha = logo_alpha * char_t;
 			float char_scale_offset = (1.0f - char_t) * 0.3f;
 
-			// Color gradient: electric blue to purple
-			float hue = 0.58f + (float)c / 6 * 0.1f;
+			// Color: Main cyan with slight variation per character
+			float blend = (float)c / 5.0f;
 			ImVec4 col;
-			ImGui::ColorConvertHSVtoRGB(hue, 0.6f, 1.0f, col.x, col.y, col.z);
+			// Gradient from main cyan to slightly lighter
+			col.x = col_main.x + blend * 0.1f;
+			col.y = col_main.y + blend * 0.05f;
+			col.z = col_main.z;
 
 			float cx = title_x + c * char_spacing;
 			float final_scale = title_scale * (1.0f + char_scale_offset);
@@ -189,13 +199,13 @@ static void ShowHeroAnimation()
 			draw_list->AddLine(
 				ImVec2(center.x - line_width, line_y),
 				ImVec2(center.x + line_width, line_y),
-				IM_COL32(100, 150, 255, (int)(line_alpha * 180)), 2.0f);
+				IM_COL32(204, 120, 88, (int)(line_alpha * 200)), 2.0f);  // Accent coral
 
 			// End dots
 			if (line_t > 0.5f) {
 				float dot_a = (line_t - 0.5f) * 2.0f;
-				draw_list->AddCircleFilled(ImVec2(center.x - line_width, line_y), 3.0f, IM_COL32(150, 180, 255, (int)(dot_a * line_alpha * 255)));
-				draw_list->AddCircleFilled(ImVec2(center.x + line_width, line_y), 3.0f, IM_COL32(150, 180, 255, (int)(dot_a * line_alpha * 255)));
+				draw_list->AddCircleFilled(ImVec2(center.x - line_width, line_y), 3.0f, IM_COL32(204, 120, 88, (int)(dot_a * line_alpha * 255)));
+				draw_list->AddCircleFilled(ImVec2(center.x + line_width, line_y), 3.0f, IM_COL32(204, 120, 88, (int)(dot_a * line_alpha * 255)));
 			}
 		}
 	}
@@ -226,7 +236,7 @@ static void ShowHeroAnimation()
 			// Check if character is within revealed area
 			float char_center = char_x + char_size.x * 0.5f;
 			if (char_center >= clip_left && char_center <= clip_right) {
-				draw_list->AddText(ImVec2(char_x, sub_y), IM_COL32(160, 175, 210, (int)(sub_alpha * 255)), ch);
+				draw_list->AddText(ImVec2(char_x, sub_y), IM_COL32(180, 210, 225, (int)(sub_alpha * 255)), ch);  // Light cyan tint
 			}
 			char_x += char_size.x;
 		}
@@ -269,12 +279,17 @@ static void ShowHeroAnimation()
 		ImVec2 pill_min = ImVec2(pill_pos.x - pw * 0.5f, pill_pos.y - ph * 0.5f);
 		ImVec2 pill_max = ImVec2(pill_pos.x + pw * 0.5f, pill_pos.y + ph * 0.5f);
 
-		// Color per pill
-		float hue = 0.55f + i * 0.05f;
-		ImVec4 pill_col;
-		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 0.2f, pill_col.x, pill_col.y, pill_col.z);
-		ImVec4 border_col;
-		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 0.5f, border_col.x, border_col.y, border_col.z);
+		// Color per pill - alternating between main and accent tints
+		ImVec4 pill_col, border_col;
+		if (i % 2 == 0) {
+			// Main cyan tint
+			pill_col = ImVec4(91/255.0f * 0.25f, 194/255.0f * 0.25f, 231/255.0f * 0.25f, 1.0f);
+			border_col = ImVec4(91/255.0f * 0.7f, 194/255.0f * 0.7f, 231/255.0f * 0.7f, 1.0f);
+		} else {
+			// Accent coral tint
+			pill_col = ImVec4(204/255.0f * 0.25f, 120/255.0f * 0.25f, 88/255.0f * 0.25f, 1.0f);
+			border_col = ImVec4(204/255.0f * 0.7f, 120/255.0f * 0.7f, 88/255.0f * 0.7f, 1.0f);
+		}
 
 		// Pill background
 		draw_list->AddRectFilled(pill_min, pill_max,
@@ -301,7 +316,10 @@ static void ShowHeroAnimation()
 			float px = canvas_pos.x + fmodf(seed * 73.0f + hero_time * (5.0f + fmodf(seed, 3.0f)), canvas_size.x);
 			float py = canvas_pos.y + fmodf(seed * 127.0f + hero_time * (2.0f + fmodf(seed * 0.5f, 2.0f)), canvas_size.y);
 			float ps = 1.5f + sinf(hero_time * 2.0f + seed) * 0.5f;
-			draw_list->AddCircleFilled(ImVec2(px, py), ps, IM_COL32(150, 180, 255, (int)(ambient_alpha * 120)));
+			// Mix of main and accent colors
+			ImU32 amb_col = (i % 2 == 0) ? IM_COL32(91, 194, 231, (int)(ambient_alpha * 150))
+			                             : IM_COL32(204, 120, 88, (int)(ambient_alpha * 120));
+			draw_list->AddCircleFilled(ImVec2(px, py), ps, amb_col);
 		}
 	}
 
@@ -322,7 +340,7 @@ static void ShowHeroAnimation()
 		float corner_t = ImClamp((t - 1.8f) / 0.3f, 0.0f, 1.0f);
 		float corner_len = 25.0f * EaseOutCubic(corner_t);
 		float corner_alpha = corner_t * 0.6f;
-		ImU32 corner_col = IM_COL32(100, 140, 255, (int)(corner_alpha * 255));
+		ImU32 corner_col = IM_COL32(91, 194, 231, (int)(corner_alpha * 255));  // Main cyan
 
 		// Top-left
 		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + 8 + corner_len, canvas_pos.y + 8), corner_col, 2.0f);
