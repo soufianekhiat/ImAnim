@@ -41,210 +41,304 @@ static void ApplyOpenAll()
 // ============================================================
 static void ShowHeroAnimation()
 {
+	float dt = GetSafeDeltaTime();
 	static float hero_time = 0.0f;
-	hero_time += GetSafeDeltaTime();
+	hero_time += dt;
 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 280.0f);
-	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 320.0f);
+	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 15.0f);
 
-	// ===== Background gradient animation =====
-	float hue_shift = hero_time * 0.1f;
+	// ===== Background with animated gradient =====
+	float bg_phase = hero_time * 0.15f;
+	ImVec4 bg_tl = ImVec4(0.06f + 0.02f * sinf(bg_phase), 0.06f, 0.12f + 0.03f * sinf(bg_phase * 0.7f), 1.0f);
+	ImVec4 bg_tr = ImVec4(0.08f, 0.05f + 0.02f * cosf(bg_phase * 0.8f), 0.14f + 0.02f * sinf(bg_phase * 1.2f), 1.0f);
+	ImVec4 bg_bl = ImVec4(0.05f + 0.01f * sinf(bg_phase * 0.5f), 0.07f, 0.13f, 1.0f);
+	ImVec4 bg_br = ImVec4(0.07f, 0.06f, 0.15f + 0.03f * cosf(bg_phase * 0.9f), 1.0f);
 
-	// Create animated gradient stops
-	ImVec4 col1 = ImVec4(0.08f + 0.02f * sinf(hue_shift), 0.08f, 0.15f + 0.05f * sinf(hue_shift * 0.7f), 1.0f);
-	ImVec4 col2 = ImVec4(0.12f + 0.03f * sinf(hue_shift * 1.3f), 0.10f, 0.20f + 0.05f * cosf(hue_shift), 1.0f);
-
-	// Draw gradient background
 	draw_list->AddRectFilledMultiColor(canvas_pos,
 		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		ImGui::ColorConvertFloat4ToU32(col1),
-		ImGui::ColorConvertFloat4ToU32(col2),
-		ImGui::ColorConvertFloat4ToU32(col1),
-		ImGui::ColorConvertFloat4ToU32(col2));
+		ImGui::ColorConvertFloat4ToU32(bg_tl), ImGui::ColorConvertFloat4ToU32(bg_tr),
+		ImGui::ColorConvertFloat4ToU32(bg_br), ImGui::ColorConvertFloat4ToU32(bg_bl));
 
-	// Subtle border
-	draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(100, 120, 180, 100), 8.0f, 0, 2.0f);
+	// ===== Floating particles (background layer) =====
+	const int num_particles = 25;
+	for (int i = 0; i < num_particles; i++) {
+		float seed = (float)i * 7.31f;
+		float px = canvas_pos.x + fmodf(seed * 127.1f + hero_time * (8.0f + sinf(seed) * 5.0f), canvas_size.x);
+		float py = canvas_pos.y + fmodf(seed * 311.7f + hero_time * (3.0f + cosf(seed * 2.0f) * 2.0f), canvas_size.y);
 
-	// ===== Orbiting particles with motion paths =====
-	const int num_orbiters = 5;
-	float orbit_radius_base = 90.0f;
+		float twinkle = 0.3f + 0.7f * (0.5f + 0.5f * sinf(hero_time * (2.0f + seed * 0.1f) + seed));
+		float size = 1.0f + sinf(seed * 3.14f) * 0.8f;
+
+		ImU32 p_col = IM_COL32(180, 200, 255, (int)(twinkle * 80));
+		draw_list->AddCircleFilled(ImVec2(px, py), size, p_col);
+	}
+
+	// ===== Decorative bezier curves (motion path showcase) =====
+	float curve_alpha = 0.15f + 0.1f * sinf(hero_time * 0.8f);
+
+	// Left curve
+	ImVec2 c1_p0 = ImVec2(canvas_pos.x + 40, center.y + 60);
+	ImVec2 c1_p1 = ImVec2(canvas_pos.x + 100, center.y - 80);
+	ImVec2 c1_p2 = ImVec2(center.x - 100, center.y - 60);
+	ImVec2 c1_p3 = ImVec2(center.x - 60, center.y);
+	draw_list->AddBezierCubic(c1_p0, c1_p1, c1_p2, c1_p3, IM_COL32(100, 150, 255, (int)(curve_alpha * 255)), 2.0f);
+
+	// Right curve
+	ImVec2 c2_p0 = ImVec2(center.x + 60, center.y);
+	ImVec2 c2_p1 = ImVec2(center.x + 100, center.y - 60);
+	ImVec2 c2_p2 = ImVec2(canvas_pos.x + canvas_size.x - 100, center.y - 80);
+	ImVec2 c2_p3 = ImVec2(canvas_pos.x + canvas_size.x - 40, center.y + 60);
+	draw_list->AddBezierCubic(c2_p0, c2_p1, c2_p2, c2_p3, IM_COL32(150, 100, 255, (int)(curve_alpha * 255)), 2.0f);
+
+	// Animated dots traveling along curves
+	for (int d = 0; d < 3; d++) {
+		float dot_t = fmodf(hero_time * 0.3f + d * 0.33f, 1.0f);
+		float eased_t = iam_eval_preset(iam_ease_in_out_sine, dot_t);
+
+		// Left curve dot
+		ImVec2 dot1 = iam_bezier_cubic(c1_p0, c1_p1, c1_p2, c1_p3, eased_t);
+		float dot_alpha = sinf(dot_t * 3.14159f);
+		draw_list->AddCircleFilled(dot1, 4.0f, IM_COL32(150, 200, 255, (int)(dot_alpha * 200)));
+		draw_list->AddCircleFilled(dot1, 8.0f, IM_COL32(150, 200, 255, (int)(dot_alpha * 50)));
+
+		// Right curve dot
+		ImVec2 dot2 = iam_bezier_cubic(c2_p0, c2_p1, c2_p2, c2_p3, eased_t);
+		draw_list->AddCircleFilled(dot2, 4.0f, IM_COL32(200, 150, 255, (int)(dot_alpha * 200)));
+		draw_list->AddCircleFilled(dot2, 8.0f, IM_COL32(200, 150, 255, (int)(dot_alpha * 50)));
+	}
+
+	// ===== Central glow =====
+	float glow_pulse = 0.6f + 0.4f * iam_eval_preset(iam_ease_in_out_sine, fmodf(hero_time * 0.3f, 1.0f));
+	for (int g = 4; g >= 0; g--) {
+		float gr = 50.0f + g * 25.0f;
+		int ga = (int)((5 - g) * 8 * glow_pulse);
+		draw_list->AddCircleFilled(center, gr, IM_COL32(100, 120, 200, ga));
+	}
+
+	// ===== Orbiting elements with trails =====
+	const int num_orbiters = 6;
+	struct OrbiterState { float angle; float radius; ImVec4 color; };
+	static OrbiterState orbiters[6];
+	static bool orbiters_init = false;
+
+	if (!orbiters_init) {
+		for (int i = 0; i < num_orbiters; i++) {
+			orbiters[i].angle = (float)i / num_orbiters * 6.28318f;
+			orbiters[i].radius = 70.0f + (i % 3) * 25.0f;
+			float hue = (float)i / num_orbiters;
+			ImGui::ColorConvertHSVtoRGB(hue, 0.7f, 1.0f, orbiters[i].color.x, orbiters[i].color.y, orbiters[i].color.z);
+			orbiters[i].color.w = 1.0f;
+		}
+		orbiters_init = true;
+	}
 
 	for (int i = 0; i < num_orbiters; i++) {
-		float phase = (float)i / num_orbiters;
-		float orbit_speed = 0.3f + phase * 0.2f;
-		float angle = hero_time * orbit_speed + phase * 6.28318f;
+		float speed = 0.4f + (i % 3) * 0.15f;
+		float direction = (i % 2 == 0) ? 1.0f : -1.0f;
+		orbiters[i].angle += dt * speed * direction;
 
-		// Apply easing to radius for pulsing effect
-		float pulse_t = fmodf(hero_time * 0.5f + phase, 1.0f);
-		float pulse = 1.0f + 0.15f * iam_eval_preset(iam_ease_in_out_sine, pulse_t);
+		// Breathing radius
+		float breath = 1.0f + 0.1f * sinf(hero_time * 1.5f + i * 1.0f);
+		float r = orbiters[i].radius * breath;
 
-		float orbit_radius = orbit_radius_base * (0.6f + phase * 0.5f) * pulse;
-		float x = center.x + cosf(angle) * orbit_radius;
-		float y = center.y + sinf(angle) * orbit_radius * 0.6f; // Elliptical orbit
+		// Current position
+		float x = center.x + cosf(orbiters[i].angle) * r;
+		float y = center.y + sinf(orbiters[i].angle) * r * 0.55f;
 
-		// Particle size with bounce easing
-		float size_t = fmodf(hero_time + phase * 2.0f, 2.0f);
-		if (size_t > 1.0f) size_t = 2.0f - size_t;
-		float size = 4.0f + 6.0f * iam_eval_preset(iam_ease_out_back, size_t);
-
-		// Color animation using smooth hue rotation
-		float hue = fmodf(phase + hero_time * 0.1f, 1.0f);
-		ImVec4 hsv_col = ImVec4(hue, 0.7f, 0.95f, 0.9f);
-		ImVec4 rgb_col;
-		ImGui::ColorConvertHSVtoRGB(hsv_col.x, hsv_col.y, hsv_col.z, rgb_col.x, rgb_col.y, rgb_col.z);
-		rgb_col.w = hsv_col.w;
-
-		// Draw glow
-		draw_list->AddCircleFilled(ImVec2(x, y), size * 2.5f, IM_COL32((int)(rgb_col.x * 255), (int)(rgb_col.y * 255), (int)(rgb_col.z * 255), 30));
-		draw_list->AddCircleFilled(ImVec2(x, y), size * 1.5f, IM_COL32((int)(rgb_col.x * 255), (int)(rgb_col.y * 255), (int)(rgb_col.z * 255), 80));
-		draw_list->AddCircleFilled(ImVec2(x, y), size, ImGui::ColorConvertFloat4ToU32(rgb_col));
-	}
-
-	// ===== Central pulsing ring with spring physics =====
-	float spring_t = fmodf(hero_time * 0.4f, 1.0f);
-	float spring_val = iam_eval_preset(iam_ease_out_elastic, spring_t);
-	float ring_radius = 35.0f + 15.0f * spring_val;
-	float ring_alpha = 0.6f + 0.3f * (1.0f - spring_t);
-
-	// Multiple concentric rings
-	for (int r = 0; r < 3; r++) {
-		float r_offset = r * 12.0f;
-		float r_alpha = ring_alpha * (1.0f - r * 0.25f);
-		ImU32 ring_col = IM_COL32(140, 180, 255, (int)(r_alpha * 255));
-		draw_list->AddCircle(center, ring_radius + r_offset, ring_col, 0, 2.0f - r * 0.5f);
-	}
-
-	// ===== Wave line using oscillators =====
-	float wave_y = canvas_pos.y + canvas_size.y - 50.0f;
-	ImVec2 prev_wave_pt = ImVec2(canvas_pos.x, wave_y);
-
-	for (int w = 0; w <= 60; w++) {
-		float wx = canvas_pos.x + (canvas_size.x * w / 60.0f);
-		float wave_phase = (float)w / 60.0f * 4.0f + hero_time * 2.0f;
-
-		// Combine multiple sine waves for organic feel
-		float wave_val = sinf(wave_phase) * 0.5f + sinf(wave_phase * 2.3f + 1.0f) * 0.3f + sinf(wave_phase * 0.7f - 0.5f) * 0.2f;
-		float wy = wave_y + wave_val * 15.0f;
-
-		// Gradient color along wave
-		float wave_hue = fmodf((float)w / 60.0f + hero_time * 0.1f, 1.0f);
-		ImVec4 wave_rgb;
-		ImGui::ColorConvertHSVtoRGB(wave_hue, 0.6f, 0.9f, wave_rgb.x, wave_rgb.y, wave_rgb.z);
-		ImU32 wave_col = IM_COL32((int)(wave_rgb.x * 255), (int)(wave_rgb.y * 255), (int)(wave_rgb.z * 255), 200);
-
-		if (w > 0) {
-			draw_list->AddLine(prev_wave_pt, ImVec2(wx, wy), wave_col, 2.5f);
+		// Draw trail (fading circles behind)
+		const int trail_len = 8;
+		for (int t = trail_len; t >= 0; t--) {
+			float trail_angle = orbiters[i].angle - t * 0.08f * direction;
+			float tx = center.x + cosf(trail_angle) * r;
+			float ty = center.y + sinf(trail_angle) * r * 0.55f;
+			float trail_alpha = (1.0f - (float)t / trail_len) * 0.4f;
+			float trail_size = 6.0f * (1.0f - (float)t / trail_len * 0.5f);
+			ImU32 trail_col = IM_COL32(
+				(int)(orbiters[i].color.x * 255),
+				(int)(orbiters[i].color.y * 255),
+				(int)(orbiters[i].color.z * 255),
+				(int)(trail_alpha * 255));
+			draw_list->AddCircleFilled(ImVec2(tx, ty), trail_size, trail_col);
 		}
-		prev_wave_pt = ImVec2(wx, wy);
+
+		// Pulsing size
+		float pulse_t = fmodf(hero_time * 2.0f + i * 0.5f, 1.0f);
+		float size_mult = 1.0f + 0.3f * iam_eval_preset(iam_ease_out_back, pulse_t < 0.5f ? pulse_t * 2.0f : 1.0f);
+		float size = 8.0f * size_mult;
+
+		// Glow layers
+		ImU32 glow_col = IM_COL32(
+			(int)(orbiters[i].color.x * 255),
+			(int)(orbiters[i].color.y * 255),
+			(int)(orbiters[i].color.z * 255), 40);
+		draw_list->AddCircleFilled(ImVec2(x, y), size * 2.0f, glow_col);
+		draw_list->AddCircleFilled(ImVec2(x, y), size * 1.4f, IM_COL32(
+			(int)(orbiters[i].color.x * 255),
+			(int)(orbiters[i].color.y * 255),
+			(int)(orbiters[i].color.z * 255), 100));
+
+		// Core
+		draw_list->AddCircleFilled(ImVec2(x, y), size, ImGui::ColorConvertFloat4ToU32(orbiters[i].color));
+		draw_list->AddCircle(ImVec2(x, y), size, IM_COL32(255, 255, 255, 150), 0, 1.5f);
 	}
 
-	// ===== Animated title text with stagger effect =====
+	// ===== Central rings with elastic animation =====
+	float ring_t = fmodf(hero_time * 0.5f, 1.0f);
+	float ring_ease = iam_eval_preset(iam_ease_out_elastic, ring_t);
+
+	for (int r = 0; r < 3; r++) {
+		float base_radius = 30.0f + r * 15.0f;
+		float animated_radius = base_radius + 10.0f * ring_ease * (1.0f - r * 0.2f);
+		float ring_alpha = (0.5f - r * 0.12f) * (1.0f - ring_t * 0.3f);
+
+		// Gradient from blue to purple
+		int rb = 130 + r * 20;
+		int gb = 160 - r * 20;
+		draw_list->AddCircle(center, animated_radius, IM_COL32(rb, gb, 255, (int)(ring_alpha * 255)), 0, 2.5f - r * 0.5f);
+	}
+
+	// ===== Title with wave animation =====
 	const char* title = "ImAnim";
 	const int title_len = 6;
 	float base_font_size = ImGui::GetFontSize();
-	float title_scale = 2.5f; // Scale up the title
-
-	// Estimate character width for spacing
-	float avg_char_width = base_font_size * title_scale * 0.6f;
+	float title_scale = 2.8f;
+	float avg_char_width = base_font_size * title_scale * 0.55f;
 	float title_width = avg_char_width * title_len;
-
 	float title_x = center.x - title_width * 0.5f;
-	float title_y = center.y - 40.0f;
+	float title_y = center.y - 35.0f;
 
-	// Draw each character with stagger animation
-	for (int char_idx = 0; char_idx < title_len; char_idx++) {
-		// Stagger timing per character
-		float char_delay = char_idx * 0.12f;
-		float char_t = fmodf(hero_time * 0.5f + 1.0f - char_delay, 2.0f);
-		if (char_t < 0.0f) char_t = 0.0f;
-		if (char_t > 1.0f) char_t = 1.0f;
+	for (int c = 0; c < title_len; c++) {
+		// Continuous wave motion
+		float wave_offset = sinf(hero_time * 3.0f + c * 0.8f) * 5.0f;
 
-		// Bounce animation for Y offset
-		float bounce_y = -20.0f * iam_eval_preset(iam_ease_out_bounce, char_t) + 20.0f * (1.0f - char_t);
+		// Subtle scale breathing
+		float scale_breath = 1.0f + 0.05f * sinf(hero_time * 2.0f + c * 0.5f);
 
-		// Scale animation
-		float scale_t = ImClamp(char_t * 1.5f, 0.0f, 1.0f);
-		float scale = iam_eval_preset(iam_ease_out_back, scale_t);
-
-		// Alpha fade in
-		float alpha = ImClamp(char_t * 2.0f, 0.0f, 1.0f);
-
-		// Skip rendering if not visible yet
-		if (alpha < 0.01f || scale < 0.01f) continue;
-
-		// Color per character
-		float char_hue = fmodf((float)char_idx / 6.0f + hero_time * 0.15f, 1.0f);
+		// Rainbow hue shift
+		float hue = fmodf(0.55f + (float)c / title_len * 0.3f + hero_time * 0.08f, 1.0f);
 		ImVec4 char_rgb;
-		ImGui::ColorConvertHSVtoRGB(char_hue, 0.5f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
-		ImU32 char_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(alpha * 255));
+		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
 
-		// Character position
-		float char_x = title_x + char_idx * avg_char_width;
-		ImVec2 char_pos = ImVec2(char_x, title_y + bounce_y);
+		float char_x = title_x + c * avg_char_width;
+		ImVec2 char_pos = ImVec2(char_x, title_y + wave_offset);
 
-		// Compute font sizes (ensure minimum)
-		float main_font_size = ImMax(1.0f, base_font_size * title_scale * scale);
-		float glow_font_size = main_font_size + 3.0f;
+		float font_size = ImMax(1.0f, base_font_size * title_scale * scale_breath);
+		char char_str[2] = { title[c], '\0' };
 
-		// Glow layer
-		ImU32 glow_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(alpha * 40));
-		char char_str[2] = { title[char_idx], '\0' };
-		draw_list->AddText(nullptr, glow_font_size, ImVec2(char_pos.x - 1, char_pos.y - 1), glow_col, char_str);
+		// Shadow
+		draw_list->AddText(nullptr, font_size, ImVec2(char_pos.x + 2, char_pos.y + 2), IM_COL32(0, 0, 0, 100), char_str);
+
+		// Glow
+		ImU32 glow_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), 60);
+		draw_list->AddText(nullptr, font_size + 2, ImVec2(char_pos.x - 1, char_pos.y - 1), glow_col, char_str);
 
 		// Main character
-		draw_list->AddText(nullptr, main_font_size, char_pos, char_col, char_str);
+		ImU32 char_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), 255);
+		draw_list->AddText(nullptr, font_size, char_pos, char_col, char_str);
 	}
 
-	// ===== Subtitle with fade =====
-	const char* subtitle = "Smooth animations for Dear ImGui";
+	// ===== Subtitle =====
+	const char* subtitle = "Fluid animations for Dear ImGui";
 	ImVec2 subtitle_size = ImGui::CalcTextSize(subtitle);
-	float subtitle_alpha = 0.5f + 0.3f * sinf(hero_time * 1.5f);
-	ImU32 subtitle_col = IM_COL32(180, 190, 220, (int)(subtitle_alpha * 255));
-	draw_list->AddText(ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 15.0f), subtitle_col, subtitle);
+	float sub_alpha = 0.6f + 0.2f * sinf(hero_time * 1.2f);
+	draw_list->AddText(ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 20.0f),
+		IM_COL32(170, 185, 220, (int)(sub_alpha * 255)), subtitle);
 
-	// ===== Feature badges with elastic animation =====
-	const char* features[] = { "30+ Easings", "Spring Physics", "Motion Paths", "Color Blending" };
-	const int num_features = 4;
-	float badge_y = canvas_pos.y + canvas_size.y - 25.0f;
-	float badge_spacing = canvas_size.x / (num_features + 1);
+	// ===== Bottom wave with gradient =====
+	float wave_base_y = canvas_pos.y + canvas_size.y - 45.0f;
+	ImVec2 prev_pt = ImVec2(canvas_pos.x, wave_base_y);
+
+	for (int w = 0; w <= 80; w++) {
+		float wx = canvas_pos.x + (canvas_size.x * w / 80.0f);
+		float wave_x = (float)w / 80.0f;
+
+		// Layered waves
+		float wave1 = sinf(wave_x * 8.0f + hero_time * 2.5f) * 8.0f;
+		float wave2 = sinf(wave_x * 12.0f - hero_time * 1.8f) * 4.0f;
+		float wave3 = sinf(wave_x * 4.0f + hero_time * 1.2f) * 6.0f;
+		float wy = wave_base_y + wave1 + wave2 + wave3;
+
+		// Color gradient along wave
+		float wave_hue = fmodf(0.5f + wave_x * 0.2f + hero_time * 0.05f, 1.0f);
+		ImVec4 wave_rgb;
+		ImGui::ColorConvertHSVtoRGB(wave_hue, 0.6f, 0.95f, wave_rgb.x, wave_rgb.y, wave_rgb.z);
+		ImU32 wave_col = IM_COL32((int)(wave_rgb.x * 255), (int)(wave_rgb.y * 255), (int)(wave_rgb.z * 255), 220);
+
+		if (w > 0) {
+			draw_list->AddLine(prev_pt, ImVec2(wx, wy), wave_col, 3.0f);
+		}
+		prev_pt = ImVec2(wx, wy);
+	}
+
+	// ===== Feature badges =====
+	const char* features[] = { "Easings", "Springs", "Paths", "Colors", "Clips" };
+	const int num_features = 5;
+	float badge_y = canvas_pos.y + canvas_size.y - 18.0f;
+	float total_badge_width = 0;
+	float badge_widths[5];
 
 	for (int f = 0; f < num_features; f++) {
-		float badge_x = canvas_pos.x + badge_spacing * (f + 1);
+		badge_widths[f] = ImGui::CalcTextSize(features[f]).x + 16.0f;
+		total_badge_width += badge_widths[f] + 8.0f;
+	}
+	total_badge_width -= 8.0f;
 
-		// Elastic pop-in animation
-		float badge_delay = f * 0.2f;
-		float badge_t = fmodf(hero_time * 0.3f + 1.0f - badge_delay, 3.0f);
-		if (badge_t < 0.0f) badge_t = 0.0f;
-		if (badge_t > 1.0f) badge_t = 1.0f;
+	float badge_start_x = center.x - total_badge_width * 0.5f;
+	float current_x = badge_start_x;
 
-		float pop_scale = iam_eval_preset(iam_ease_out_elastic, badge_t);
-		float badge_alpha = ImClamp(badge_t * 3.0f, 0.0f, 1.0f);
+	for (int f = 0; f < num_features; f++) {
+		// Staggered bounce animation
+		float badge_delay = f * 0.15f;
+		float badge_t = fmodf(hero_time * 0.4f + 0.5f - badge_delay, 2.5f);
+		badge_t = ImClamp(badge_t, 0.0f, 1.0f);
 
-		// Skip rendering if not visible yet
-		if (badge_alpha < 0.01f || pop_scale < 0.01f) continue;
+		float bounce = iam_eval_preset(iam_ease_out_back, badge_t);
+		float badge_alpha = ImClamp(badge_t * 2.5f, 0.0f, 1.0f);
+
+		if (badge_alpha < 0.01f || bounce < 0.01f) {
+			current_x += badge_widths[f] + 8.0f;
+			continue;
+		}
 
 		ImVec2 text_size = ImGui::CalcTextSize(features[f]);
-		float pad_x = 8.0f * pop_scale;
-		float pad_y = 4.0f * pop_scale;
+		float pad_x = 8.0f;
+		float pad_y = 3.0f;
+		float badge_w = text_size.x + pad_x * 2;
+		float badge_h = text_size.y + pad_y * 2;
 
-		ImVec2 badge_min = ImVec2(badge_x - text_size.x * 0.5f * pop_scale - pad_x, badge_y - text_size.y * 0.5f * pop_scale - pad_y);
-		ImVec2 badge_max = ImVec2(badge_x + text_size.x * 0.5f * pop_scale + pad_x, badge_y + text_size.y * 0.5f * pop_scale + pad_y);
+		float scale = bounce;
+		float offset_y = (1.0f - bounce) * 10.0f;
 
-		// Badge background
-		ImU32 badge_bg = IM_COL32(60, 80, 120, (int)(badge_alpha * 180));
-		ImU32 badge_border = IM_COL32(100, 140, 200, (int)(badge_alpha * 200));
-		draw_list->AddRectFilled(badge_min, badge_max, badge_bg, 4.0f * pop_scale);
-		draw_list->AddRect(badge_min, badge_max, badge_border, 4.0f * pop_scale);
+		ImVec2 badge_center = ImVec2(current_x + badge_widths[f] * 0.5f, badge_y + offset_y);
+		ImVec2 badge_min = ImVec2(badge_center.x - badge_w * 0.5f * scale, badge_center.y - badge_h * 0.5f * scale);
+		ImVec2 badge_max = ImVec2(badge_center.x + badge_w * 0.5f * scale, badge_center.y + badge_h * 0.5f * scale);
 
-		// Badge text (ensure minimum font size)
-		float badge_font_size = ImMax(1.0f, ImGui::GetFontSize() * pop_scale);
-		ImU32 badge_text_col = IM_COL32(220, 230, 255, (int)(badge_alpha * 255));
-		ImVec2 text_pos = ImVec2(badge_x - text_size.x * 0.5f * pop_scale, badge_y - text_size.y * 0.5f * pop_scale);
-		draw_list->AddText(nullptr, badge_font_size, text_pos, badge_text_col, features[f]);
+		// Badge color based on index
+		float badge_hue = 0.55f + (float)f / num_features * 0.25f;
+		ImVec4 badge_rgb;
+		ImGui::ColorConvertHSVtoRGB(badge_hue, 0.4f, 0.25f, badge_rgb.x, badge_rgb.y, badge_rgb.z);
+		ImU32 badge_bg = IM_COL32((int)(badge_rgb.x * 255), (int)(badge_rgb.y * 255), (int)(badge_rgb.z * 255), (int)(badge_alpha * 200));
+
+		ImGui::ColorConvertHSVtoRGB(badge_hue, 0.5f, 0.6f, badge_rgb.x, badge_rgb.y, badge_rgb.z);
+		ImU32 badge_border = IM_COL32((int)(badge_rgb.x * 255), (int)(badge_rgb.y * 255), (int)(badge_rgb.z * 255), (int)(badge_alpha * 255));
+
+		draw_list->AddRectFilled(badge_min, badge_max, badge_bg, 4.0f);
+		draw_list->AddRect(badge_min, badge_max, badge_border, 4.0f, 0, 1.5f);
+
+		// Badge text
+		float font_size = ImMax(1.0f, ImGui::GetFontSize() * scale);
+		ImVec2 text_pos = ImVec2(badge_center.x - text_size.x * 0.5f * scale, badge_center.y - text_size.y * 0.5f * scale);
+		draw_list->AddText(nullptr, font_size, text_pos, IM_COL32(230, 235, 255, (int)(badge_alpha * 255)), features[f]);
+
+		current_x += badge_widths[f] + 8.0f;
 	}
+
+	// ===== Border =====
+	draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+		IM_COL32(80, 100, 160, 120), 6.0f, 0, 1.5f);
 
 	// Reserve space
 	ImGui::Dummy(canvas_size);
