@@ -23,6 +23,17 @@ static float GetSafeDeltaTime()
 	return dt;
 }
 
+// ============================================================
+// HELPER: Open/Close all collapsing headers and tree nodes
+// ============================================================
+static int s_open_all = 0;  // 0 = none, 1 = open all, -1 = close all
+
+static void ApplyOpenAll()
+{
+	if (s_open_all != 0)
+		ImGui::SetNextItemOpen(s_open_all > 0, ImGuiCond_Always);
+}
+
 // HELPER: Use iam_eval_preset from im_anim API for easing evaluation
 
 // ============================================================
@@ -148,6 +159,7 @@ static void ShowEasingDemo()
 	ImGui::Dummy(ImVec2(canvas_size.x, canvas_size.y + 40));
 
 	// Custom easing section
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Custom Bezier Curve")) {
 		static float bezier[4] = { 0.25f, 0.1f, 0.25f, 1.0f };
 		static float bezier_preview_time = 0.0f;
@@ -225,6 +237,7 @@ static void ShowEasingDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Spring Physics")) {
 		static float mass = 1.0f, stiffness = 120.0f, damping = 20.0f, v0 = 0.0f;
 		static float spring_preview_time = 0.0f;
@@ -315,6 +328,7 @@ static void ShowEasingDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Steps Easing")) {
 		static int step_count = 5;
 		static int step_mode = 0;  // 0=end, 1=start, 2=both
@@ -406,6 +420,7 @@ static void ShowEasingDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Easing Gallery")) {
 		ImGui::TextWrapped(
 			"Visual grid showing all standard easing functions side-by-side. "
@@ -678,6 +693,7 @@ static void ShowBasicTweensDemo()
 	ImGui::Separator();
 
 	// Float tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Float Tween")) {
 		static float target = 50.0f;
 		ImGui::SliderFloat("Target", &target, 0.0f, 100.0f);
@@ -694,6 +710,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Vec2 tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Vec2 Tween")) {
 		static ImVec2 target(150.0f, 80.0f);
 		ImGui::SliderFloat2("Target", &target.x, 0.0f, 280.0f);
@@ -722,6 +739,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Int tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Int Tween")) {
 		static int target = 50;
 		ImGui::SliderInt("Target", &target, 0, 100);
@@ -735,6 +753,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Vec4 tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Vec4 Tween")) {
 		static ImVec4 target(1.0f, 0.5f, 0.2f, 1.0f);
 		ImGui::ColorEdit4("Target", &target.x);
@@ -749,6 +768,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Multi-property animation
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Multi-Property Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextDisabled("Animate multiple properties on the same object with different timings");
 		ImGui::Spacing();
@@ -798,6 +818,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Staggered wave animation
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Staggered Wave Animation")) {
 		ImGui::TextDisabled("Multiple items with offset timing create a wave effect");
 		ImGui::Spacing();
@@ -851,6 +872,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Spring physics comparison
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Spring Physics Comparison")) {
 		ImGui::TextDisabled("Compare different spring parameters - adjust stiffness and damping");
 		ImGui::Spacing();
@@ -901,6 +923,7 @@ static void ShowBasicTweensDemo()
 	}
 
 	// Smooth counter animation
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Animated Counter")) {
 		ImGui::TextDisabled("Smooth number counting animation using int tweens");
 		ImGui::Spacing();
@@ -985,6 +1008,7 @@ static void ShowPerAxisEasingDemo()
 	ImGui::Spacing();
 
 	// Demo 1: Vec2 with different X and Y easing
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Vec2 Per-Axis")) {
 		static int ease_x = 2;   // Out Cubic
 		static int ease_y = 10;  // Out Bounce
@@ -1039,6 +1063,7 @@ static void ShowPerAxisEasingDemo()
 	}
 
 	// Demo 2: Color with per-channel easing
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Color Per-Channel")) {
 		static int ease_r = 2;  // Out Cubic
 		static int ease_g = 5;  // Out Bounce
@@ -1091,6 +1116,7 @@ static void ShowPerAxisEasingDemo()
 	}
 
 	// Demo 3: Practical example - bounce landing effect
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Bounce Landing Effect")) {
 		static float drop_timer = 0.0f;
 		static bool dropping = false;
@@ -1197,6 +1223,7 @@ static void ShowPoliciesDemo()
 	ImGui::Spacing();
 
 	// Visual policy comparison - each policy in its own horizontal lane
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Visual Comparison")) {
 		ImGui::TextWrapped("Each row shows the same animation with different policies. "
 			"Click buttons rapidly to see differences:");
@@ -1299,6 +1326,7 @@ static void ShowWidgetsDemo()
 	ImGui::Separator();
 
 	// Animated buttons - using fixed layout to prevent movement
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Animated Buttons", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextDisabled("Hover over buttons to see animation effects");
 		ImGui::Spacing();
@@ -1357,6 +1385,7 @@ static void ShowWidgetsDemo()
 	}
 
 	// Animated toggle
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Animated Toggle")) {
 		static bool toggle_state = false;
 
@@ -1393,6 +1422,7 @@ static void ShowWidgetsDemo()
 	}
 
 	// Hover card - larger
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Hover Card")) {
 		ImGuiID id = ImHashStr("card_demo");
 
@@ -1643,6 +1673,7 @@ static void ShowClipSystemDemo()
 	ImGui::Separator();
 
 	// Basic clip playback
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Basic Playback", ImGuiTreeNodeFlags_DefaultOpen)) {
 		// Fade In with scale
 		{
@@ -1740,6 +1771,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Looping animations
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Looping Animations")) {
 		static ImGuiID inst_id = ImHashStr("loop_inst");
 		static bool playing = false;
@@ -1782,6 +1814,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Playback control
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Playback Control")) {
 		static ImGuiID inst_id = ImHashStr("control_inst");
 
@@ -1830,6 +1863,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Delayed playback
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Delayed Playback")) {
 		ImGui::TextWrapped("set_delay() adds a delay before the animation starts playing.");
 
@@ -1874,6 +1908,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Callbacks demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Callbacks")) {
 		ImGui::TextWrapped(
 			"on_begin(), on_update(), and on_complete() let you hook into animation lifecycle events.");
@@ -1912,6 +1947,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Integer keyframes demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Integer Keyframes")) {
 		ImGui::TextWrapped(
 			"key_int() animates integer values (useful for counters, frame indices, etc.).");
@@ -1938,6 +1974,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Sequential Timeline demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Sequential Timeline (seq_begin/end)")) {
 		ImGui::TextWrapped(
 			"seq_begin()/seq_end() groups keyframes that play in sequence. "
@@ -1979,6 +2016,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Parallel Timeline demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Parallel Timeline (par_begin/end)")) {
 		ImGui::TextWrapped(
 			"par_begin()/par_end() groups keyframes that play simultaneously. "
@@ -2021,6 +2059,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Stagger demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Stagger Animation")) {
 		ImGui::TextWrapped(
 			"set_stagger() applies progressive delays for animating multiple items. "
@@ -2106,6 +2145,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Stagger List demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Stagger: List Slide-In")) {
 		ImGui::TextWrapped(
 			"Classic list animation with items sliding in from the left.");
@@ -2184,6 +2224,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Stagger Grid demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Stagger: Grid Reveal")) {
 		ImGui::TextWrapped(
 			"Grid items appearing with scale and subtle rotation.");
@@ -2272,6 +2313,7 @@ static void ShowClipSystemDemo()
 	}
 
 	// Stagger Cards demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Stagger: Dropping Cards")) {
 		ImGui::TextWrapped(
 			"Cards dropping in from above with a bounce effect.");
@@ -2390,6 +2432,7 @@ static void ShowResizeHelpersDemo()
 
 	ImGui::Spacing();
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Relative Positioning")) {
 		ImGui::TextWrapped("Position as percentage of container + pixel offset:");
 
@@ -2427,6 +2470,7 @@ static void ShowResizeHelpersDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Anchor Spaces Showcase")) {
 		ImGui::TextWrapped("Each anchor space measures from a different reference:");
 
@@ -2553,6 +2597,7 @@ static void ShowResizeHelpersDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Resolver Callback")) {
 		ImGui::TextWrapped(
 			"iam_tween_vec2_resolved() uses a callback to compute the target position dynamically. "
@@ -2618,6 +2663,7 @@ static void ShowResizeHelpersDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Rebase Animation")) {
 		ImGui::TextWrapped(
 			"iam_rebase_vec2() allows changing the target of an in-progress animation "
@@ -2683,6 +2729,7 @@ static void ShowResizeHelpersDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Anchor Size Query")) {
 		ImGui::TextWrapped(
 			"anchor_size() returns the dimensions of each anchor space. "
@@ -2755,6 +2802,7 @@ static void ShowLayeringDemo()
 
 	ImGui::Spacing();
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Basic Layer Blending (3 Layers)")) {
 		ImGui::TextWrapped(
 			"Three animations move dots with different patterns. "
@@ -2854,6 +2902,7 @@ static void ShowLayeringDemo()
 		ImGui::TreePop();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Instance Weights")) {
 		ImGui::TextWrapped(
 			"set_weight() on an instance controls its contribution when used with the layering API.");
@@ -2920,6 +2969,7 @@ static void ShowDrawListDemo()
 	ImGui::Separator();
 
 	// Rotating 3D Cube
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("3D Rotating Cube", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextDisabled("Wireframe cube with animated rotation");
 
@@ -3017,6 +3067,7 @@ static void ShowDrawListDemo()
 	ImGui::Spacing();
 
 	// Pulsing Rings
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Pulsing Rings")) {
 		ImGui::TextDisabled("Animated expanding rings with easing");
 
@@ -3055,6 +3106,7 @@ static void ShowDrawListDemo()
 	ImGui::Spacing();
 
 	// Orbiting Particles
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Orbiting Particles")) {
 		ImGui::TextDisabled("Particles following elliptical paths");
 
@@ -3120,6 +3172,7 @@ static void ShowDrawListDemo()
 	ImGui::Spacing();
 
 	// Bouncing Ball with Trail
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Bouncing Ball")) {
 		ImGui::TextDisabled("Ball bouncing with motion trail");
 
@@ -3185,6 +3238,7 @@ static void ShowDrawListDemo()
 	ImGui::Spacing();
 
 	// Morphing Shape (animated interpolation between shapes)
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Morphing Shape")) {
 		ImGui::TextDisabled("Smooth interpolation between different shapes");
 
@@ -3343,6 +3397,7 @@ static void ShowOscillatorsDemo()
 	for (int i = 0; i < 4; i++) {
 		float phase = i * 0.25f;
 		float x = canvas_pos.x + 50.0f + i * (canvas_size.x - 100.0f) / 3.0f;
+
 		char id_buf[32];
 		snprintf(id_buf, sizeof(id_buf), "osc_demo_%d", i);
 		float offset_y = iam_oscillate(ImGui::GetID(id_buf),
@@ -3354,6 +3409,7 @@ static void ShowOscillatorsDemo()
 	ImGui::Dummy(canvas_size);
 
 	// Vec2 oscillation demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("2D Oscillation (Lissajous)")) {
 		static ImVec2 freq_2d(1.0f, 2.0f);
 		static ImVec2 amp_2d(40.0f, 40.0f);
@@ -3375,6 +3431,7 @@ static void ShowOscillatorsDemo()
 	}
 
 	// Practical UI example
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Practical: Pulsing Button")) {
 		float pulse = iam_oscillate(ImGui::GetID("pulse_btn"), 0.1f, 2.0f, iam_wave_sine, 0.0f, dt);
 		float scale = 1.0f + pulse;
@@ -3409,6 +3466,7 @@ static void ShowShakeWiggleDemo()
 		"Wiggle provides continuous smooth random movement (for idle animations, organic feel).");
 
 	// Shake demo
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Shake (Decaying)", ImGuiTreeNodeFlags_DefaultOpen)) {
 		static float shake_intensity = 10.0f;
 		static float shake_frequency = 20.0f;
@@ -3443,6 +3501,7 @@ static void ShowShakeWiggleDemo()
 	}
 
 	// Wiggle demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Wiggle (Continuous)")) {
 		static float wiggle_amplitude = 5.0f;
 		static float wiggle_frequency = 3.0f;
@@ -3469,6 +3528,7 @@ static void ShowShakeWiggleDemo()
 	}
 
 	// Practical example
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Practical: Error Feedback")) {
 		static char input_buf[64] = "";
 		static bool show_error = false;
@@ -3754,6 +3814,7 @@ static void ShowPathMorphingDemo()
 	}
 
 	// Demo 1: Manual blend slider
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Manual Morph Control")) {
 		static float blend = 0.0f;
 		static int path_a_idx = 0;
@@ -3809,6 +3870,7 @@ static void ShowPathMorphingDemo()
 	}
 
 	// Demo 2: Animated morph
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Animated Shape Morph")) {
 		static float morph_timer = 0.0f;
 		static bool animating = false;
@@ -3879,6 +3941,7 @@ static void ShowPathMorphingDemo()
 	}
 
 	// Demo 3: Object along morphing path
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Object Along Morphing Path")) {
 		static float path_t = 0.0f;
 		static float path_blend = 0.0f;
@@ -4363,6 +4426,7 @@ static void ShowTextStaggerDemo()
 	ImGui::Text("Total Duration: %.2f s", total_duration);
 
 	// Multiple effect comparison
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Effect Comparison")) {
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		ImVec2 size(ImGui::GetContentRegionAvail().x, 300.0f);
@@ -4417,6 +4481,7 @@ static void ShowNoiseChannelsDemo()
 	ImGui::SliderFloat("Amplitude", &amplitude, 10.0f, 100.0f, "%.0f px");
 
 	// 2D Noise visualization
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("2D Noise Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(200, 200);
@@ -4457,6 +4522,7 @@ static void ShowNoiseChannelsDemo()
 	}
 
 	// Animated noise channel demo
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Animated Noise Channel", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120.0f);
@@ -4501,6 +4567,7 @@ static void ShowNoiseChannelsDemo()
 	}
 
 	// 2D noise movement
+	ApplyOpenAll();
 	if (ImGui::TreeNode("2D Noise Movement")) {
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(200.0f, 200.0f);
@@ -4795,6 +4862,7 @@ static void ShowStyleInterpolationDemo()
 	ImGui::PopStyleVar(14);
 
 	// Show current interpolated values
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Interpolated Values")) {
 		ImGui::Text("Rounding: Frame=%.1f, Child=%.1f, Grab=%.1f",
 			blended.FrameRounding, blended.ChildRounding, blended.GrabRounding);
@@ -4820,6 +4888,7 @@ static void ShowDragFeedbackDemo()
 	ImGui::Spacing();
 
 	// Snap grid demo
+	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("Grid Snapping", ImGuiTreeNodeFlags_DefaultOpen)) {
 		static ImVec2 drag_pos(100, 60);
 		static bool dragging = false;
@@ -4915,6 +4984,7 @@ static void ShowDragFeedbackDemo()
 	}
 
 	// Snap points demo
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Snap Points")) {
 		static ImVec2 drag_pos2(150, 100);
 		static bool dragging2 = false;
@@ -5003,6 +5073,7 @@ static void ShowGradientKeyframesDemo()
 	float dt = GetSafeDeltaTime();
 
 	// Demo 1: Basic gradient interpolation
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Basic Gradient Interpolation")) {
 		static float blend = 0.5f;
 		ImGui::SliderFloat("Blend##GradientBasic", &blend, 0.0f, 1.0f);
@@ -5046,6 +5117,7 @@ static void ShowGradientKeyframesDemo()
 	}
 
 	// Demo 2: Animated gradient tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Animated Gradient Tween")) {
 		static int target_idx = 0;
 		static const char* gradient_names[] = { "Sunset", "Ocean", "Forest", "Neon" };
@@ -5117,6 +5189,7 @@ static void ShowGradientKeyframesDemo()
 	}
 
 	// Demo 3: Health bar with gradient
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Health Bar with Gradient")) {
 		static float health = 0.75f;
 		ImGui::SliderFloat("Health", &health, 0.0f, 1.0f);
@@ -5176,6 +5249,7 @@ static void ShowTransformInterpolationDemo()
 	float dt = GetSafeDeltaTime();
 
 	// Demo 1: Basic transform interpolation
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Basic Transform Blend")) {
 		static float blend = 0.5f;
 		ImGui::SliderFloat("Blend##TransformBasic", &blend, 0.0f, 1.0f);
@@ -5229,6 +5303,7 @@ static void ShowTransformInterpolationDemo()
 	}
 
 	// Demo 2: Animated transform tween
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Animated Transform Tween")) {
 		static int target_idx = 0;
 		static const char* pose_names[] = { "Center", "Top-Left", "Bottom-Right", "Spinning" };
@@ -5314,6 +5389,7 @@ static void ShowTransformInterpolationDemo()
 	}
 
 	// Demo 3: Rotation Modes
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Rotation Modes")) {
 		static int rotation_mode = iam_rotation_shortest;
 		static float target_angle = 0.0f;
@@ -5406,6 +5482,7 @@ static void ShowTransformInterpolationDemo()
 	}
 
 	// Demo 3: Transform composition
+	ApplyOpenAll();
 	if (ImGui::TreeNode("Transform Composition")) {
 		static float time = 0.0f;
 		time += dt;
@@ -5537,168 +5614,211 @@ void ImAnimDemoWindow()
 	ImGui::SameLine();
 	ImGui::TextDisabled("(time scale, stats, profiler)");
 
+	// Open/Close all sections (uses global s_open_all)
+	if (ImGui::Button("Open All")) {
+		s_open_all = 1;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Close All")) {
+		s_open_all = -1;
+	}
+
 	ImGui::Separator();
 
+	// Begin scrollable child for all demo content
+	ImGui::BeginChild("DemoContent", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+
 	// Main sections as collapsing headers (like imgui_demo.cpp)
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Easing Functions")) {
 		iam_profiler_begin("Easing Functions");
 		ShowEasingDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Custom Easing")) {
 		iam_profiler_begin("Custom Easing");
 		ShowCustomEasingDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Basic Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
 		iam_profiler_begin("Basic Tweens");
 		ShowBasicTweensDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Color Tweens")) {
 		iam_profiler_begin("Color Tweens");
 		ShowColorTweensDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Per-Axis Easing")) {
 		iam_profiler_begin("Per-Axis Easing");
 		ShowPerAxisEasingDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Tween Policies")) {
 		iam_profiler_begin("Tween Policies");
 		ShowPoliciesDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Interactive Widgets", ImGuiTreeNodeFlags_DefaultOpen)) {
 		iam_profiler_begin("Interactive Widgets");
 		ShowWidgetsDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Clip System")) {
 		iam_profiler_begin("Clip System");
 		ShowClipSystemDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Layering System")) {
 		iam_profiler_begin("Layering System");
 		ShowLayeringDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Resize-Aware Helpers")) {
 		iam_profiler_begin("Resize Helpers");
 		ShowResizeHelpersDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("ImDrawList Animations")) {
 		iam_profiler_begin("DrawList Animations");
 		ShowDrawListDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Oscillators")) {
 		iam_profiler_begin("Oscillators");
 		ShowOscillatorsDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Shake & Wiggle")) {
 		iam_profiler_begin("Shake & Wiggle");
 		ShowShakeWiggleDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Scroll Animation")) {
 		iam_profiler_begin("Scroll Animation");
 		ShowScrollDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Motion Paths")) {
 		iam_profiler_begin("Motion Paths");
 		ShowMotionPathsDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Path Morphing")) {
 		iam_profiler_begin("Path Morphing");
 		ShowPathMorphingDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Text Along Paths")) {
 		iam_profiler_begin("Text Along Paths");
 		ShowTextAlongPathDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Gradient Keyframes")) {
 		iam_profiler_begin("Gradient Keyframes");
 		ShowGradientKeyframesDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Transform Interpolation")) {
 		iam_profiler_begin("Transform Interpolation");
 		ShowTransformInterpolationDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Timeline Markers")) {
 		iam_profiler_begin("Timeline Markers");
 		ShowTimelineMarkersDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Animation Chaining")) {
 		iam_profiler_begin("Animation Chaining");
 		ShowAnimationChainingDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Text Stagger")) {
 		iam_profiler_begin("Text Stagger");
 		ShowTextStaggerDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Noise Channels")) {
 		iam_profiler_begin("Noise Channels");
 		ShowNoiseChannelsDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Style Interpolation")) {
 		iam_profiler_begin("Style Interpolation");
 		ShowStyleInterpolationDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Drag Feedback")) {
 		iam_profiler_begin("Drag Feedback");
 		ShowDragFeedbackDemo();
 		iam_profiler_end();
 	}
 
+	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Animation Inspector")) {
 		iam_profiler_begin("Animation Inspector");
 		ShowAnimationInspectorDemo();
 		iam_profiler_end();
 	}
 
-	// Footer
+	// Reset open/close all state after processing all headers
+	s_open_all = 0;
+
+	// Footer (inside child)
 	ImGui::Separator();
 	ImGui::TextDisabled("FPS: %.1f (dt: %.3f ms)", ImGui::GetIO().Framerate, ImGui::GetIO().DeltaTime * 1000.0f);
+
+	ImGui::EndChild();  // End scrollable content
 
 	ImGui::End();
 

@@ -78,6 +78,10 @@ void iam_set_ease_lut_samples(int count);                                       
 void  iam_set_global_time_scale(float scale);                                       // Set global time multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double).
 float iam_get_global_time_scale();                                                  // Get current global time scale.
 
+// Lazy Initialization - defer channel creation until animation is needed
+void iam_set_lazy_init(bool enable);                                                // Enable/disable lazy initialization (default: true).
+bool iam_is_lazy_init_enabled();                                                    // Check if lazy init is enabled.
+
 // Custom easing functions
 void iam_register_custom_ease(int slot, iam_ease_fn fn);                            // Register custom easing in slot 0-15. Use with iam_ease_custom_fn(slot).
 iam_ease_fn iam_get_custom_ease(int slot);                                          // Get registered custom easing function.
