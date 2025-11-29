@@ -37,330 +37,534 @@ static void ApplyOpenAll()
 // HELPER: Use iam_eval_preset from im_anim API for easing evaluation
 
 // ============================================================
-// SECTION: Hero Animation (Showcase) - Brand Reveal Style
+// SECTION: Hero Animation - Dynamic Brand Showcase
 // ============================================================
 
-// Snappy easings for punchy motion
-static float EaseOutExpo(float t) { return t >= 1.0f ? 1.0f : 1.0f - powf(2.0f, -10.0f * t); }
-static float EaseOutCubic(float t) { return 1.0f - powf(1.0f - t, 3.0f); }
-static float EaseOutBack(float t) { float c = 2.5f; return 1.0f + (c + 1.0f) * powf(t - 1.0f, 3.0f) + c * powf(t - 1.0f, 2.0f); }
+// Helper: Draw a rotated rectangle
+static void DrawRotatedRect(ImDrawList* dl, ImVec2 ctr, ImVec2 size, float angle, ImU32 fill, ImU32 border) {
+	float c = cosf(angle), s = sinf(angle);
+	ImVec2 corners[4] = {
+		ImVec2(-size.x * 0.5f, -size.y * 0.5f),
+		ImVec2( size.x * 0.5f, -size.y * 0.5f),
+		ImVec2( size.x * 0.5f,  size.y * 0.5f),
+		ImVec2(-size.x * 0.5f,  size.y * 0.5f)
+	};
+	ImVec2 pts[4];
+	for (int i = 0; i < 4; i++) {
+		pts[i].x = ctr.x + corners[i].x * c - corners[i].y * s;
+		pts[i].y = ctr.y + corners[i].x * s + corners[i].y * c;
+	}
+	dl->AddConvexPolyFilled(pts, 4, fill);
+	if ((border & IM_COL32_A_MASK) > 0)
+		dl->AddPolyline(pts, 4, border, ImDrawFlags_Closed, 1.5f);
+}
 
 static void ShowHeroAnimation()
 {
 	float dt = GetSafeDeltaTime();
-	static float hero_time = 0.0f;
-	hero_time += dt;
+	static float T = 0.0f;  // Global time
+	T += dt;
 
-	// === TIMING - Tight 5 second cycle ===
-	// Beat 1: 0.0-0.6s  - HOLD (tension)
-	// Beat 2: 0.6-0.75s - FLASH (impact)
-	// Beat 3: 0.75-1.3s - LOGO SLAM
-	// Beat 4: 1.3-1.6s  - SUBTITLE WIPE
-	// Beat 5: 1.6-2.2s  - FEATURES CASCADE
-	// Beat 6: 2.2-5.0s  - AMBIENT
-	const float CYCLE = 5.0f;
-	float t = fmodf(hero_time, CYCLE);
+	// === 8-second cycle with sequences ===
+	const float CYCLE = 8.0f;
+	float t = fmodf(T, CYCLE);
 
-	ImDrawList* draw_list = ImGui::GetWindowDrawList();
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 280.0f);
-	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 8.0f);
-
-	// === BACKGROUND - Pure black during hold, then gradient ===
-	float bg_reveal = (t < 0.6f) ? 0.0f : ImClamp((t - 0.6f) / 0.3f, 0.0f, 1.0f);
-	ImU32 bg_color = IM_COL32((int)(8 * bg_reveal), (int)(10 * bg_reveal), (int)(18 * bg_reveal), 255);
-	draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), bg_color);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 cp = ImGui::GetCursorScreenPos();  // Canvas position
+	ImVec2 cs = ImVec2(ImGui::GetContentRegionAvail().x, 300.0f);  // Canvas size
+	ImVec2 cc = ImVec2(cp.x + cs.x * 0.5f, cp.y + cs.y * 0.5f);    // Canvas center
 
 	// === BRAND COLORS ===
-	// Main: #5BC2E7 (91, 194, 231) - Cyan
-	// Accent: #CC7858 (204, 120, 88) - Coral
-	const ImVec4 col_main = ImVec4(91/255.0f, 194/255.0f, 231/255.0f, 1.0f);
-	const ImVec4 col_accent = ImVec4(204/255.0f, 120/255.0f, 88/255.0f, 1.0f);
+	const ImU32 C1 = IM_COL32(91, 194, 231, 255);   // Main cyan
+	const ImU32 C2 = IM_COL32(204, 120, 88, 255);   // Accent coral
+	const ImU32 C1a = IM_COL32(91, 194, 231, 80);
+	const ImU32 C2a = IM_COL32(204, 120, 88, 80);
 
-	// === BEAT 1: TENSION - Pulsing dot in center ===
-	if (t < 0.75f) {
-		float pulse = sinf(t * 18.0f) * 0.5f + 0.5f;
-		float dot_size = 3.0f + pulse * 4.0f;
-		float dot_alpha = (t < 0.6f) ? (0.4f + pulse * 0.4f) : (1.0f - (t - 0.6f) / 0.15f);
-		if (dot_alpha > 0.0f) {
-			draw_list->AddCircleFilled(center, dot_size * 3, IM_COL32(91, 194, 231, (int)(dot_alpha * 30)));
-			draw_list->AddCircleFilled(center, dot_size, IM_COL32(91, 194, 231, (int)(dot_alpha * 255)));
+	// ========================================================
+	// LAYER 0: ANIMATED GRADIENT BACKGROUND
+	// ========================================================
+	{
+		float grad_shift = sinf(T * 0.8f) * 0.5f + 0.5f;
+		float grad_shift2 = sinf(T * 0.5f + 1.0f) * 0.5f + 0.5f;
+
+		// Four corners with animated colors
+		ImU32 tl = IM_COL32((int)(12 + 20 * grad_shift), (int)(14 + 15 * grad_shift), (int)(28 + 25 * grad_shift), 255);
+		ImU32 tr = IM_COL32((int)(8 + 30 * grad_shift2), (int)(12 + 20 * grad_shift2), (int)(22 + 35 * grad_shift2), 255);
+		ImU32 bl = IM_COL32((int)(15 + 25 * grad_shift2), (int)(10 + 18 * grad_shift2), (int)(25 + 30 * grad_shift2), 255);
+		ImU32 br = IM_COL32((int)(10 + 22 * grad_shift), (int)(15 + 12 * grad_shift), (int)(30 + 20 * grad_shift), 255);
+
+		dl->AddRectFilledMultiColor(cp, ImVec2(cp.x + cs.x, cp.y + cs.y), tl, tr, br, bl);
+	}
+
+	// ========================================================
+	// LAYER 1: BEZIER CURVES NETWORK (Background decoration)
+	// ========================================================
+	{
+		// Multiple curves flowing across the canvas
+		struct CurveDef { float ox, oy, ax, ay, speed, phase; };
+		CurveDef curves[] = {
+			{ 0.0f, 0.3f, 0.15f, 0.25f, 0.7f, 0.0f },
+			{ 0.0f, 0.7f, 0.2f,  0.2f,  0.5f, 1.5f },
+			{ 1.0f, 0.2f, -0.15f, 0.3f, 0.6f, 0.8f },
+			{ 1.0f, 0.8f, -0.2f, 0.15f, 0.8f, 2.2f },
+		};
+
+		for (int ci = 0; ci < 4; ci++) {
+			CurveDef& cv = curves[ci];
+			float anim = fmodf(T * cv.speed + cv.phase, 3.0f) / 3.0f;
+
+			// Dynamic bezier control points
+			ImVec2 p0 = ImVec2(cp.x + cs.x * cv.ox, cp.y + cs.y * cv.oy);
+			ImVec2 p3 = ImVec2(cp.x + cs.x * (1.0f - cv.ox), cp.y + cs.y * (1.0f - cv.oy + sinf(T + cv.phase) * 0.1f));
+			ImVec2 p1 = ImVec2(p0.x + cs.x * (cv.ax + sinf(T * 0.3f + cv.phase) * 0.05f),
+			                   p0.y + cs.y * (cv.ay * sinf(T * 0.5f + cv.phase)));
+			ImVec2 p2 = ImVec2(p3.x - cs.x * (cv.ax + cosf(T * 0.4f + cv.phase) * 0.05f),
+			                   p3.y - cs.y * (cv.ay * cosf(T * 0.6f + cv.phase)));
+
+			// Draw curve
+			ImVec2 prev = p0;
+			for (int i = 1; i <= 30; i++) {
+				float ct = (float)i / 30.0f;
+				ImVec2 pt = iam_bezier_cubic(p0, p1, p2, p3, ct);
+				int alpha = (int)(20 + 15 * sinf(ct * 3.14159f));
+				dl->AddLine(prev, pt, (ci % 2 == 0) ? IM_COL32(91, 194, 231, alpha) : IM_COL32(204, 120, 88, alpha), 1.0f);
+				prev = pt;
+			}
+
+			// Traveling dot on curve
+			float dot_t = iam_eval_preset(iam_ease_in_out_sine, anim);
+			ImVec2 dot_pos = iam_bezier_cubic(p0, p1, p2, p3, dot_t);
+			dl->AddCircleFilled(dot_pos, 3.0f, (ci % 2 == 0) ? C1a : C2a);
 		}
 	}
 
-	// === BEAT 2: FLASH - Screen flash at impact ===
-	if (t >= 0.6f && t < 0.9f) {
-		float flash_t = (t - 0.6f) / 0.3f;
-		float flash_alpha = (flash_t < 0.3f) ? EaseOutExpo(flash_t / 0.3f) : (1.0f - EaseOutCubic((flash_t - 0.3f) / 0.7f));
-		flash_alpha *= 0.7f;
-		if (flash_alpha > 0.01f) {
-			draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-				IM_COL32(140, 210, 235, (int)(flash_alpha * 255)));
+	// ========================================================
+	// LAYER 2: TRANSFORM SHOWCASE RECTANGLE (Rotation + Scale)
+	// ========================================================
+	{
+		// One rectangle with full transform: position along a RIGHT STROPHOID curve
+		// Strophoid parametric equations:
+		//   raw_x(s) = (s² - 1) / (s² + 1)
+		//   raw_y(s) = s * (s² - 1) / (s² + 1)
+		// Rotated 90° so the curve goes left-to-right with loop in middle
+
+		const float PI = 3.14159265f;
+		float center_x = cp.x + cs.x * 0.5f;
+		float center_y = cp.y + cs.y * 0.5f;
+		float travel = cs.x - 120.0f;  // Horizontal span of the curve
+
+		// Scale factor: raw_y spans [-1.2, 1.2] for s in [-2, 2], so 2.4 total
+		// We want the curve to span 'travel' horizontally
+		float curve_scale = travel / 2.4f;
+		float loop_height = curve_scale * 0.25f;  // Height of the loop (reduced more)
+
+		// Lambda to compute position on the RIGHT STROPHOID
+		// s ∈ [-2, 2] traces the full curve with loop
+		// Rotated 90° and flipped Y: x follows raw_y, y follows +raw_x (loop goes DOWN)
+		auto strophoid_pos = [&](float t) -> ImVec2 {
+			float s = -2.0f + 4.0f * t;  // Map t:[0,1] to s:[-2,2]
+			float s2 = s * s;
+			float denom = s2 + 1.0f;
+			float factor = (s2 - 1.0f) / denom;
+
+			float raw_x = factor;        // ranges: 0.6 → -1 → 0.6
+			float raw_y = s * factor;    // ranges: -1.2 → 0 → 1.2
+
+			// Rotate 90° + flip Y: new_x = raw_y, new_y = +raw_x (loop goes down)
+			float x = center_x + raw_y * curve_scale;
+			float y = center_y + raw_x * loop_height;
+			return ImVec2(x, y);
+		};
+
+		// Lambda to compute tangent (derivative) for rotation
+		// d(factor)/ds = 4s / (s²+1)²
+		// d(s·factor)/ds = (s⁴ + 4s² - 1) / (s²+1)²
+		auto strophoid_tangent = [&](float t) -> ImVec2 {
+			float s = -2.0f + 4.0f * t;
+			float s2 = s * s;
+			float denom = s2 + 1.0f;
+			float denom2 = denom * denom;
+
+			// Derivatives of raw coordinates w.r.t. s
+			float d_raw_x = 4.0f * s / denom2;
+			float d_raw_y = (s2 * s2 + 4.0f * s2 - 1.0f) / denom2;
+
+			// Rotated + flipped: dx/ds = d_raw_y, dy/ds = +d_raw_x
+			// Chain rule: dx/dt = dx/ds * ds/dt, where ds/dt = 4
+			float dx = d_raw_y * 4.0f * curve_scale;
+			float dy = d_raw_x * 4.0f * loop_height;
+			return ImVec2(dx, dy);
+		};
+
+		// Alias for compatibility with existing code
+		auto loop_curve_pos = strophoid_pos;
+		auto loop_curve_tangent = strophoid_tangent;
+
+		// Animation: 4s travel + 0.5s pause
+		float local_t = fmodf(T, 4.5f);
+		float progress = ImClamp(local_t / 4.0f, 0.0f, 1.0f);
+
+		// Apply bounce easing to the progress
+		float eased = iam_eval_preset(iam_ease_out_bounce, progress);
+
+		// Position on the continuous loop curve
+		ImVec2 pos = loop_curve_pos(eased);
+		ImVec2 tangent = loop_curve_tangent(eased);
+		float path_angle = atan2f(tangent.y, tangent.x);
+
+		// ROTATION: Follow tangent + extra spin with elastic easing
+		float rot_eased = iam_eval_preset(iam_ease_out_elastic, progress);
+		float rotation = path_angle + rot_eased * PI * 2.0f;
+
+		// SCALE: Burlesque exaggerated effect - dramatic swings
+		float scale_eased = iam_eval_preset(iam_ease_out_elastic, progress);
+		float base_scale = 0.2f + 0.9f * scale_eased;  // Starts tiny, grows big
+		// Strong pulse that peaks during the loop (around progress 0.3-0.7)
+		float loop_intensity = 1.0f - powf(fabsf(progress - 0.5f) * 2.0f, 2.0f);
+		float pulse = sinf(progress * PI * 6.0f) * 0.35f * loop_intensity;
+		// Add a "squash and stretch" effect based on velocity
+		float squash = sinf(progress * PI * 4.0f) * 0.2f * (1.0f - progress);
+		float scale = base_scale + pulse + squash;
+
+		// Draw the continuous loop curve path hint
+		ImVec2 prev_curve_pt = loop_curve_pos(0.0f);
+		for (int i = 1; i <= 80; i++) {
+			float ct = (float)i / 80.0f;
+			ImVec2 curve_pt = loop_curve_pos(ct);
+			int alpha = 25 + (int)(15.0f * sinf(ct * PI * 4.0f));
+			dl->AddLine(prev_curve_pt, curve_pt, IM_COL32(91, 194, 231, alpha), 2.0f);
+			prev_curve_pt = curve_pt;
+		}
+
+		// Motion trail with rotation - using same continuous curve
+		for (int tr = 6; tr >= 1; tr--) {
+			float trail_progress = ImMax(0.0f, progress - tr * 0.04f);
+			float trail_eased = iam_eval_preset(iam_ease_out_bounce, trail_progress);
+			float trail_rot_eased = iam_eval_preset(iam_ease_out_elastic, trail_progress);
+
+			ImVec2 trail_pos = loop_curve_pos(trail_eased);
+			ImVec2 trail_tan = loop_curve_tangent(trail_eased);
+			float trail_path_angle = atan2f(trail_tan.y, trail_tan.x);
+			float trail_rot = trail_path_angle + trail_rot_eased * PI * 2.0f;
+			float trail_scale = (0.3f + 0.7f * iam_eval_preset(iam_ease_out_back, trail_progress)) * (1.0f - tr * 0.08f);
+
+			int alpha = 50 - tr * 7;
+			DrawRotatedRect(dl, trail_pos, ImVec2(40.0f * trail_scale, 24.0f * trail_scale), trail_rot,
+				IM_COL32(91, 194, 231, alpha), 0);
+		}
+
+		// Main rectangle
+		ImVec2 rect_size = ImVec2(44.0f * scale, 26.0f * scale);
+		DrawRotatedRect(dl, pos, rect_size, rotation, C1, IM_COL32(255, 255, 255, 180));
+
+		// Inner detail to show rotation clearly
+		DrawRotatedRect(dl, pos, ImVec2(rect_size.x * 0.4f, rect_size.y * 0.4f), rotation, C2, 0);
+	}
+
+	// ========================================================
+	// LAYER 2b: ADDITIONAL PATH RECTANGLES
+	// ========================================================
+	{
+		// Two more rectangles with simpler animations
+		struct RectPath {
+			ImVec2 p0, p1, p2, p3;
+			int ease_type;
+			float duration, delay;
+			ImU32 color;
+		};
+
+		RectPath paths[2];
+
+		// Path 1: Top curve (back easing)
+		paths[0].p0 = ImVec2(cp.x + cs.x - 60, cp.y + cs.y * 0.25f);
+		paths[0].p3 = ImVec2(cp.x + 60, cp.y + cs.y * 0.25f);
+		paths[0].p1 = ImVec2(cp.x + cs.x * 0.7f, cp.y + 20);
+		paths[0].p2 = ImVec2(cp.x + cs.x * 0.3f, cp.y + 20);
+		paths[0].ease_type = iam_ease_out_back;
+		paths[0].duration = 2.2f;
+		paths[0].delay = 0.5f;
+		paths[0].color = C2;
+
+		// Path 2: Bottom curve (cubic)
+		paths[1].p0 = ImVec2(cp.x + 60, cp.y + cs.y * 0.75f);
+		paths[1].p3 = ImVec2(cp.x + cs.x - 60, cp.y + cs.y * 0.75f);
+		paths[1].p1 = ImVec2(cp.x + cs.x * 0.3f, cp.y + cs.y - 20);
+		paths[1].p2 = ImVec2(cp.x + cs.x * 0.7f, cp.y + cs.y - 20);
+		paths[1].ease_type = iam_ease_out_cubic;
+		paths[1].duration = 2.0f;
+		paths[1].delay = 0.8f;
+		paths[1].color = IM_COL32(140, 200, 180, 255);
+
+		for (int pi = 0; pi < 2; pi++) {
+			RectPath& rp = paths[pi];
+
+			float local_t = fmodf(T - rp.delay, rp.duration + 1.2f);
+			float progress = ImClamp(local_t / rp.duration, 0.0f, 1.0f);
+			float eased = iam_eval_preset(rp.ease_type, progress);
+
+			ImVec2 pos = iam_bezier_cubic(rp.p0, rp.p1, rp.p2, rp.p3, eased);
+			ImVec2 tan = iam_bezier_cubic_deriv(rp.p0, rp.p1, rp.p2, rp.p3, eased);
+			float angle = atan2f(tan.y, tan.x);
+
+			// Path dots
+			for (int i = 0; i < 15; i++) {
+				float pt = (float)i / 15.0f;
+				ImVec2 pp = iam_bezier_cubic(rp.p0, rp.p1, rp.p2, rp.p3, pt);
+				dl->AddCircleFilled(pp, 1.0f, IM_COL32((rp.color >> 0) & 0xFF, (rp.color >> 8) & 0xFF, (rp.color >> 16) & 0xFF, 20));
+			}
+
+			// Trail
+			for (int tr = 3; tr >= 1; tr--) {
+				float trail_eased = ImMax(0.0f, eased - tr * 0.05f);
+				ImVec2 trail_pos = iam_bezier_cubic(rp.p0, rp.p1, rp.p2, rp.p3, trail_eased);
+				ImVec2 trail_tan = iam_bezier_cubic_deriv(rp.p0, rp.p1, rp.p2, rp.p3, trail_eased);
+				float trail_angle = atan2f(trail_tan.y, trail_tan.x);
+				ImU32 trail_col = IM_COL32((rp.color >> 0) & 0xFF, (rp.color >> 8) & 0xFF, (rp.color >> 16) & 0xFF, 35 - tr * 10);
+				DrawRotatedRect(dl, trail_pos, ImVec2(22.0f - tr * 2.0f, 14.0f - tr), trail_angle, trail_col, 0);
+			}
+
+			// Main rectangle
+			float rect_scale = 0.8f + 0.2f * iam_eval_preset(iam_ease_out_back, ImMin(progress * 2.5f, 1.0f));
+			DrawRotatedRect(dl, pos, ImVec2(26.0f * rect_scale, 16.0f * rect_scale), angle, rp.color,
+				IM_COL32(255, 255, 255, 100));
 		}
 	}
 
-	// === BEAT 2: PARTICLE BURST - Explosion from center ===
-	if (t >= 0.6f && t < 2.0f) {
-		float burst_t = (t - 0.6f) / 1.4f;
-		const int num_burst = 24;
-		for (int i = 0; i < num_burst; i++) {
-			float angle = (float)i / num_burst * 6.28318f + 0.3f;
-			float speed = 180.0f + (i % 5) * 40.0f;
-			float dist = EaseOutExpo(burst_t) * speed;
-			float px = center.x + cosf(angle) * dist;
-			float py = center.y + sinf(angle) * dist * 0.5f;
+	// ========================================================
+	// LAYER 3: CENTRAL LOGO WITH TRANSFORM ANIMATION
+	// ========================================================
+	{
+		const char* logo = "ImAnim";
+		float base_size = ImGui::GetFontSize();
 
-			float particle_alpha = (1.0f - burst_t) * 0.8f;
-			float particle_size = 3.0f * (1.0f - burst_t * 0.5f);
+		// Sequence timing within cycle
+		// 0-1s: Build up (scale from 0)
+		// 1-3s: Hold with subtle motion
+		// 3-3.5s: Glitch/cut effect
+		// 3.5-7s: Hold
+		// 7-8s: Exit
 
-			if (particle_alpha > 0.01f) {
-				// Mix of main cyan and accent coral
-				ImU32 p_col = (i % 3 == 0) ? IM_COL32(91, 194, 231, (int)(particle_alpha * 255))   // Main cyan
-					: (i % 3 == 1) ? IM_COL32(204, 120, 88, (int)(particle_alpha * 255))          // Accent coral
-					: IM_COL32(130, 200, 220, (int)(particle_alpha * 255));                        // Light cyan
-				draw_list->AddCircleFilled(ImVec2(px, py), particle_size, p_col);
+		float logo_scale = 1.0f;
+		float logo_alpha = 1.0f;
+		float logo_y_offset = 0.0f;
+		float logo_rotation = 0.0f;
+		bool show_glitch = false;
+
+		if (t < 1.0f) {
+			// Enter: scale up with overshoot
+			float enter_t = t / 1.0f;
+			logo_scale = iam_eval_preset(iam_ease_out_back, enter_t) * 3.5f;
+			logo_alpha = iam_eval_preset(iam_ease_out_cubic, enter_t);
+			logo_y_offset = (1.0f - iam_eval_preset(iam_ease_out_expo, enter_t)) * 30.0f;
+		}
+		else if (t < 3.0f) {
+			// Hold with breathing
+			logo_scale = 3.5f + sinf(T * 2.5f) * 0.08f;
+			logo_rotation = sinf(T * 1.5f) * 0.015f;
+		}
+		else if (t < 3.5f) {
+			// Glitch cut
+			show_glitch = true;
+			logo_scale = 3.5f;
+			logo_y_offset = sinf((t - 3.0f) * 60.0f) * 8.0f * (1.0f - (t - 3.0f) * 2.0f);
+		}
+		else if (t < 7.0f) {
+			// Hold
+			logo_scale = 3.5f + sinf(T * 2.0f) * 0.05f;
+		}
+		else {
+			// Exit
+			float exit_t = (t - 7.0f) / 1.0f;
+			logo_scale = 3.5f * (1.0f - iam_eval_preset(iam_ease_in_back, exit_t));
+			logo_alpha = 1.0f - iam_eval_preset(iam_ease_in_expo, exit_t);
+		}
+
+		if (logo_scale > 0.1f && logo_alpha > 0.01f) {
+			float font_size = ImMax(1.0f, base_size * logo_scale);
+			float spacing = font_size * 0.6f;
+			float total_w = spacing * 5 + ImGui::CalcTextSize("m").x * logo_scale;
+			float start_x = cc.x - total_w * 0.5f;
+			float base_y = cc.y - font_size * 0.35f + logo_y_offset;
+
+			// Glitch effect: horizontal slice displacement
+			if (show_glitch) {
+				float gt = (t - 3.0f) * 4.0f;
+				for (int slice = 0; slice < 3; slice++) {
+					float slice_offset = sinf(gt * 20.0f + slice * 2.0f) * 15.0f * (1.0f - gt);
+					float slice_y = base_y + (slice - 1) * font_size * 0.3f;
+					ImU32 slice_col = (slice % 2 == 0) ? IM_COL32(91, 194, 231, (int)(80 * (1.0f - gt)))
+					                                   : IM_COL32(204, 120, 88, (int)(80 * (1.0f - gt)));
+					dl->AddText(nullptr, font_size * 0.9f, ImVec2(start_x + slice_offset, slice_y), slice_col, logo);
+				}
+			}
+
+			// Draw each character with stagger
+			for (int i = 0; i < 6; i++) {
+				char ch[2] = { logo[i], '\0' };
+
+				// Per-character wave motion
+				float char_wave = sinf(T * 3.0f + i * 0.5f) * 3.0f;
+				float char_scale = 1.0f + sinf(T * 2.0f + i * 0.8f) * 0.05f;
+
+				// Color: gradient across letters
+				float hue_t = (float)i / 5.0f;
+				int r = (int)(91 + (204 - 91) * hue_t);
+				int g = (int)(194 + (120 - 194) * hue_t);
+				int b = (int)(231 + (88 - 231) * hue_t);
+				ImU32 char_col = IM_COL32(r, g, b, (int)(logo_alpha * 255));
+
+				ImVec2 char_pos = ImVec2(start_x + i * spacing, base_y + char_wave);
+
+				// Shadow
+				dl->AddText(nullptr, font_size * char_scale, ImVec2(char_pos.x + 3, char_pos.y + 3),
+					IM_COL32(0, 0, 0, (int)(logo_alpha * 100)), ch);
+
+				// Glow
+				dl->AddText(nullptr, font_size * char_scale + 2, ImVec2(char_pos.x - 1, char_pos.y - 1),
+					IM_COL32(r, g, b, (int)(logo_alpha * 50)), ch);
+
+				// Main
+				dl->AddText(nullptr, font_size * char_scale, char_pos, char_col, ch);
+			}
+
+			// Underline with gradient
+			float line_y = base_y + font_size + 8.0f;
+			float line_progress = (t < 1.5f) ? iam_eval_preset(iam_ease_out_expo, (t - 0.5f) / 1.0f) : 1.0f;
+			if (t > 7.0f) line_progress = 1.0f - iam_eval_preset(iam_ease_in_expo, (t - 7.0f) / 0.5f);
+			line_progress = ImClamp(line_progress, 0.0f, 1.0f);
+
+			float line_w = total_w * 0.8f * line_progress;
+			if (line_w > 1.0f) {
+				// Gradient line (approximate with segments)
+				int segs = 20;
+				for (int i = 0; i < segs; i++) {
+					float seg_t = (float)i / segs;
+					float x1 = cc.x - line_w * 0.5f + line_w * seg_t;
+					float x2 = cc.x - line_w * 0.5f + line_w * (seg_t + 1.0f / segs);
+					int sr = (int)(91 + (204 - 91) * seg_t);
+					int sg = (int)(194 + (120 - 194) * seg_t);
+					int sb = (int)(231 + (88 - 231) * seg_t);
+					dl->AddLine(ImVec2(x1, line_y), ImVec2(x2, line_y), IM_COL32(sr, sg, sb, (int)(logo_alpha * 200)), 2.5f);
+				}
 			}
 		}
 	}
 
-	// === BEAT 3: LOGO SLAM - Scale punch with overshoot ===
-	const char* title = "ImAnim";
-	float base_font_size = ImGui::GetFontSize();
+	// ========================================================
+	// LAYER 4: FLOATING PARTICLES WITH EASING
+	// ========================================================
+	{
+		struct Particle { float seed, speed, size, ease_type; };
+		Particle particles[] = {
+			{ 1.0f, 0.8f, 3.0f, (float)iam_ease_out_sine },
+			{ 2.3f, 0.6f, 2.5f, (float)iam_ease_out_quad },
+			{ 3.7f, 1.0f, 2.0f, (float)iam_ease_out_cubic },
+			{ 4.1f, 0.7f, 3.5f, (float)iam_ease_out_bounce },
+			{ 5.5f, 0.9f, 2.8f, (float)iam_ease_out_elastic },
+			{ 6.2f, 0.5f, 2.2f, (float)iam_ease_in_out_sine },
+			{ 7.8f, 0.75f, 3.2f, (float)iam_ease_out_back },
+			{ 8.4f, 0.85f, 2.6f, (float)iam_ease_out_quart },
+		};
 
-	if (t >= 0.75f) {
-		float logo_t = ImClamp((t - 0.75f) / 0.35f, 0.0f, 1.0f);
+		for (int i = 0; i < 8; i++) {
+			Particle& p = particles[i];
 
-		// SLAM: Starts at 180%, settles to 100% with overshoot
-		float scale_punch;
-		if (logo_t < 1.0f) {
-			float raw = EaseOutBack(logo_t);
-			scale_punch = 1.8f - 0.8f * raw; // 1.8 -> 1.0 with overshoot below 1.0 then back
-		} else {
-			// Subtle breathing in ambient
-			scale_punch = 1.0f + sinf(hero_time * 2.0f) * 0.015f;
-		}
+			// Looping vertical motion
+			float cycle_t = fmodf(T * p.speed + p.seed * 10.0f, 4.0f);
+			float progress = ImClamp(cycle_t / 3.0f, 0.0f, 1.0f);
+			float eased_y = iam_eval_preset((int)p.ease_type, progress);
 
-		float title_scale = 3.2f * scale_punch;
-		float char_spacing = base_font_size * 3.2f * 0.56f;
-		float title_width = char_spacing * 6;
-		float title_x = center.x - title_width * 0.5f;
-		float title_y = center.y - base_font_size * 3.2f * 0.4f;
+			float px = cp.x + fmodf(p.seed * 137.0f, cs.x);
+			float py = cp.y + cs.y - eased_y * (cs.y + 40.0f);
 
-		// Alpha: instant on
-		float logo_alpha = (logo_t < 0.1f) ? logo_t / 0.1f : 1.0f;
+			// Alpha fade at edges
+			float alpha = 1.0f;
+			if (progress < 0.1f) alpha = progress / 0.1f;
+			if (progress > 0.9f) alpha = (1.0f - progress) / 0.1f;
 
-		// Y offset: slight drop
-		float y_offset = (logo_t < 1.0f) ? -15.0f * (1.0f - EaseOutExpo(logo_t)) : 0.0f;
-
-		for (int c = 0; c < 6; c++) {
-			// Slight stagger for each letter (very fast)
-			float char_delay = c * 0.02f;
-			float char_t = ImClamp((logo_t - char_delay) * 1.2f, 0.0f, 1.0f);
-			if (char_t < 0.01f) continue;
-
-			float char_alpha = logo_alpha * char_t;
-			float char_scale_offset = (1.0f - char_t) * 0.3f;
-
-			// Color: Main cyan with slight variation per character
-			float blend = (float)c / 5.0f;
-			ImVec4 col;
-			// Gradient from main cyan to slightly lighter
-			col.x = col_main.x + blend * 0.1f;
-			col.y = col_main.y + blend * 0.05f;
-			col.z = col_main.z;
-
-			float cx = title_x + c * char_spacing;
-			float final_scale = title_scale * (1.0f + char_scale_offset);
-			float font_size = ImMax(1.0f, base_font_size * final_scale);
-
-			char ch[2] = { title[c], '\0' };
-			ImVec2 pos = ImVec2(cx, title_y + y_offset);
-
-			// Hard shadow
-			draw_list->AddText(nullptr, font_size, ImVec2(pos.x + 4, pos.y + 4),
-				IM_COL32(0, 0, 0, (int)(char_alpha * 150)), ch);
+			ImU32 pcol = (i % 2 == 0)
+				? IM_COL32(91, 194, 231, (int)(alpha * 150))
+				: IM_COL32(204, 120, 88, (int)(alpha * 120));
 
 			// Glow
-			draw_list->AddText(nullptr, font_size + 3, ImVec2(pos.x - 1, pos.y - 1),
-				IM_COL32((int)(col.x * 255), (int)(col.y * 255), (int)(col.z * 255), (int)(char_alpha * 80)), ch);
+			dl->AddCircleFilled(ImVec2(px, py), p.size * 2.5f, IM_COL32((pcol >> 0) & 0xFF, (pcol >> 8) & 0xFF, (pcol >> 16) & 0xFF, (int)(alpha * 30)));
+			dl->AddCircleFilled(ImVec2(px, py), p.size, pcol);
+		}
+	}
 
-			// Main
-			draw_list->AddText(nullptr, font_size, pos,
-				IM_COL32((int)(col.x * 255), (int)(col.y * 255), (int)(col.z * 255), (int)(char_alpha * 255)), ch);
+	// ========================================================
+	// LAYER 5: SUBTITLE TEXT ON WAVE
+	// ========================================================
+	{
+		const char* subtitle = "Fluid Animation for Dear ImGui";
+		int len = (int)strlen(subtitle);
+
+		// Appear after logo settles
+		float sub_alpha = 0.0f;
+		if (t > 1.5f && t < 7.5f) {
+			if (t < 2.5f) sub_alpha = (t - 1.5f) / 1.0f;
+			else if (t > 6.5f) sub_alpha = (7.5f - t) / 1.0f;
+			else sub_alpha = 1.0f;
 		}
 
-		// === HORIZONTAL LINE ACCENT ===
-		if (t >= 1.0f) {
-			float line_t = ImClamp((t - 1.0f) / 0.25f, 0.0f, 1.0f);
-			float line_width = EaseOutExpo(line_t) * (canvas_size.x * 0.35f);
-			float line_y = title_y + base_font_size * 3.2f + 8.0f;
-			float line_alpha = (t < 2.2f) ? 1.0f : ImMax(0.3f, 1.0f - (t - 2.2f) * 0.3f);
+		if (sub_alpha > 0.01f) {
+			float base_y = cc.y + 55.0f;
+			float wave_amp = 6.0f;
+			float total_w = ImGui::CalcTextSize(subtitle).x * 1.1f;
+			float start_x = cc.x - total_w * 0.5f;
 
-			draw_list->AddLine(
-				ImVec2(center.x - line_width, line_y),
-				ImVec2(center.x + line_width, line_y),
-				IM_COL32(204, 120, 88, (int)(line_alpha * 200)), 2.0f);  // Accent coral
+			float char_x = start_x;
+			for (int i = 0; i < len; i++) {
+				char ch[2] = { subtitle[i], '\0' };
+				ImVec2 ch_size = ImGui::CalcTextSize(ch);
 
-			// End dots
-			if (line_t > 0.5f) {
-				float dot_a = (line_t - 0.5f) * 2.0f;
-				draw_list->AddCircleFilled(ImVec2(center.x - line_width, line_y), 3.0f, IM_COL32(204, 120, 88, (int)(dot_a * line_alpha * 255)));
-				draw_list->AddCircleFilled(ImVec2(center.x + line_width, line_y), 3.0f, IM_COL32(204, 120, 88, (int)(dot_a * line_alpha * 255)));
+				// Wave motion
+				float wave_y = sinf(T * 2.5f + i * 0.3f) * wave_amp;
+
+				// Stagger reveal
+				float reveal = ImClamp((sub_alpha * len * 1.5f - i) / 3.0f, 0.0f, 1.0f);
+				float char_alpha = sub_alpha * reveal;
+				float char_scale = 0.8f + 0.2f * iam_eval_preset(iam_ease_out_back, reveal);
+
+				if (char_alpha > 0.01f) {
+					ImU32 col = IM_COL32(180, 195, 210, (int)(char_alpha * 200));
+					dl->AddText(nullptr, ImGui::GetFontSize() * char_scale,
+						ImVec2(char_x, base_y + wave_y), col, ch);
+				}
+
+				char_x += ch_size.x * 1.05f;
 			}
 		}
 	}
 
-	// === BEAT 4: SUBTITLE - Wipe reveal from center ===
-	if (t >= 1.3f) {
-		const char* subtitle = "Fluid animations for Dear ImGui";
-		ImVec2 sub_size = ImGui::CalcTextSize(subtitle);
-		float sub_y = center.y + 38.0f;
+	// ========================================================
+	// LAYER 6: CORNER ACCENTS & FRAME
+	// ========================================================
+	{
+		float corner_progress = ImClamp((t - 2.0f) / 0.5f, 0.0f, 1.0f);
+		if (t > 7.0f) corner_progress = ImMax(0.0f, 1.0f - (t - 7.0f) / 0.3f);
 
-		float wipe_t = ImClamp((t - 1.3f) / 0.3f, 0.0f, 1.0f);
-		float wipe_width = EaseOutCubic(wipe_t) * sub_size.x * 0.5f;
+		float corner_len = 30.0f * iam_eval_preset(iam_ease_out_back, corner_progress);
+		ImU32 corner_col = IM_COL32(91, 194, 231, (int)(corner_progress * 150));
 
-		// Clipping simulation: draw text, but only reveal portion
-		float sub_alpha = (t < 2.2f) ? 0.7f : ImMax(0.4f, 0.7f - (t - 2.2f) * 0.1f);
-
-		// Draw full text with clip approximation (from center outward)
-		float text_x = center.x - sub_size.x * 0.5f;
-		float clip_left = center.x - wipe_width;
-		float clip_right = center.x + wipe_width;
-
-		// We'll draw character by character for wipe effect
-		float char_x = text_x;
-		for (const char* p = subtitle; *p; p++) {
-			char ch[2] = { *p, '\0' };
-			ImVec2 char_size = ImGui::CalcTextSize(ch);
-
-			// Check if character is within revealed area
-			float char_center = char_x + char_size.x * 0.5f;
-			if (char_center >= clip_left && char_center <= clip_right) {
-				draw_list->AddText(ImVec2(char_x, sub_y), IM_COL32(180, 210, 225, (int)(sub_alpha * 255)), ch);  // Light cyan tint
-			}
-			char_x += char_size.x;
-		}
-	}
-
-	// === BEAT 5: FEATURES CASCADE - Rapid fire from left ===
-	const char* features[] = { "Easings", "Springs", "Paths", "Colors", "Clips" };
-	float pills_y = canvas_pos.y + canvas_size.y - 32.0f;
-
-	// Calculate total width for centering
-	float total_w = 0;
-	float feat_widths[5];
-	for (int i = 0; i < 5; i++) {
-		feat_widths[i] = ImGui::CalcTextSize(features[i]).x + 20.0f;
-		total_w += feat_widths[i] + 8.0f;
-	}
-	total_w -= 8.0f;
-	float feat_x = center.x - total_w * 0.5f;
-
-	for (int i = 0; i < 5; i++) {
-		// Each pill: 0.06s apart, 0.15s animation
-		float pill_start = 1.6f + i * 0.06f;
-		float pill_t = ImClamp((t - pill_start) / 0.15f, 0.0f, 1.0f);
-
-		if (pill_t < 0.01f) {
-			feat_x += feat_widths[i] + 8.0f;
-			continue;
-		}
-
-		// Slide from left with overshoot
-		float slide_x = -30.0f * (1.0f - EaseOutBack(pill_t));
-		float pill_alpha = pill_t;
-		float pill_scale = 0.7f + 0.3f * EaseOutBack(pill_t);
-
-		ImVec2 text_size = ImGui::CalcTextSize(features[i]);
-		float pw = feat_widths[i] * pill_scale;
-		float ph = (ImGui::GetFontSize() + 10.0f) * pill_scale;
-
-		ImVec2 pill_pos = ImVec2(feat_x + feat_widths[i] * 0.5f + slide_x, pills_y);
-		ImVec2 pill_min = ImVec2(pill_pos.x - pw * 0.5f, pill_pos.y - ph * 0.5f);
-		ImVec2 pill_max = ImVec2(pill_pos.x + pw * 0.5f, pill_pos.y + ph * 0.5f);
-
-		// Color per pill - alternating between main and accent tints
-		ImVec4 pill_col, border_col;
-		if (i % 2 == 0) {
-			// Main cyan tint
-			pill_col = ImVec4(91/255.0f * 0.25f, 194/255.0f * 0.25f, 231/255.0f * 0.25f, 1.0f);
-			border_col = ImVec4(91/255.0f * 0.7f, 194/255.0f * 0.7f, 231/255.0f * 0.7f, 1.0f);
-		} else {
-			// Accent coral tint
-			pill_col = ImVec4(204/255.0f * 0.25f, 120/255.0f * 0.25f, 88/255.0f * 0.25f, 1.0f);
-			border_col = ImVec4(204/255.0f * 0.7f, 120/255.0f * 0.7f, 88/255.0f * 0.7f, 1.0f);
-		}
-
-		// Pill background
-		draw_list->AddRectFilled(pill_min, pill_max,
-			IM_COL32((int)(pill_col.x * 255), (int)(pill_col.y * 255), (int)(pill_col.z * 255), (int)(pill_alpha * 230)),
-			ph * 0.5f);
-		draw_list->AddRect(pill_min, pill_max,
-			IM_COL32((int)(border_col.x * 255), (int)(border_col.y * 255), (int)(border_col.z * 255), (int)(pill_alpha * 255)),
-			ph * 0.5f, 0, 1.5f);
-
-		// Text
-		float font_size = ImMax(1.0f, ImGui::GetFontSize() * pill_scale);
-		ImVec2 text_pos = ImVec2(pill_pos.x - text_size.x * pill_scale * 0.5f, pill_pos.y - text_size.y * pill_scale * 0.5f);
-		draw_list->AddText(nullptr, font_size, text_pos,
-			IM_COL32(220, 230, 255, (int)(pill_alpha * 255)), features[i]);
-
-		feat_x += feat_widths[i] + 8.0f;
-	}
-
-	// === AMBIENT: Subtle floating particles ===
-	if (t >= 2.0f) {
-		float ambient_alpha = ImClamp((t - 2.0f) / 0.5f, 0.0f, 1.0f) * 0.4f;
-		for (int i = 0; i < 12; i++) {
-			float seed = i * 5.7f;
-			float px = canvas_pos.x + fmodf(seed * 73.0f + hero_time * (5.0f + fmodf(seed, 3.0f)), canvas_size.x);
-			float py = canvas_pos.y + fmodf(seed * 127.0f + hero_time * (2.0f + fmodf(seed * 0.5f, 2.0f)), canvas_size.y);
-			float ps = 1.5f + sinf(hero_time * 2.0f + seed) * 0.5f;
-			// Mix of main and accent colors
-			ImU32 amb_col = (i % 2 == 0) ? IM_COL32(91, 194, 231, (int)(ambient_alpha * 150))
-			                             : IM_COL32(204, 120, 88, (int)(ambient_alpha * 120));
-			draw_list->AddCircleFilled(ImVec2(px, py), ps, amb_col);
-		}
-	}
-
-	// === SCANLINES - Tech aesthetic ===
-	if (t >= 0.7f && t < 1.5f) {
-		float scan_alpha = (t < 1.0f) ? (t - 0.7f) / 0.3f : 1.0f - (t - 1.0f) / 0.5f;
-		scan_alpha *= 0.08f;
-		for (float y = canvas_pos.y; y < canvas_pos.y + canvas_size.y; y += 4.0f) {
-			draw_list->AddLine(
-				ImVec2(canvas_pos.x, y),
-				ImVec2(canvas_pos.x + canvas_size.x, y),
-				IM_COL32(255, 255, 255, (int)(scan_alpha * 255)), 1.0f);
-		}
-	}
-
-	// === CORNER ACCENTS ===
-	if (t >= 1.8f) {
-		float corner_t = ImClamp((t - 1.8f) / 0.3f, 0.0f, 1.0f);
-		float corner_len = 25.0f * EaseOutCubic(corner_t);
-		float corner_alpha = corner_t * 0.6f;
-		ImU32 corner_col = IM_COL32(91, 194, 231, (int)(corner_alpha * 255));  // Main cyan
-
+		float m = 10.0f;  // Margin
 		// Top-left
-		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + 8 + corner_len, canvas_pos.y + 8), corner_col, 2.0f);
-		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + 8, canvas_pos.y + 8 + corner_len), corner_col, 2.0f);
-
+		dl->AddLine(ImVec2(cp.x + m, cp.y + m), ImVec2(cp.x + m + corner_len, cp.y + m), corner_col, 2.0f);
+		dl->AddLine(ImVec2(cp.x + m, cp.y + m), ImVec2(cp.x + m, cp.y + m + corner_len), corner_col, 2.0f);
 		// Top-right
-		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + canvas_size.x - 8 - corner_len, canvas_pos.y + 8), corner_col, 2.0f);
-		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8 + corner_len), corner_col, 2.0f);
-
+		dl->AddLine(ImVec2(cp.x + cs.x - m, cp.y + m), ImVec2(cp.x + cs.x - m - corner_len, cp.y + m), corner_col, 2.0f);
+		dl->AddLine(ImVec2(cp.x + cs.x - m, cp.y + m), ImVec2(cp.x + cs.x - m, cp.y + m + corner_len), corner_col, 2.0f);
 		// Bottom-left
-		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + 8 + corner_len, canvas_pos.y + canvas_size.y - 8), corner_col, 2.0f);
-		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8 - corner_len), corner_col, 2.0f);
-
-		// Bottom-right
-		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + canvas_size.x - 8 - corner_len, canvas_pos.y + canvas_size.y - 8), corner_col, 2.0f);
-		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8 - corner_len), corner_col, 2.0f);
+		dl->AddLine(ImVec2(cp.x + m, cp.y + cs.y - m), ImVec2(cp.x + m + corner_len, cp.y + cs.y - m), corner_col, 2.0f);
+		dl->AddLine(ImVec2(cp.x + m, cp.y + cs.y - m), ImVec2(cp.x + m, cp.y + cs.y - m - corner_len), corner_col, 2.0f);
+		// Bottom-right (accent color)
+		ImU32 corner_col2 = IM_COL32(204, 120, 88, (int)(corner_progress * 150));
+		dl->AddLine(ImVec2(cp.x + cs.x - m, cp.y + cs.y - m), ImVec2(cp.x + cs.x - m - corner_len, cp.y + cs.y - m), corner_col2, 2.0f);
+		dl->AddLine(ImVec2(cp.x + cs.x - m, cp.y + cs.y - m), ImVec2(cp.x + cs.x - m, cp.y + cs.y - m - corner_len), corner_col2, 2.0f);
 	}
 
 	// Reserve space
-	ImGui::Dummy(canvas_size);
+	ImGui::Dummy(cs);
 	ImGui::Spacing();
 }
 
