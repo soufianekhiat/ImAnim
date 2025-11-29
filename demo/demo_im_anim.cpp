@@ -39,306 +39,353 @@ static void ApplyOpenAll()
 // ============================================================
 // SECTION: Hero Animation (Showcase)
 // ============================================================
+
+// Attempt at motion design: custom easing with bezier for snappy feel
+static float EaseOutExpo(float t) { return t >= 1.0f ? 1.0f : 1.0f - powf(2.0f, -10.0f * t); }
+static float EaseOutQuint(float t) { return 1.0f - powf(1.0f - t, 5.0f); }
+static float EaseInOutQuart(float t) { return t < 0.5f ? 8.0f * t * t * t * t : 1.0f - powf(-2.0f * t + 2.0f, 4.0f) / 2.0f; }
+
+// Attempt at motion design: attempt at a smooth remap for phased animations
+static float Remap(float value, float inMin, float inMax, float outMin, float outMax) {
+	float t = (value - inMin) / (inMax - inMin);
+	t = ImClamp(t, 0.0f, 1.0f);
+	return outMin + t * (outMax - outMin);
+}
+
 static void ShowHeroAnimation()
 {
 	float dt = GetSafeDeltaTime();
 	static float hero_time = 0.0f;
 	hero_time += dt;
 
+	// === TIMING STRUCTURE ===
+	// Total cycle: 8 seconds
+	// Phase 1 (0.0-2.0s): Anticipation - energy gathers
+	// Phase 2 (2.0-3.5s): Impact - logo reveals with punch
+	// Phase 3 (3.5-8.0s): Settle - gentle ambient loop
+	const float CYCLE = 8.0f;
+	float cycle_time = fmodf(hero_time, CYCLE);
+
+	// Phase progress values (0-1 within each phase)
+	float phase1_t = Remap(cycle_time, 0.0f, 2.0f, 0.0f, 1.0f);
+	float phase2_t = Remap(cycle_time, 2.0f, 3.5f, 0.0f, 1.0f);
+
+	// === SETUP ===
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 320.0f);
-	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 15.0f);
+	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 300.0f);
+	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 10.0f);
 
-	// ===== Background with animated gradient =====
-	float bg_phase = hero_time * 0.15f;
-	ImVec4 bg_tl = ImVec4(0.06f + 0.02f * sinf(bg_phase), 0.06f, 0.12f + 0.03f * sinf(bg_phase * 0.7f), 1.0f);
-	ImVec4 bg_tr = ImVec4(0.08f, 0.05f + 0.02f * cosf(bg_phase * 0.8f), 0.14f + 0.02f * sinf(bg_phase * 1.2f), 1.0f);
-	ImVec4 bg_bl = ImVec4(0.05f + 0.01f * sinf(bg_phase * 0.5f), 0.07f, 0.13f, 1.0f);
-	ImVec4 bg_br = ImVec4(0.07f, 0.06f, 0.15f + 0.03f * cosf(bg_phase * 0.9f), 1.0f);
+	// === COLOR PALETTE (refined, cohesive) ===
+	const ImU32 col_bg_dark = IM_COL32(12, 14, 24, 255);
+	const ImU32 col_bg_mid = IM_COL32(18, 22, 38, 255);
 
+	// === BACKGROUND ===
+	// Subtle vignette gradient
 	draw_list->AddRectFilledMultiColor(canvas_pos,
 		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		ImGui::ColorConvertFloat4ToU32(bg_tl), ImGui::ColorConvertFloat4ToU32(bg_tr),
-		ImGui::ColorConvertFloat4ToU32(bg_br), ImGui::ColorConvertFloat4ToU32(bg_bl));
+		col_bg_mid, col_bg_mid, col_bg_dark, col_bg_dark);
 
-	// ===== Floating particles (background layer) =====
-	const int num_particles = 25;
+	// === LAYER 1: RADIAL LINES (anticipation energy) ===
+	if (cycle_time < 3.5f) {
+		int num_lines = 24;
+		float line_alpha = (cycle_time < 2.0f)
+			? EaseOutQuint(phase1_t) * 0.3f                    // Fade in during phase 1
+			: (1.0f - EaseOutExpo(phase2_t)) * 0.3f;          // Fade out during phase 2
+
+		for (int i = 0; i < num_lines; i++) {
+			float angle = (float)i / num_lines * 6.28318f;
+
+			// Lines extend outward during anticipation
+			float line_progress = (cycle_time < 2.0f)
+				? EaseInOutQuart(phase1_t)
+				: 1.0f;
+
+			float inner_r = 40.0f + 20.0f * line_progress;
+			float outer_r = 80.0f + 60.0f * line_progress;
+
+			ImVec2 p1 = ImVec2(center.x + cosf(angle) * inner_r, center.y + sinf(angle) * inner_r * 0.6f);
+			ImVec2 p2 = ImVec2(center.x + cosf(angle) * outer_r, center.y + sinf(angle) * outer_r * 0.6f);
+
+			ImU32 line_col = IM_COL32(90, 140, 255, (int)(line_alpha * 255));
+			draw_list->AddLine(p1, p2, line_col, 1.5f);
+		}
+	}
+
+	// === LAYER 2: CONVERGING PARTICLES ===
+	const int num_particles = 16;
 	for (int i = 0; i < num_particles; i++) {
-		float seed = (float)i * 7.31f;
-		float px = canvas_pos.x + fmodf(seed * 127.1f + hero_time * (8.0f + sinf(seed) * 5.0f), canvas_size.x);
-		float py = canvas_pos.y + fmodf(seed * 311.7f + hero_time * (3.0f + cosf(seed * 2.0f) * 2.0f), canvas_size.y);
+		float seed = (float)i * 7.31f + 0.5f;
+		float base_angle = seed * 2.39996f; // Golden angle distribution
+		float base_dist = 120.0f + fmodf(seed * 47.0f, 80.0f);
 
-		float twinkle = 0.3f + 0.7f * (0.5f + 0.5f * sinf(hero_time * (2.0f + seed * 0.1f) + seed));
-		float size = 1.0f + sinf(seed * 3.14f) * 0.8f;
-
-		ImU32 p_col = IM_COL32(180, 200, 255, (int)(twinkle * 80));
-		draw_list->AddCircleFilled(ImVec2(px, py), size, p_col);
-	}
-
-	// ===== Decorative bezier curves (motion path showcase) =====
-	float curve_alpha = 0.15f + 0.1f * sinf(hero_time * 0.8f);
-
-	// Left curve
-	ImVec2 c1_p0 = ImVec2(canvas_pos.x + 40, center.y + 60);
-	ImVec2 c1_p1 = ImVec2(canvas_pos.x + 100, center.y - 80);
-	ImVec2 c1_p2 = ImVec2(center.x - 100, center.y - 60);
-	ImVec2 c1_p3 = ImVec2(center.x - 60, center.y);
-	draw_list->AddBezierCubic(c1_p0, c1_p1, c1_p2, c1_p3, IM_COL32(100, 150, 255, (int)(curve_alpha * 255)), 2.0f);
-
-	// Right curve
-	ImVec2 c2_p0 = ImVec2(center.x + 60, center.y);
-	ImVec2 c2_p1 = ImVec2(center.x + 100, center.y - 60);
-	ImVec2 c2_p2 = ImVec2(canvas_pos.x + canvas_size.x - 100, center.y - 80);
-	ImVec2 c2_p3 = ImVec2(canvas_pos.x + canvas_size.x - 40, center.y + 60);
-	draw_list->AddBezierCubic(c2_p0, c2_p1, c2_p2, c2_p3, IM_COL32(150, 100, 255, (int)(curve_alpha * 255)), 2.0f);
-
-	// Animated dots traveling along curves
-	for (int d = 0; d < 3; d++) {
-		float dot_t = fmodf(hero_time * 0.3f + d * 0.33f, 1.0f);
-		float eased_t = iam_eval_preset(iam_ease_in_out_sine, dot_t);
-
-		// Left curve dot
-		ImVec2 dot1 = iam_bezier_cubic(c1_p0, c1_p1, c1_p2, c1_p3, eased_t);
-		float dot_alpha = sinf(dot_t * 3.14159f);
-		draw_list->AddCircleFilled(dot1, 4.0f, IM_COL32(150, 200, 255, (int)(dot_alpha * 200)));
-		draw_list->AddCircleFilled(dot1, 8.0f, IM_COL32(150, 200, 255, (int)(dot_alpha * 50)));
-
-		// Right curve dot
-		ImVec2 dot2 = iam_bezier_cubic(c2_p0, c2_p1, c2_p2, c2_p3, eased_t);
-		draw_list->AddCircleFilled(dot2, 4.0f, IM_COL32(200, 150, 255, (int)(dot_alpha * 200)));
-		draw_list->AddCircleFilled(dot2, 8.0f, IM_COL32(200, 150, 255, (int)(dot_alpha * 50)));
-	}
-
-	// ===== Central glow =====
-	float glow_pulse = 0.6f + 0.4f * iam_eval_preset(iam_ease_in_out_sine, fmodf(hero_time * 0.3f, 1.0f));
-	for (int g = 4; g >= 0; g--) {
-		float gr = 50.0f + g * 25.0f;
-		int ga = (int)((5 - g) * 8 * glow_pulse);
-		draw_list->AddCircleFilled(center, gr, IM_COL32(100, 120, 200, ga));
-	}
-
-	// ===== Orbiting elements with trails =====
-	const int num_orbiters = 6;
-	struct OrbiterState { float angle; float radius; ImVec4 color; };
-	static OrbiterState orbiters[6];
-	static bool orbiters_init = false;
-
-	if (!orbiters_init) {
-		for (int i = 0; i < num_orbiters; i++) {
-			orbiters[i].angle = (float)i / num_orbiters * 6.28318f;
-			orbiters[i].radius = 70.0f + (i % 3) * 25.0f;
-			float hue = (float)i / num_orbiters;
-			ImGui::ColorConvertHSVtoRGB(hue, 0.7f, 1.0f, orbiters[i].color.x, orbiters[i].color.y, orbiters[i].color.z);
-			orbiters[i].color.w = 1.0f;
-		}
-		orbiters_init = true;
-	}
-
-	for (int i = 0; i < num_orbiters; i++) {
-		float speed = 0.4f + (i % 3) * 0.15f;
-		float direction = (i % 2 == 0) ? 1.0f : -1.0f;
-		orbiters[i].angle += dt * speed * direction;
-
-		// Breathing radius
-		float breath = 1.0f + 0.1f * sinf(hero_time * 1.5f + i * 1.0f);
-		float r = orbiters[i].radius * breath;
-
-		// Current position
-		float x = center.x + cosf(orbiters[i].angle) * r;
-		float y = center.y + sinf(orbiters[i].angle) * r * 0.55f;
-
-		// Draw trail (fading circles behind)
-		const int trail_len = 8;
-		for (int t = trail_len; t >= 0; t--) {
-			float trail_angle = orbiters[i].angle - t * 0.08f * direction;
-			float tx = center.x + cosf(trail_angle) * r;
-			float ty = center.y + sinf(trail_angle) * r * 0.55f;
-			float trail_alpha = (1.0f - (float)t / trail_len) * 0.4f;
-			float trail_size = 6.0f * (1.0f - (float)t / trail_len * 0.5f);
-			ImU32 trail_col = IM_COL32(
-				(int)(orbiters[i].color.x * 255),
-				(int)(orbiters[i].color.y * 255),
-				(int)(orbiters[i].color.z * 255),
-				(int)(trail_alpha * 255));
-			draw_list->AddCircleFilled(ImVec2(tx, ty), trail_size, trail_col);
+		// During phase 1: particles converge toward center
+		// During phase 2+: particles orbit gently
+		float dist, angle;
+		if (cycle_time < 2.0f) {
+			float converge = EaseInOutQuart(phase1_t);
+			dist = base_dist * (1.0f - converge * 0.7f);
+			angle = base_angle + converge * 0.5f;
+		} else {
+			dist = base_dist * 0.3f + 20.0f;
+			angle = base_angle + hero_time * (0.15f + fmodf(seed, 0.1f));
 		}
 
-		// Pulsing size
-		float pulse_t = fmodf(hero_time * 2.0f + i * 0.5f, 1.0f);
-		float size_mult = 1.0f + 0.3f * iam_eval_preset(iam_ease_out_back, pulse_t < 0.5f ? pulse_t * 2.0f : 1.0f);
-		float size = 8.0f * size_mult;
+		float px = center.x + cosf(angle) * dist;
+		float py = center.y + sinf(angle) * dist * 0.55f;
 
-		// Glow layers
-		ImU32 glow_col = IM_COL32(
-			(int)(orbiters[i].color.x * 255),
-			(int)(orbiters[i].color.y * 255),
-			(int)(orbiters[i].color.z * 255), 40);
-		draw_list->AddCircleFilled(ImVec2(x, y), size * 2.0f, glow_col);
-		draw_list->AddCircleFilled(ImVec2(x, y), size * 1.4f, IM_COL32(
-			(int)(orbiters[i].color.x * 255),
-			(int)(orbiters[i].color.y * 255),
-			(int)(orbiters[i].color.z * 255), 100));
+		// Particle alpha based on phase
+		float p_alpha = (cycle_time < 2.0f)
+			? 0.3f + 0.4f * EaseOutQuint(phase1_t)
+			: 0.5f + 0.2f * sinf(hero_time * 2.0f + seed);
 
-		// Core
-		draw_list->AddCircleFilled(ImVec2(x, y), size, ImGui::ColorConvertFloat4ToU32(orbiters[i].color));
-		draw_list->AddCircle(ImVec2(x, y), size, IM_COL32(255, 255, 255, 150), 0, 1.5f);
+		// Size pulses subtly
+		float p_size = 2.0f + 1.5f * sinf(hero_time * 3.0f + seed * 2.0f);
+
+		// Alternate colors between primary and secondary
+		ImU32 p_col = (i % 3 == 0)
+			? IM_COL32(90, 140, 255, (int)(p_alpha * 200))
+			: (i % 3 == 1)
+				? IM_COL32(160, 120, 255, (int)(p_alpha * 180))
+				: IM_COL32(80, 200, 220, (int)(p_alpha * 160));
+
+		// Glow
+		draw_list->AddCircleFilled(ImVec2(px, py), p_size * 2.5f, IM_COL32(100, 140, 220, (int)(p_alpha * 40)));
+		draw_list->AddCircleFilled(ImVec2(px, py), p_size, p_col);
 	}
 
-	// ===== Central rings with elastic animation =====
-	float ring_t = fmodf(hero_time * 0.5f, 1.0f);
-	float ring_ease = iam_eval_preset(iam_ease_out_elastic, ring_t);
+	// === LAYER 3: IMPACT RING (phase 2 only) ===
+	if (cycle_time >= 2.0f && cycle_time < 4.0f) {
+		float ring_t = Remap(cycle_time, 2.0f, 4.0f, 0.0f, 1.0f);
+		float ring_radius = 20.0f + EaseOutExpo(ring_t) * 150.0f;
+		float ring_alpha = (1.0f - EaseOutQuint(ring_t)) * 0.6f;
+		float ring_thickness = 3.0f * (1.0f - ring_t * 0.7f);
 
-	for (int r = 0; r < 3; r++) {
-		float base_radius = 30.0f + r * 15.0f;
-		float animated_radius = base_radius + 10.0f * ring_ease * (1.0f - r * 0.2f);
-		float ring_alpha = (0.5f - r * 0.12f) * (1.0f - ring_t * 0.3f);
+		draw_list->AddCircle(center, ring_radius, IM_COL32(90, 160, 255, (int)(ring_alpha * 255)), 64, ring_thickness);
 
-		// Gradient from blue to purple
-		int rb = 130 + r * 20;
-		int gb = 160 - r * 20;
-		draw_list->AddCircle(center, animated_radius, IM_COL32(rb, gb, 255, (int)(ring_alpha * 255)), 0, 2.5f - r * 0.5f);
+		// Secondary ring (delayed)
+		if (ring_t > 0.15f) {
+			float ring2_t = Remap(ring_t, 0.15f, 1.0f, 0.0f, 1.0f);
+			float ring2_radius = 15.0f + EaseOutExpo(ring2_t) * 120.0f;
+			float ring2_alpha = (1.0f - EaseOutQuint(ring2_t)) * 0.4f;
+			draw_list->AddCircle(center, ring2_radius, IM_COL32(160, 120, 255, (int)(ring2_alpha * 255)), 48, 2.0f);
+		}
 	}
 
-	// ===== Title with wave animation =====
+	// === LAYER 4: CENTRAL GLOW ===
+	float glow_intensity = (cycle_time < 2.0f)
+		? 0.3f + 0.4f * EaseOutQuint(phase1_t)                             // Build up
+		: (cycle_time < 3.5f)
+			? 0.7f + 0.3f * (1.0f - EaseOutExpo(phase2_t * 0.5f))          // Peak at impact
+			: 0.5f + 0.15f * sinf(hero_time * 1.5f);                        // Gentle pulse
+
+	for (int g = 5; g >= 0; g--) {
+		float gr = 25.0f + g * 18.0f;
+		int ga = (int)((6 - g) * 7 * glow_intensity);
+		draw_list->AddCircleFilled(center, gr, IM_COL32(80, 120, 200, ga));
+	}
+
+	// === LAYER 5: ORBITING ACCENTS (3 elegant orbiters) ===
+	if (cycle_time >= 2.5f) {
+		float orbit_fade = ImClamp((cycle_time - 2.5f) / 1.0f, 0.0f, 1.0f);
+
+		for (int i = 0; i < 3; i++) {
+			float orbit_speed = 0.4f + i * 0.12f;
+			float orbit_radius = 55.0f + i * 22.0f;
+			float orbit_angle = hero_time * orbit_speed + i * 2.094f; // 120 degrees apart
+
+			// Elliptical orbit with depth
+			float ox = center.x + cosf(orbit_angle) * orbit_radius;
+			float oy = center.y + sinf(orbit_angle) * orbit_radius * 0.45f;
+
+			// Size based on "depth" (y position in orbit)
+			float depth = 0.7f + 0.3f * sinf(orbit_angle);
+			float o_size = (5.0f + i * 1.5f) * depth;
+
+			// Trail
+			const int trail_count = 6;
+			for (int t = trail_count; t >= 1; t--) {
+				float trail_angle = orbit_angle - t * 0.12f;
+				float tx = center.x + cosf(trail_angle) * orbit_radius;
+				float ty = center.y + sinf(trail_angle) * orbit_radius * 0.45f;
+				float trail_alpha = orbit_fade * (1.0f - (float)t / trail_count) * 0.35f * depth;
+
+				ImU32 trail_col = (i == 0) ? IM_COL32(90, 140, 255, (int)(trail_alpha * 255))
+					: (i == 1) ? IM_COL32(160, 120, 255, (int)(trail_alpha * 255))
+					: IM_COL32(80, 200, 220, (int)(trail_alpha * 255));
+
+				draw_list->AddCircleFilled(ImVec2(tx, ty), o_size * (1.0f - t * 0.1f), trail_col);
+			}
+
+			// Main orbiter
+			float o_alpha = orbit_fade * depth;
+			ImU32 o_glow = (i == 0) ? IM_COL32(90, 140, 255, (int)(o_alpha * 60))
+				: (i == 1) ? IM_COL32(160, 120, 255, (int)(o_alpha * 60))
+				: IM_COL32(80, 200, 220, (int)(o_alpha * 60));
+			ImU32 o_core = (i == 0) ? IM_COL32(120, 170, 255, (int)(o_alpha * 255))
+				: (i == 1) ? IM_COL32(180, 150, 255, (int)(o_alpha * 255))
+				: IM_COL32(100, 220, 235, (int)(o_alpha * 255));
+
+			draw_list->AddCircleFilled(ImVec2(ox, oy), o_size * 2.0f, o_glow);
+			draw_list->AddCircleFilled(ImVec2(ox, oy), o_size, o_core);
+			draw_list->AddCircle(ImVec2(ox, oy), o_size, IM_COL32(255, 255, 255, (int)(o_alpha * 120)), 0, 1.0f);
+		}
+	}
+
+	// === LAYER 6: LOGO TEXT ===
 	const char* title = "ImAnim";
 	const int title_len = 6;
 	float base_font_size = ImGui::GetFontSize();
-	float title_scale = 2.8f;
-	float avg_char_width = base_font_size * title_scale * 0.55f;
-	float title_width = avg_char_width * title_len;
+	float title_scale = 3.0f;
+	float char_spacing = base_font_size * title_scale * 0.58f;
+	float title_width = char_spacing * title_len;
 	float title_x = center.x - title_width * 0.5f;
-	float title_y = center.y - 35.0f;
+	float title_y = center.y - 28.0f;
 
 	for (int c = 0; c < title_len; c++) {
-		// Continuous wave motion
-		float wave_offset = sinf(hero_time * 3.0f + c * 0.8f) * 5.0f;
+		// Staggered reveal timing
+		float char_delay = c * 0.08f;
+		float char_appear_time = 2.1f + char_delay;
 
-		// Subtle scale breathing
-		float scale_breath = 1.0f + 0.05f * sinf(hero_time * 2.0f + c * 0.5f);
+		float char_alpha, char_scale, char_y_offset;
 
-		// Rainbow hue shift
-		float hue = fmodf(0.55f + (float)c / title_len * 0.3f + hero_time * 0.08f, 1.0f);
+		if (cycle_time < char_appear_time) {
+			// Not yet visible
+			char_alpha = 0.0f;
+			char_scale = 0.0f;
+			char_y_offset = 20.0f;
+		} else if (cycle_time < char_appear_time + 0.5f) {
+			// Reveal animation
+			float reveal_t = (cycle_time - char_appear_time) / 0.5f;
+			char_alpha = EaseOutQuint(reveal_t);
+			char_scale = 0.5f + 0.5f * iam_eval_preset(iam_ease_out_back, reveal_t); // Overshoot!
+			char_y_offset = 20.0f * (1.0f - EaseOutExpo(reveal_t));
+		} else {
+			// Settled state with subtle wave
+			char_alpha = 1.0f;
+			char_scale = 1.0f + 0.02f * sinf(hero_time * 2.5f + c * 0.4f);
+			char_y_offset = sinf(hero_time * 2.0f + c * 0.6f) * 2.5f;
+		}
+
+		if (char_alpha < 0.01f) continue;
+
+		// Color: subtle gradient across letters (blue to purple)
+		float char_hue = 0.6f + (float)c / title_len * 0.12f;
 		ImVec4 char_rgb;
-		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
+		ImGui::ColorConvertHSVtoRGB(char_hue, 0.45f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
 
-		float char_x = title_x + c * avg_char_width;
-		ImVec2 char_pos = ImVec2(char_x, title_y + wave_offset);
+		float cx = title_x + c * char_spacing;
+		ImVec2 char_pos = ImVec2(cx, title_y + char_y_offset);
+		float font_size = ImMax(1.0f, base_font_size * title_scale * char_scale);
 
-		float font_size = ImMax(1.0f, base_font_size * title_scale * scale_breath);
 		char char_str[2] = { title[c], '\0' };
 
-		// Shadow
-		draw_list->AddText(nullptr, font_size, ImVec2(char_pos.x + 2, char_pos.y + 2), IM_COL32(0, 0, 0, 100), char_str);
+		// Shadow (offset down-right)
+		draw_list->AddText(nullptr, font_size, ImVec2(char_pos.x + 3, char_pos.y + 3),
+			IM_COL32(0, 0, 0, (int)(char_alpha * 80)), char_str);
 
-		// Glow
-		ImU32 glow_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), 60);
-		draw_list->AddText(nullptr, font_size + 2, ImVec2(char_pos.x - 1, char_pos.y - 1), glow_col, char_str);
+		// Glow layer
+		draw_list->AddText(nullptr, font_size + 2, ImVec2(char_pos.x - 1, char_pos.y - 1),
+			IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(char_alpha * 50)), char_str);
 
-		// Main character
-		ImU32 char_col = IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), 255);
-		draw_list->AddText(nullptr, font_size, char_pos, char_col, char_str);
+		// Main text
+		draw_list->AddText(nullptr, font_size, char_pos,
+			IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(char_alpha * 255)), char_str);
 	}
 
-	// ===== Subtitle =====
+	// === LAYER 7: SUBTITLE ===
 	const char* subtitle = "Fluid animations for Dear ImGui";
 	ImVec2 subtitle_size = ImGui::CalcTextSize(subtitle);
-	float sub_alpha = 0.6f + 0.2f * sinf(hero_time * 1.2f);
-	draw_list->AddText(ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 20.0f),
-		IM_COL32(170, 185, 220, (int)(sub_alpha * 255)), subtitle);
 
-	// ===== Bottom wave with gradient =====
-	float wave_base_y = canvas_pos.y + canvas_size.y - 45.0f;
-	ImVec2 prev_pt = ImVec2(canvas_pos.x, wave_base_y);
+	// Subtitle appears after title
+	float sub_appear = Remap(cycle_time, 2.8f, 3.3f, 0.0f, 1.0f);
+	float sub_alpha = EaseOutQuint(sub_appear) * (0.55f + 0.15f * sinf(hero_time * 1.0f));
 
-	for (int w = 0; w <= 80; w++) {
-		float wx = canvas_pos.x + (canvas_size.x * w / 80.0f);
-		float wave_x = (float)w / 80.0f;
-
-		// Layered waves
-		float wave1 = sinf(wave_x * 8.0f + hero_time * 2.5f) * 8.0f;
-		float wave2 = sinf(wave_x * 12.0f - hero_time * 1.8f) * 4.0f;
-		float wave3 = sinf(wave_x * 4.0f + hero_time * 1.2f) * 6.0f;
-		float wy = wave_base_y + wave1 + wave2 + wave3;
-
-		// Color gradient along wave
-		float wave_hue = fmodf(0.5f + wave_x * 0.2f + hero_time * 0.05f, 1.0f);
-		ImVec4 wave_rgb;
-		ImGui::ColorConvertHSVtoRGB(wave_hue, 0.6f, 0.95f, wave_rgb.x, wave_rgb.y, wave_rgb.z);
-		ImU32 wave_col = IM_COL32((int)(wave_rgb.x * 255), (int)(wave_rgb.y * 255), (int)(wave_rgb.z * 255), 220);
-
-		if (w > 0) {
-			draw_list->AddLine(prev_pt, ImVec2(wx, wy), wave_col, 3.0f);
-		}
-		prev_pt = ImVec2(wx, wy);
+	if (sub_alpha > 0.01f) {
+		float sub_y_offset = 8.0f * (1.0f - EaseOutExpo(sub_appear));
+		draw_list->AddText(
+			ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 28.0f + sub_y_offset),
+			IM_COL32(160, 175, 210, (int)(sub_alpha * 255)), subtitle);
 	}
 
-	// ===== Feature badges =====
+	// === LAYER 8: FEATURE PILLS ===
 	const char* features[] = { "Easings", "Springs", "Paths", "Colors", "Clips" };
 	const int num_features = 5;
-	float badge_y = canvas_pos.y + canvas_size.y - 18.0f;
-	float total_badge_width = 0;
-	float badge_widths[5];
 
+	// Calculate layout
+	float pill_spacing = 10.0f;
+	float pill_heights = ImGui::GetFontSize() + 8.0f;
+	float total_pills_width = 0.0f;
+	float pill_widths[5];
 	for (int f = 0; f < num_features; f++) {
-		badge_widths[f] = ImGui::CalcTextSize(features[f]).x + 16.0f;
-		total_badge_width += badge_widths[f] + 8.0f;
+		pill_widths[f] = ImGui::CalcTextSize(features[f]).x + 18.0f;
+		total_pills_width += pill_widths[f];
 	}
-	total_badge_width -= 8.0f;
+	total_pills_width += pill_spacing * (num_features - 1);
 
-	float badge_start_x = center.x - total_badge_width * 0.5f;
-	float current_x = badge_start_x;
+	float pills_x = center.x - total_pills_width * 0.5f;
+	float pills_y = canvas_pos.y + canvas_size.y - 28.0f;
 
 	for (int f = 0; f < num_features; f++) {
-		// Staggered bounce animation
-		float badge_delay = f * 0.15f;
-		float badge_t = fmodf(hero_time * 0.4f + 0.5f - badge_delay, 2.5f);
-		badge_t = ImClamp(badge_t, 0.0f, 1.0f);
+		// Staggered appear from center outward
+		int appear_order = (f < num_features / 2) ? (num_features / 2 - f) : (f - num_features / 2);
+		float pill_delay = appear_order * 0.1f;
+		float pill_appear_time = 3.2f + pill_delay;
 
-		float bounce = iam_eval_preset(iam_ease_out_back, badge_t);
-		float badge_alpha = ImClamp(badge_t * 2.5f, 0.0f, 1.0f);
+		float pill_alpha, pill_scale;
+		if (cycle_time < pill_appear_time) {
+			pill_alpha = 0.0f;
+			pill_scale = 0.0f;
+		} else if (cycle_time < pill_appear_time + 0.4f) {
+			float pt = (cycle_time - pill_appear_time) / 0.4f;
+			pill_alpha = EaseOutQuint(pt);
+			pill_scale = iam_eval_preset(iam_ease_out_back, pt);
+		} else {
+			pill_alpha = 1.0f;
+			pill_scale = 1.0f;
+		}
 
-		if (badge_alpha < 0.01f || bounce < 0.01f) {
-			current_x += badge_widths[f] + 8.0f;
+		if (pill_alpha < 0.01f || pill_scale < 0.01f) {
+			pills_x += pill_widths[f] + pill_spacing;
 			continue;
 		}
 
 		ImVec2 text_size = ImGui::CalcTextSize(features[f]);
-		float pad_x = 8.0f;
-		float pad_y = 3.0f;
-		float badge_w = text_size.x + pad_x * 2;
-		float badge_h = text_size.y + pad_y * 2;
+		float pw = pill_widths[f] * pill_scale;
+		float ph = pill_heights * pill_scale;
 
-		float scale = bounce;
-		float offset_y = (1.0f - bounce) * 10.0f;
+		ImVec2 pill_center = ImVec2(pills_x + pill_widths[f] * 0.5f, pills_y);
+		ImVec2 pill_min = ImVec2(pill_center.x - pw * 0.5f, pill_center.y - ph * 0.5f);
+		ImVec2 pill_max = ImVec2(pill_center.x + pw * 0.5f, pill_center.y + ph * 0.5f);
 
-		ImVec2 badge_center = ImVec2(current_x + badge_widths[f] * 0.5f, badge_y + offset_y);
-		ImVec2 badge_min = ImVec2(badge_center.x - badge_w * 0.5f * scale, badge_center.y - badge_h * 0.5f * scale);
-		ImVec2 badge_max = ImVec2(badge_center.x + badge_w * 0.5f * scale, badge_center.y + badge_h * 0.5f * scale);
+		// Subtle color variation per pill
+		float pill_hue = 0.58f + (float)f / num_features * 0.15f;
+		ImVec4 pill_rgb;
+		ImGui::ColorConvertHSVtoRGB(pill_hue, 0.35f, 0.18f, pill_rgb.x, pill_rgb.y, pill_rgb.z);
+		ImU32 pill_bg = IM_COL32((int)(pill_rgb.x * 255), (int)(pill_rgb.y * 255), (int)(pill_rgb.z * 255), (int)(pill_alpha * 220));
 
-		// Badge color based on index
-		float badge_hue = 0.55f + (float)f / num_features * 0.25f;
-		ImVec4 badge_rgb;
-		ImGui::ColorConvertHSVtoRGB(badge_hue, 0.4f, 0.25f, badge_rgb.x, badge_rgb.y, badge_rgb.z);
-		ImU32 badge_bg = IM_COL32((int)(badge_rgb.x * 255), (int)(badge_rgb.y * 255), (int)(badge_rgb.z * 255), (int)(badge_alpha * 200));
+		ImGui::ColorConvertHSVtoRGB(pill_hue, 0.4f, 0.45f, pill_rgb.x, pill_rgb.y, pill_rgb.z);
+		ImU32 pill_border = IM_COL32((int)(pill_rgb.x * 255), (int)(pill_rgb.y * 255), (int)(pill_rgb.z * 255), (int)(pill_alpha * 255));
 
-		ImGui::ColorConvertHSVtoRGB(badge_hue, 0.5f, 0.6f, badge_rgb.x, badge_rgb.y, badge_rgb.z);
-		ImU32 badge_border = IM_COL32((int)(badge_rgb.x * 255), (int)(badge_rgb.y * 255), (int)(badge_rgb.z * 255), (int)(badge_alpha * 255));
+		// Rounded pill shape
+		float rounding = ph * 0.5f;
+		draw_list->AddRectFilled(pill_min, pill_max, pill_bg, rounding);
+		draw_list->AddRect(pill_min, pill_max, pill_border, rounding, 0, 1.0f);
 
-		draw_list->AddRectFilled(badge_min, badge_max, badge_bg, 4.0f);
-		draw_list->AddRect(badge_min, badge_max, badge_border, 4.0f, 0, 1.5f);
+		// Text
+		float font_size = ImMax(1.0f, ImGui::GetFontSize() * pill_scale);
+		ImVec2 text_pos = ImVec2(
+			pill_center.x - text_size.x * 0.5f * pill_scale,
+			pill_center.y - text_size.y * 0.5f * pill_scale);
+		draw_list->AddText(nullptr, font_size, text_pos,
+			IM_COL32(210, 220, 240, (int)(pill_alpha * 255)), features[f]);
 
-		// Badge text
-		float font_size = ImMax(1.0f, ImGui::GetFontSize() * scale);
-		ImVec2 text_pos = ImVec2(badge_center.x - text_size.x * 0.5f * scale, badge_center.y - text_size.y * 0.5f * scale);
-		draw_list->AddText(nullptr, font_size, text_pos, IM_COL32(230, 235, 255, (int)(badge_alpha * 255)), features[f]);
-
-		current_x += badge_widths[f] + 8.0f;
+		pills_x += pill_widths[f] + pill_spacing;
 	}
 
-	// ===== Border =====
+	// === BORDER (subtle) ===
 	draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(80, 100, 160, 120), 6.0f, 0, 1.5f);
+		IM_COL32(60, 80, 140, 80), 4.0f, 0, 1.0f);
 
 	// Reserve space
 	ImGui::Dummy(canvas_size);
