@@ -898,7 +898,7 @@ static void ShowEasingDemo()
 	// Draw easing curve
 	ImGui::Spacing();
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(300, 200);
+	ImVec2 canvas_size(300, 300);
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 	// Background
@@ -985,7 +985,7 @@ static void ShowEasingDemo()
 
 		// Draw bezier curve
 		ImVec2 bezier_canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 bezier_canvas_size(250, 180);
+		ImVec2 bezier_canvas_size(300, 300);
 		ImDrawList* bezier_draw_list = ImGui::GetWindowDrawList();
 
 		bezier_draw_list->AddRectFilled(bezier_canvas_pos,
@@ -1287,7 +1287,7 @@ static void ShowEasingDemo()
 		int num_eases = IM_ARRAYSIZE(eases);
 
 		// Grid layout - larger cells
-		ImVec2 cell_size(200, 160);
+		ImVec2 cell_size(300, 300);
 		int cols = (int)(ImGui::GetContentRegionAvail().x / (cell_size.x + 10));
 		if (cols < 1) cols = 1;
 		if (cols > 4) cols = 4;
@@ -1523,7 +1523,7 @@ static void ShowBasicTweensDemo()
 
 		// Draw a dot at the animated position
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(300, 150);
+		ImVec2 canvas_size(300, 300);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
 			IM_COL32(40, 40, 45, 255));
@@ -1572,7 +1572,7 @@ static void ShowBasicTweensDemo()
 
 	// Multi-property animation
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Multi-Property Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Multi-Property Animation")) {
 		ImGui::TextDisabled("Animate multiple properties on the same object with different timings");
 		ImGui::Spacing();
 
@@ -2130,7 +2130,7 @@ static void ShowWidgetsDemo()
 
 	// Animated buttons - using fixed layout to prevent movement
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Animated Buttons", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Animated Buttons")) {
 		ImGui::TextDisabled("Hover over buttons to see animation effects");
 		ImGui::Spacing();
 
@@ -2229,7 +2229,7 @@ static void ShowWidgetsDemo()
 	if (ImGui::TreeNode("Hover Card")) {
 		ImGuiID id = ImHashStr("card_demo");
 
-		ImVec2 card_size(280, 140);
+		ImVec2 card_size(480, 140);
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 
 		ImGui::InvisibleButton("##card", card_size);
@@ -2244,9 +2244,9 @@ static void ShowWidgetsDemo()
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		// Shadow
-		ImVec2 shadow_pos(pos.x + elevation * 0.3f, pos.y + y_offset + elevation);
+		ImVec2 shadow_pos(pos.x + elevation, pos.y + y_offset + elevation);
 		draw_list->AddRectFilled(shadow_pos, ImVec2(shadow_pos.x + card_size.x, shadow_pos.y + card_size.y),
-			IM_COL32(0, 0, 0, (int)(40 + elevation * 3)), 12.0f);
+			IM_COL32(255, 255, 255, (int)(40 + elevation * 3)), 12.0f);
 
 		// Card
 		ImVec2 card_pos(pos.x, pos.y + y_offset);
@@ -2282,6 +2282,7 @@ static const ImGuiID CLIP_STAGGER = 0x100A;
 static const ImGuiID CLIP_STAGGER_LIST = 0x100B;
 static const ImGuiID CLIP_STAGGER_GRID = 0x100C;
 static const ImGuiID CLIP_STAGGER_CARDS = 0x100D;
+static const ImGuiID CLIP_COLOR_OKLCH = 0x100E;
 
 // Channel IDs for clips
 static const ImGuiID CLIP_CH_ALPHA = 0x2001;
@@ -2305,16 +2306,12 @@ static void InitDemoClips()
 	if (s_clips_initialized) return;
 	s_clips_initialized = true;
 
-	// Clip 1: Multi-keyframe fade with pulse
+	// Clip 1: Simple fade in with scale
 	iam_clip::begin(CLIP_FADE_IN)
 		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_cubic)
-		.key_float(CLIP_CH_ALPHA, 0.5f, 1.0f, iam_ease_out_cubic)
-		.key_float(CLIP_CH_ALPHA, 0.8f, 0.6f, iam_ease_in_out_sine)
-		.key_float(CLIP_CH_ALPHA, 1.2f, 1.0f, iam_ease_out_cubic)
-		.key_float(CLIP_CH_SCALE, 0.0f, 0.5f, iam_ease_out_back)
-		.key_float(CLIP_CH_SCALE, 0.4f, 1.1f, iam_ease_out_back)
-		.key_float(CLIP_CH_SCALE, 0.7f, 0.95f, iam_ease_in_out_sine)
-		.key_float(CLIP_CH_SCALE, 1.0f, 1.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_ALPHA, 0.8f, 1.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.5f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_SCALE, 0.8f, 1.0f, iam_ease_out_cubic)
 		.end();
 
 	// Clip 2: Bounce with multiple keyframes
@@ -2348,13 +2345,14 @@ static void InitDemoClips()
 		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_cubic)
 		.key_float(CLIP_CH_ALPHA, 0.8f, 1.0f, iam_ease_out_cubic)
 		.key_float(CLIP_CH_SCALE, 0.0f, 0.3f, iam_ease_out_back)
-		.key_float(CLIP_CH_SCALE, 0.6f, 1.15f, iam_ease_out_back)
-		.key_float(CLIP_CH_SCALE, 1.2f, 1.0f, iam_ease_in_out_sine)
+		.key_float(CLIP_CH_SCALE, 0.6f, 1.08f, iam_ease_in_out_cubic)
+		.key_float(CLIP_CH_SCALE, 1.0f, 0.97f, iam_ease_in_out_sine)
+		.key_float(CLIP_CH_SCALE, 1.5f, 1.0f, iam_ease_out_cubic)
 		.key_vec2(CLIP_CH_OFFSET, 0.0f, ImVec2(-80, 0), iam_ease_out_cubic)
-		.key_vec2(CLIP_CH_OFFSET, 0.5f, ImVec2(10, 0), iam_ease_out_cubic)
+		.key_vec2(CLIP_CH_OFFSET, 0.5f, ImVec2(8, 0), iam_ease_in_out_cubic)
 		.key_vec2(CLIP_CH_OFFSET, 1.0f, ImVec2(0, 0), iam_ease_out_cubic)
-		.key_vec4(CLIP_CH_COLOR, 0.0f, ImVec4(1.0f, 1.0f, 1.0f, 1.0f), iam_ease_linear)
-		.key_vec4(CLIP_CH_COLOR, 0.6f, ImVec4(1.0f, 0.8f, 0.3f, 1.0f), iam_ease_out_cubic)
+		.key_vec4(CLIP_CH_COLOR, 0.0f, ImVec4(1.0f, 1.0f, 1.0f, 1.0f), iam_ease_out_cubic)
+		.key_vec4(CLIP_CH_COLOR, 0.6f, ImVec4(1.0f, 0.8f, 0.3f, 1.0f), iam_ease_in_out_cubic)
 		.key_vec4(CLIP_CH_COLOR, 1.5f, ImVec4(0.3f, 0.7f, 1.0f, 1.0f), iam_ease_out_cubic)
 		.end();
 
@@ -2461,6 +2459,18 @@ static void InitDemoClips()
 		.key_float(CLIP_CH_SCALE, 0.4f, 1.0f, iam_ease_out_cubic)
 		.set_stagger(5, 0.12f, 0.0f)
 		.end();
+
+	// Color keyframe clips - demonstrating different color spaces
+	// 5-color cycle in OKLCH (perceptually uniform with smooth hue transitions)
+	iam_clip::begin(CLIP_COLOR_OKLCH)
+		.key_color(CLIP_CH_COLOR, 0.0f, ImVec4(1.0f, 0.2f, 0.2f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Red
+		.key_color(CLIP_CH_COLOR, 1.0f, ImVec4(1.0f, 0.7f, 0.1f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Orange
+		.key_color(CLIP_CH_COLOR, 2.0f, ImVec4(0.2f, 0.9f, 0.3f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Green
+		.key_color(CLIP_CH_COLOR, 3.0f, ImVec4(0.2f, 0.5f, 1.0f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Blue
+		.key_color(CLIP_CH_COLOR, 4.0f, ImVec4(0.8f, 0.2f, 0.9f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Purple
+		.key_color(CLIP_CH_COLOR, 5.0f, ImVec4(1.0f, 0.2f, 0.2f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Back to Red
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
 }
 
 static void ShowClipSystemDemo()
@@ -2477,7 +2487,7 @@ static void ShowClipSystemDemo()
 
 	// Basic clip playback
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Basic Playback", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Basic Playback")) {
 		// Fade In with scale
 		{
 			static ImGuiID inst_id = ImHashStr("fade_inst");
@@ -2569,6 +2579,10 @@ static void ShowClipSystemDemo()
 			ImGui::SetWindowFontScale(1.0f);
 			ImGui::PopStyleVar();
 		}
+
+		ImGui::Spacing();
+		ImGui::TextWrapped("Note: Font scale animations may appear slightly jumpy due to text rasterization. "
+			"Small scale changes (e.g. 1.05 to 1.0) produce sub-pixel differences that don't render smoothly.");
 
 		ImGui::TreePop();
 	}
@@ -3223,6 +3237,63 @@ static void ShowClipSystemDemo()
 }
 
 // ============================================================
+// SECTION: Color Keyframe Demo
+// ============================================================
+static void ShowColorKeyframeDemo()
+{
+	InitDemoClips();
+
+	ImGui::TextWrapped(
+		"key_color() animates colors with 5 keyframes in OKLCH color space, "
+		"providing perceptually uniform transitions with smooth hue interpolation.");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Start animation on first run
+	static bool started = false;
+	static ImGuiID inst_oklch = ImHashStr("color_oklch_inst");
+
+	if (!started) {
+		iam_play(CLIP_COLOR_OKLCH, inst_oklch);
+		started = true;
+	}
+
+	if (ImGui::Button("Restart")) {
+		iam_play(CLIP_COLOR_OKLCH, inst_oklch);
+	}
+
+	ImGui::Spacing();
+	ImGui::Text("5-color cycle: Red -> Orange -> Green -> Blue -> Purple");
+	ImGui::Spacing();
+
+	// Get current color from animation
+	ImVec4 color(1, 1, 1, 1);
+	iam_instance inst = iam_get_instance(inst_oklch);
+	if (inst.valid()) {
+		inst.get_color(CLIP_CH_COLOR, &color);
+	}
+
+	// Draw color bar
+	float bar_width = ImGui::GetContentRegionAvail().x;
+	float bar_height = 50.0f;
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	ImU32 col32 = IM_COL32(
+		(int)(color.x * 255),
+		(int)(color.y * 255),
+		(int)(color.z * 255),
+		255
+	);
+	dl->AddRectFilled(pos, ImVec2(pos.x + bar_width, pos.y + bar_height), col32, 4.0f);
+	dl->AddRect(pos, ImVec2(pos.x + bar_width, pos.y + bar_height), IM_COL32(100, 100, 100, 255), 4.0f);
+
+	ImGui::Dummy(ImVec2(bar_width, bar_height + 8.0f));
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -3773,7 +3844,7 @@ static void ShowDrawListDemo()
 
 	// Rotating 3D Cube
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("3D Rotating Cube", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("3D Rotating Cube")) {
 		ImGui::TextDisabled("Wireframe cube with animated rotation");
 
 		static float angle_x = 0.0f;
@@ -4270,7 +4341,7 @@ static void ShowShakeWiggleDemo()
 
 	// Shake demo
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Shake (Decaying)", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Shake (Decaying)")) {
 		static float shake_intensity = 10.0f;
 		static float shake_frequency = 20.0f;
 		static float shake_decay = 0.5f;
@@ -4289,7 +4360,7 @@ static void ShowShakeWiggleDemo()
 
 		// Visual
 		ImVec2 box_pos = ImGui::GetCursorScreenPos();
-		ImVec2 box_size(100.0f, 60.0f);
+		ImVec2 box_size(180.0f, 60.0f);
 		ImVec2 center(box_pos.x + 150.0f + offset.x, box_pos.y + 40.0f + offset.y);
 
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -5285,7 +5356,7 @@ static void ShowNoiseChannelsDemo()
 
 	// 2D Noise visualization
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("2D Noise Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("2D Noise Visualization")) {
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(200, 200);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -5308,7 +5379,7 @@ static void ShowNoiseChannelsDemo()
 			for (int x = 0; x < res; x++) {
 				float nx = x * 0.1f + time_offset;
 				float ny = y * 0.1f;
-				float n = iam_noise(nx, ny, opts);
+				float n = iam_noise_2d(nx, ny, opts);
 				n = (n + 1.0f) * 0.5f; // Map from [-1,1] to [0,1]
 				ImU8 c = (ImU8)(n * 255);
 				ImVec2 p0(canvas_pos.x + x * cell_w, canvas_pos.y + y * cell_h);
@@ -5326,7 +5397,7 @@ static void ShowNoiseChannelsDemo()
 
 	// Animated noise channel demo
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Animated Noise Channel", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Animated Noise Channel")) {
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120.0f);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -5359,7 +5430,7 @@ static void ShowNoiseChannelsDemo()
 			snprintf(id_buf, sizeof(id_buf), "noise_demo_%d", i);
 
 			opts.seed = i * 12345;
-			float offset = iam_noise_channel(ImGui::GetID(id_buf), frequency, amplitude, opts, dt);
+			float offset = iam_noise_channel_float(ImGui::GetID(id_buf), frequency, amplitude, opts, dt);
 
 			draw_list->AddCircleFilled(ImVec2(x, center_y + offset), 12.0f, colors[i]);
 			draw_list->AddCircle(ImVec2(x, center_y + offset), 12.0f, IM_COL32(255, 255, 255, 100), 0, 2.0f);
@@ -5692,7 +5763,7 @@ static void ShowDragFeedbackDemo()
 
 	// Snap grid demo
 	ApplyOpenAll();
-	if (ImGui::TreeNodeEx("Grid Snapping", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Grid Snapping")) {
 		static ImVec2 drag_pos(100, 60);
 		static bool dragging = false;
 
@@ -5794,12 +5865,12 @@ static void ShowDragFeedbackDemo()
 
 		static ImVec2 snap_points[] = {
 			ImVec2(50, 50), ImVec2(150, 50), ImVec2(250, 50),
-			ImVec2(50, 100), ImVec2(150, 100), ImVec2(250, 100),
-			ImVec2(50, 150), ImVec2(150, 150), ImVec2(250, 150)
+			ImVec2(50, 150), ImVec2(150, 150), ImVec2(250, 150),
+			ImVec2(50, 250), ImVec2(150, 250), ImVec2(250, 250)
 		};
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(300, 200);
+		ImVec2 canvas_size(300, 300);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		draw_list->AddRectFilled(canvas_pos,
@@ -6445,7 +6516,7 @@ void ImAnimDemoWindow()
 	// 1. EASING & TWEENS
 	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Easing & Tweens", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::CollapsingHeader("Easing & Tweens")) {
 		iam_profiler_begin("Easing & Tweens");
 
 		ApplyOpenAll();
@@ -6491,7 +6562,7 @@ void ImAnimDemoWindow()
 	// 2. INTERACTIVE WIDGETS
 	// ========================================
 	ApplyOpenAll();
-	if (ImGui::CollapsingHeader("Interactive Widgets", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::CollapsingHeader("Interactive Widgets")) {
 		iam_profiler_begin("Interactive Widgets");
 		ShowWidgetsDemo();
 		iam_profiler_end();
@@ -6507,6 +6578,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Clip System")) {
 			ShowClipSystemDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Color Keyframes")) {
+			ShowColorKeyframeDemo();
 			ImGui::TreePop();
 		}
 

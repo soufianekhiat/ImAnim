@@ -1,7 +1,6 @@
 // im_anim.cpp — Dear ImGui animation helpers implementation.
 // Author: Soufiane KHIAT
 // License: MIT
-// Style: snake_case, tabs, east const.
 
 #include "im_anim.h"
 #include "imgui.h"
@@ -359,6 +358,10 @@ static ImVec4 oklab_to_srgb(ImVec4 L) {
 	float R = +4.0767416621f*l3 - 3.3077115913f*m3 + 0.2309699292f*s3;
 	float G = -1.2684380046f*l3 + 2.6097574011f*m3 - 0.3413193965f*s3;
 	float B = -0.0041960863f*l3 - 0.7034186147f*m3 + 1.7076147010f*s3;
+	// Clamp to valid linear sRGB range to avoid NaN from ImPow with negative values
+	R = ImClamp(R, 0.0f, 1.0f);
+	G = ImClamp(G, 0.0f, 1.0f);
+	B = ImClamp(B, 0.0f, 1.0f);
 	return linear_to_srgb(ImVec4(R,G,B,L.w));
 }
 
@@ -1226,6 +1229,11 @@ ImVec4 iam_tween_color_resolved(ImGuiID id, ImGuiID channel_id, iam_color_resolv
 	return iam_tween_color(id, channel_id, target, dur, ez, policy, color_space, dt);
 }
 
+int iam_tween_int_resolved(ImGuiID id, ImGuiID channel_id, iam_int_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt) {
+	int target = fn ? fn(user) : 0;
+	return iam_tween_int(id, channel_id, target, dur, ez, policy, dt);
+}
+
 void iam_rebase_float(ImGuiID id, ImGuiID channel_id, float new_target, float dt) {
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	int idx = iam_detail::g_float.pool.Map.GetInt(key, -1);
@@ -1265,6 +1273,23 @@ void iam_rebase_color(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float d
 	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
 }
 
+void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt) {
+	ImGuiID key = iam_detail::make_key(id, channel_id);
+	int idx = iam_detail::g_int.pool.Map.GetInt(key, -1);
+	if (idx == -1) return;
+	iam_detail::int_chan* c = iam_detail::g_int.pool.GetByIndex(idx);
+	if (c->progress() < 1.0f && dt > 0) c->tick(dt);
+	float remain = (1.0f - (c->progress() < 1.0f ? c->t : 1.0f)) * c->dur;
+	c->start = c->current;
+	c->target = new_target;
+	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
+	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+}
+
+ImVec4 iam_get_blended_color(ImVec4 a_srgb, ImVec4 b_srgb, float t, int color_space) {
+	return iam_detail::color::lerp_color(a_srgb, b_srgb, t, color_space);
+}
+
 // ============================================================
 // CLIP-BASED ANIMATION SYSTEM IMPLEMENTATION
 // ============================================================
@@ -1277,13 +1302,14 @@ struct keyframe {
 	float		time;
 	int			type;		// iam_channel_type
 	int			ease_type;	// iam_ease_type
+	int			color_space;// iam_color_space (for iam_chan_color)
 	float		bezier[4];
 	bool		has_bezier;
 	bool		is_spring;
 	iam_spring_params spring;
-	float		value[4];	// f=value[0], v2=(value[0],value[1]), v4=(value[0..3]), i=*(int*)&value[0]
+	float		value[4];	// f=value[0], v2=(value[0],value[1]), v4=(value[0..3]), i=*(int*)&value[0], color=(value[0..3])
 
-	keyframe() : channel(0), time(0), type(0), ease_type(iam_ease_linear), has_bezier(false), is_spring(false) {
+	keyframe() : channel(0), time(0), type(0), ease_type(iam_ease_linear), color_space(iam_col_oklab), has_bezier(false), is_spring(false) {
 		bezier[0] = bezier[1] = bezier[2] = bezier[3] = 0;
 		spring = { 1.0f, 120.0f, 20.0f, 0.0f };
 		value[0] = value[1] = value[2] = value[3] = 0;
@@ -1297,15 +1323,18 @@ struct keyframe {
 	ImVec4 get_vec4() const { return ImVec4(value[0], value[1], value[2], value[3]); }
 	void set_int(int i) { *(int*)&value[0] = i; }
 	int get_int() const { return *(int*)&value[0]; }
+	void set_color(ImVec4 c) { value[0] = c.x; value[1] = c.y; value[2] = c.z; value[3] = c.w; }
+	ImVec4 get_color() const { return ImVec4(value[0], value[1], value[2], value[3]); }
 };
 
 // iam_track: sorted keyframes for a single channel
 struct iam_track {
 	ImGuiID				channel;
 	int					type;
+	int					color_space;  // For iam_chan_color tracks
 	ImVector<keyframe>	keys;
 
-	iam_track() : channel(0), type(0) {}
+	iam_track() : channel(0), type(0), color_space(iam_col_oklab) {}
 };
 
 // Timeline marker
@@ -1380,17 +1409,20 @@ struct iam_instance_data {
 	// Per-channel current values (cached after evaluation)
 	ImGuiStorage	values_float;
 	ImGuiStorage	values_int;
-	// vec2/vec4 stored as float pairs/quads in separate arrays
+	// vec2/vec4/color stored as float pairs/quads in separate arrays
 	struct vec2_entry { ImGuiID ch; ImVec2 v; };
 	struct vec4_entry { ImGuiID ch; ImVec4 v; };
+	struct color_entry { ImGuiID ch; ImVec4 v; int color_space; };
 	ImVector<vec2_entry> values_vec2;
 	ImVector<vec4_entry> values_vec4;
+	ImVector<color_entry> values_color;
 
 	// Layered blending output (written by iam_layer_end)
 	ImGuiStorage	blended_float;
 	ImGuiStorage	blended_int;
 	ImVector<vec2_entry> blended_vec2;
 	ImVector<vec4_entry> blended_vec4;
+	ImVector<color_entry> blended_color;
 	bool			has_blended;	// true if blended values are valid
 
 	// Marker tracking - bitset for triggered markers (reset on loop)
@@ -1546,6 +1578,25 @@ static void eval_iam_track(iam_track const& trk, float t, iam_instance_data* ins
 			inst->values_int.SetInt(trk.channel, v);
 			break;
 		}
+		case iam_chan_color: {
+			ImVec4 a = k0->get_color(), b = k1->get_color();
+			// Blend in the specified color space
+			ImVec4 v = iam_detail::color::lerp_color(a, b, w, trk.color_space);
+			bool found = false;
+			for (int i = 0; i < inst->values_color.Size; ++i) {
+				if (inst->values_color[i].ch == trk.channel) {
+					inst->values_color[i].v = v;
+					inst->values_color[i].color_space = trk.color_space;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				iam_instance_data::color_entry e; e.ch = trk.channel; e.v = v; e.color_space = trk.color_space;
+				inst->values_color.push_back(e);
+			}
+			break;
+		}
 	}
 }
 
@@ -1685,6 +1736,27 @@ iam_clip& iam_clip::key_int(ImGuiID channel, float time, int value, int ease_typ
 	k.type = iam_chan_int;
 	k.ease_type = ease_type;
 	k.set_int(value);
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_color(ImGuiID channel, float time, ImVec4 value, int color_space, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_color;
+	k.ease_type = ease_type;
+	k.color_space = color_space;
+	k.set_color(value);
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
 	clip->build_keys.push_back(k);
 	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
@@ -1857,6 +1929,9 @@ void iam_clip::end() {
 			trk = &clip->iam_tracks.back();
 			trk->channel = k.channel;
 			trk->type = k.type;
+			if (k.type == iam_chan_color) {
+				trk->color_space = k.color_space;
+			}
 		}
 
 		trk->keys.push_back(k);
@@ -2041,6 +2116,26 @@ bool iam_instance::get_int(ImGuiID channel, int* out) const {
 	return true;
 }
 
+bool iam_instance::get_color(ImGuiID channel, ImVec4* out, int color_space) const {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst || !out) return false;
+	for (int i = 0; i < inst->values_color.Size; ++i) {
+		if (inst->values_color[i].ch == channel) {
+			// If requested color space differs from stored, convert
+			if (color_space != inst->values_color[i].color_space) {
+				// Convert from stored sRGB to requested color space and back
+				// Note: values are stored in sRGB after lerp_color
+				*out = inst->values_color[i].v;
+			} else {
+				*out = inst->values_color[i].v;
+			}
+			return true;
+		}
+	}
+	*out = ImVec4(0, 0, 0, 1);
+	return false;
+}
+
 // ----------------------------------------------------
 // Clip System API implementation
 // ----------------------------------------------------
@@ -2165,6 +2260,7 @@ void iam_clip_update(float dt) {
 			for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
 				eval_iam_track(clip->iam_tracks[tr], inst->time, inst);
 			}
+			inst->last_seen_frame = g_clip_sys.frame_counter;
 			if (clip->cb_complete)
 				clip->cb_complete(inst->inst_id, clip->cb_complete_user);
 
@@ -2291,6 +2387,12 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id) {
 	inst->chain_next_clip_id = 0;
 	inst->chain_next_inst_id = 0;
 	inst->chain_delay = 0;
+
+	// Evaluate initial frame immediately so values are available right away
+	float initial_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
+	for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
+		eval_iam_track(clip->iam_tracks[tr], initial_time, inst);
+	}
 
 	return iam_instance(instance_id);  // Return iam_instance with ID
 }
@@ -2769,6 +2871,7 @@ float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type,
 	}
 	float t = s->time * frequency + phase;
 	return amplitude * eval_wave(wave_type, t);
+}int iam_oscillate_int(ImGuiID id, int amplitude, float frequency, int wave_type, float phase, float dt) {	float result = iam_oscillate(id, (float)amplitude, frequency, wave_type, phase, dt);	return (int)(result + 0.5f * (result > 0 ? 1 : -1));  // Round to nearest int
 }
 
 ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt) {
@@ -2937,6 +3040,7 @@ float iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, 
 	float noise = n0 + (n1 - n0) * frac; // linear interpolation
 
 	return noise * intensity * decay;
+}int iam_shake_int(ImGuiID id, int intensity, float frequency, float decay_time, float dt) {	float result = iam_shake(id, (float)intensity, frequency, decay_time, dt);	return (int)(result + 0.5f * (result > 0 ? 1 : -1));
 }
 
 ImVec2 iam_shake_vec2(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt) {
@@ -3027,6 +3131,7 @@ float iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt) {
 	float n1 = hash_noise((unsigned int)id + sample + 1);
 
 	return amplitude * (n0 + (n1 - n0) * t);
+}int iam_wiggle_int(ImGuiID id, int amplitude, float frequency, float dt) {	float result = iam_wiggle(id, (float)amplitude, frequency, dt);	return (int)(result + 0.5f * (result > 0 ? 1 : -1));
 }
 
 ImVec2 iam_wiggle_vec2(ImGuiID id, ImVec2 amplitude, float frequency, float dt) {
@@ -3468,6 +3573,10 @@ struct path_data {
 
 		if (distance <= 0) return 0.0f;
 		if (distance >= total_length) return 1.0f;
+
+		// TODO: Add a define to choose between binary and
+		// an tabulated inverse CDF read, that's an approximation
+		// but faster for real-time.
 
 		// Binary search for the interval containing this distance
 		int lo = 0, hi = arc_lut.Size - 1;
@@ -4990,7 +5099,7 @@ noise_state* get_noise_state(ImGuiID id) {
 
 } // namespace iam_noise_detail
 
-float iam_noise(float x, float y, iam_noise_opts const& opts) {
+float iam_noise_2d(float x, float y, iam_noise_opts const& opts) {
 	float total = 0.0f;
 	float amplitude = 1.0f;
 	float frequency = 1.0f;
@@ -5048,12 +5157,12 @@ float iam_noise_3d(float x, float y, float z, iam_noise_opts const& opts) {
 	return total / max_value;
 }
 
-float iam_noise_channel(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt) {
+float iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt) {
 	using namespace iam_noise_detail;
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
-	float noise_val = iam_noise(s->time * frequency, 0.0f, opts);
+	float noise_val = iam_noise_2d(s->time * frequency, 0.0f, opts);
 	return noise_val * amplitude;
 }
 
@@ -5062,8 +5171,8 @@ ImVec2 iam_noise_channel_vec2(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, ia
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
-	float nx = iam_noise(s->time * frequency.x, 0.0f, opts);
-	float ny = iam_noise(s->time * frequency.y, 100.0f, opts); // Offset Y to get different values
+	float nx = iam_noise_2d(s->time * frequency.x, 0.0f, opts);
+	float ny = iam_noise_2d(s->time * frequency.y, 100.0f, opts); // Offset Y to get different values
 	return ImVec2(nx * amplitude.x, ny * amplitude.y);
 }
 
@@ -5072,18 +5181,18 @@ ImVec4 iam_noise_channel_vec4(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, ia
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
-	float nx = iam_noise(s->time * frequency.x, 0.0f, opts);
-	float ny = iam_noise(s->time * frequency.y, 100.0f, opts);
-	float nz = iam_noise(s->time * frequency.z, 200.0f, opts);
-	float nw = iam_noise(s->time * frequency.w, 300.0f, opts);
+	float nx = iam_noise_2d(s->time * frequency.x, 0.0f, opts);
+	float ny = iam_noise_2d(s->time * frequency.y, 100.0f, opts);
+	float nz = iam_noise_2d(s->time * frequency.z, 200.0f, opts);
+	float nw = iam_noise_2d(s->time * frequency.w, 300.0f, opts);
 	return ImVec4(nx * amplitude.x, ny * amplitude.y, nz * amplitude.z, nw * amplitude.w);
 }
 
-float iam_smooth_noise(ImGuiID id, float amplitude, float speed, float dt) {
+float iam_smooth_noise_float(ImGuiID id, float amplitude, float speed, float dt) {
 	iam_noise_opts opts;
 	opts.octaves = 2;
 	opts.persistence = 0.5f;
-	return iam_noise_channel(id, speed, amplitude, opts, dt);
+	return iam_noise_channel_float(id, speed, amplitude, opts, dt);
 }
 
 ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt) {
@@ -5094,6 +5203,7 @@ ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt
 }
 
 // ============================================================
+ImVec4 iam_smooth_noise_vec4(ImGuiID id, ImVec4 amplitude, float speed, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_vec4(id, ImVec4(speed, speed, speed, speed), amplitude, opts, dt);}ImVec4 iam_noise_channel_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt) {	ImVec4 noise = iam_noise_channel_vec4(id, ImVec4(frequency, frequency, frequency, frequency), amplitude, opts, dt);	ImVec4 working;	switch (color_space) {		case iam_col_srgb_linear:			working = iam_detail::color::srgb_to_linear(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::linear_to_srgb(working);		case iam_col_hsv:			working = iam_detail::color::srgb_to_hsv(base_color);			working.x = fmodf(working.x + noise.x + 1.0f, 1.0f);			working.y = ImClamp(working.y + noise.y, 0.0f, 1.0f);			working.z = ImClamp(working.z + noise.z, 0.0f, 1.0f);			working.w = ImClamp(working.w + noise.w, 0.0f, 1.0f);			return iam_detail::color::hsv_to_srgb(working);		case iam_col_oklab:			working = iam_detail::color::srgb_to_oklab(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::oklab_to_srgb(working);		case iam_col_oklch:			working = iam_detail::color::srgb_to_oklch(base_color);			working.x += noise.x; working.y += noise.y;			working.z = fmodf(working.z + noise.z + 360.0f, 360.0f);			working.w += noise.w;			return iam_detail::color::oklch_to_srgb(working);		default:			return ImVec4(ImClamp(base_color.x + noise.x, 0.0f, 1.0f), ImClamp(base_color.y + noise.y, 0.0f, 1.0f), ImClamp(base_color.z + noise.z, 0.0f, 1.0f), ImClamp(base_color.w + noise.w, 0.0f, 1.0f));	}}ImVec4 iam_smooth_noise_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_color(id, base_color, amplitude, speed, opts, color_space, dt);}
 // STYLE INTERPOLATION - Animate between ImGuiStyle themes
 // ============================================================
 
@@ -5249,25 +5359,37 @@ void iam_style_tween(ImGuiID id, ImGuiID target_style, float duration, iam_ease_
 // ============================================================
 // GRADIENT INTERPOLATION
 // ============================================================
-
-ImVec4 iam_gradient::sample(float t, int color_space) const {
-	if (stop_count == 0) return ImVec4(1, 1, 1, 1);
-	if (stop_count == 1) return stops[0].color;
-
-	// Clamp t
-	if (t <= stops[0].position) return stops[0].color;
-	if (t >= stops[stop_count - 1].position) return stops[stop_count - 1].color;
-
-	// Find the two stops we're between
-	for (int i = 0; i < stop_count - 1; ++i) {
-		if (t >= stops[i].position && t <= stops[i + 1].position) {
-			float range = stops[i + 1].position - stops[i].position;
-			float local_t = (range > 1e-6f) ? (t - stops[i].position) / range : 0.0f;
-			return iam_detail::color::lerp_color(stops[i].color, stops[i + 1].color, local_t, color_space);
+iam_gradient& iam_gradient::add(float position, ImVec4 color) {
+	// Find insertion point to maintain sorted order
+	int insert_idx = positions.Size;
+	for (int i = 0; i < positions.Size; ++i) {
+		if (position < positions[i]) {
+			insert_idx = i;
+			break;
 		}
 	}
+	// Insert at the correct position
+	positions.insert(positions.Data + insert_idx, position);
+	colors.insert(colors.Data + insert_idx, color);
+	return *this;
+}
 
-	return stops[stop_count - 1].color;
+ImVec4 iam_gradient::sample(float t, int color_space) const {
+	int count = positions.Size;
+	if (count == 0) return ImVec4(1, 1, 1, 1);
+	if (count == 1) return colors[0];
+	// Clamp t
+	if (t <= positions[0]) return colors[0];
+	if (t >= positions[count - 1]) return colors[count - 1];
+	// Find the two stops we are between (positions are already sorted)
+	for (int i = 0; i < count - 1; ++i) {
+		if (t >= positions[i] && t <= positions[i + 1]) {
+			float range = positions[i + 1] - positions[i];
+			float local_t = (range > 1e-6f) ? (t - positions[i]) / range : 0.0f;
+			return iam_detail::color::lerp_color(colors[i], colors[i + 1], local_t, color_space);
+		}
+	}
+	return colors[count - 1];
 }
 
 iam_gradient iam_gradient::solid(ImVec4 color) {
@@ -5294,48 +5416,42 @@ iam_gradient iam_gradient::three_color(ImVec4 start, ImVec4 mid, ImVec4 end) {
 
 iam_gradient iam_gradient_lerp(iam_gradient const& a, iam_gradient const& b, float t, int color_space) {
 	// Strategy: sample both gradients at unified positions and blend
-	// Collect all unique positions from both gradients
-	float positions[IAM_GRADIENT_MAX_STOPS * 2];
-	int pos_count = 0;
+	ImVector<float> all_positions;
 
-	for (int i = 0; i < a.stop_count; ++i) {
-		positions[pos_count++] = a.stops[i].position;
+	for (int i = 0; i < a.positions.Size; ++i) {
+		all_positions.push_back(a.positions[i]);
 	}
-	for (int i = 0; i < b.stop_count; ++i) {
-		// Add if not already present
+	for (int i = 0; i < b.positions.Size; ++i) {
 		bool found = false;
-		for (int j = 0; j < pos_count; ++j) {
-			if (fabsf(positions[j] - b.stops[i].position) < 1e-6f) {
+		for (int j = 0; j < all_positions.Size; ++j) {
+			if (fabsf(all_positions[j] - b.positions[i]) < 1e-6f) {
 				found = true;
 				break;
 			}
 		}
-		if (!found && pos_count < IAM_GRADIENT_MAX_STOPS * 2) {
-			positions[pos_count++] = b.stops[i].position;
+		if (!found) {
+			all_positions.push_back(b.positions[i]);
 		}
 	}
 
 	// Sort positions
-	for (int i = 0; i < pos_count - 1; ++i) {
-		for (int j = i + 1; j < pos_count; ++j) {
-			if (positions[j] < positions[i]) {
-				float tmp = positions[i];
-				positions[i] = positions[j];
-				positions[j] = tmp;
+	for (int i = 0; i < all_positions.Size - 1; ++i) {
+		for (int j = i + 1; j < all_positions.Size; ++j) {
+			if (all_positions[j] < all_positions[i]) {
+				float tmp = all_positions[i];
+				all_positions[i] = all_positions[j];
+				all_positions[j] = tmp;
 			}
 		}
 	}
 
-	// Limit to max stops
-	if (pos_count > IAM_GRADIENT_MAX_STOPS) pos_count = IAM_GRADIENT_MAX_STOPS;
-
-	// Build result gradient by sampling and blending at each position
+	// Build result gradient
 	iam_gradient result;
-	for (int i = 0; i < pos_count; ++i) {
-		ImVec4 color_a = a.sample(positions[i], color_space);
-		ImVec4 color_b = b.sample(positions[i], color_space);
+	for (int i = 0; i < all_positions.Size; ++i) {
+		ImVec4 color_a = a.sample(all_positions[i], color_space);
+		ImVec4 color_b = b.sample(all_positions[i], color_space);
 		ImVec4 blended = iam_detail::color::lerp_color(color_a, color_b, t, color_space);
-		result.add(positions[i], blended);
+		result.add(all_positions[i], blended);
 	}
 
 	return result;
@@ -5408,14 +5524,14 @@ iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient con
 	c->last_seen_frame = g_gradient_frame;
 
 	// Fast path: sleeping and target unchanged
-	if (c->sleeping && c->target.stop_count == target.stop_count) {
+	if (c->sleeping && c->target.stop_count() == target.stop_count()) {
 		bool same = true;
-		for (int i = 0; i < target.stop_count && same; ++i) {
-			if (fabsf(c->target.stops[i].position - target.stops[i].position) > 1e-6f) same = false;
-			if (fabsf(c->target.stops[i].color.x - target.stops[i].color.x) > 1e-6f) same = false;
-			if (fabsf(c->target.stops[i].color.y - target.stops[i].color.y) > 1e-6f) same = false;
-			if (fabsf(c->target.stops[i].color.z - target.stops[i].color.z) > 1e-6f) same = false;
-			if (fabsf(c->target.stops[i].color.w - target.stops[i].color.w) > 1e-6f) same = false;
+		for (int i = 0; i < target.stop_count() && same; ++i) {
+			if (fabsf(c->target.positions[i] - target.positions[i]) > 1e-6f) same = false;
+			if (fabsf(c->target.colors[i].x - target.colors[i].x) > 1e-6f) same = false;
+			if (fabsf(c->target.colors[i].y - target.colors[i].y) > 1e-6f) same = false;
+			if (fabsf(c->target.colors[i].z - target.colors[i].z) > 1e-6f) same = false;
+			if (fabsf(c->target.colors[i].w - target.colors[i].w) > 1e-6f) same = false;
 		}
 		if (same) return c->current;
 	}
@@ -5423,15 +5539,15 @@ iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient con
 	// Check if target changed
 	bool change = (c->policy != policy) || (c->ez.type != ez.type) ||
 	              (c->ez.p0 != ez.p0) || (c->ez.p1 != ez.p1) || (c->ez.p2 != ez.p2) || (c->ez.p3 != ez.p3) ||
-	              (c->progress() >= 1.0f) || (c->target.stop_count != target.stop_count);
+	              (c->progress() >= 1.0f) || (c->target.stop_count() != target.stop_count());
 
 	if (!change) {
-		for (int i = 0; i < target.stop_count && !change; ++i) {
-			if (fabsf(c->target.stops[i].position - target.stops[i].position) > 1e-6f) change = true;
-			if (fabsf(c->target.stops[i].color.x - target.stops[i].color.x) > 1e-6f) change = true;
-			if (fabsf(c->target.stops[i].color.y - target.stops[i].color.y) > 1e-6f) change = true;
-			if (fabsf(c->target.stops[i].color.z - target.stops[i].color.z) > 1e-6f) change = true;
-			if (fabsf(c->target.stops[i].color.w - target.stops[i].color.w) > 1e-6f) change = true;
+		for (int i = 0; i < target.stop_count() && !change; ++i) {
+			if (fabsf(c->target.positions[i] - target.positions[i]) > 1e-6f) change = true;
+			if (fabsf(c->target.colors[i].x - target.colors[i].x) > 1e-6f) change = true;
+			if (fabsf(c->target.colors[i].y - target.colors[i].y) > 1e-6f) change = true;
+			if (fabsf(c->target.colors[i].z - target.colors[i].z) > 1e-6f) change = true;
+			if (fabsf(c->target.colors[i].w - target.colors[i].w) > 1e-6f) change = true;
 		}
 	}
 
@@ -5882,7 +5998,7 @@ void iam_show_animation_inspector(bool* p_open) {
 
 			for (int y = 0; y < (int)preview_size; y += 2) {
 				for (int x = 0; x < (int)preview_size; x += 2) {
-					float n = iam_noise(x * scale, y * scale, preview_opts);
+					float n = iam_noise_2d(x * scale, y * scale, preview_opts);
 					n = (n + 1.0f) * 0.5f; // Map to [0,1]
 					ImU8 gray = (ImU8)(n * 255);
 					ImU32 col = IM_COL32(gray, gray, gray, 255);

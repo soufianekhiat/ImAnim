@@ -6,7 +6,6 @@
 // - Easing: presets + cubicBezier/steps/back/elastic/bounce/spring.
 // - Caching: ImPool + ImGuiStorage keyed by (ImGuiID, channel_id) via ImHashData.
 // - Resize helpers: relative targets, resolver callback, explicit rebase.
-// Style: snake_case, tabs, east const.
 
 #pragma once
 #include "imgui.h"
@@ -132,16 +131,19 @@ enum iam_wave_type {
 	iam_wave_square         // Square wave (on/off pulse)
 };
 float  iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt);       // Returns oscillating value [-amplitude, +amplitude].
+int    iam_oscillate_int(ImGuiID id, int amplitude, float frequency, int wave_type, float phase, float dt);      // Returns oscillating integer value [-amplitude, +amplitude].
 ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt); // 2D oscillation.
 ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt); // 4D oscillation.
 ImVec4 iam_oscillate_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt); // Color oscillation in specified color space.
 
 // Shake/Wiggle - procedural noise animations
 float  iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, float dt);       // Decaying random shake. Returns offset that decays to 0.
+int    iam_shake_int(ImGuiID id, int intensity, float frequency, float decay_time, float dt);     // Decaying random shake for integers.
 ImVec2 iam_shake_vec2(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt); // 2D decaying shake.
 ImVec4 iam_shake_vec4(ImGuiID id, ImVec4 intensity, float frequency, float decay_time, float dt); // 4D decaying shake.
 ImVec4 iam_shake_color(ImGuiID id, ImVec4 base_color, ImVec4 intensity, float frequency, float decay_time, int color_space, float dt); // Color shake in specified color space.
 float  iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt);                        // Continuous smooth random movement.
+int    iam_wiggle_int(ImGuiID id, int amplitude, float frequency, float dt);                      // Continuous smooth random movement for integers.
 ImVec2 iam_wiggle_vec2(ImGuiID id, ImVec2 amplitude, float frequency, float dt);                  // 2D continuous wiggle.
 ImVec4 iam_wiggle_vec4(ImGuiID id, ImVec4 amplitude, float frequency, float dt);                  // 4D continuous wiggle.
 ImVec4 iam_wiggle_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int color_space, float dt); // Color wiggle in specified color space.
@@ -171,18 +173,24 @@ typedef float  (*iam_float_resolver)(void* user);   // Returns float target valu
 typedef ImVec2 (*iam_vec2_resolver)(void* user);    // Returns vec2 target value.
 typedef ImVec4 (*iam_vec4_resolver)(void* user);    // Returns vec4 target value.
 typedef ImVec4 (*iam_color_resolver)(void* user);   // Returns color target (sRGB).
+typedef int    (*iam_int_resolver)(void* user);     // Returns int target value.
 
 // Resolved tweens - target computed dynamically by callback each frame
 float  iam_tween_float_resolved(ImGuiID id, ImGuiID channel_id, iam_float_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                     // Float with dynamic target.
 ImVec2 iam_tween_vec2_resolved(ImGuiID id, ImGuiID channel_id, iam_vec2_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec2 with dynamic target.
 ImVec4 iam_tween_vec4_resolved(ImGuiID id, ImGuiID channel_id, iam_vec4_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec4 with dynamic target.
 ImVec4 iam_tween_color_resolved(ImGuiID id, ImGuiID channel_id, iam_color_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt);    // Color with dynamic target.
+int    iam_tween_int_resolved(ImGuiID id, ImGuiID channel_id, iam_int_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                         // Int with dynamic target.
 
 // Rebase functions - change target of in-progress animation without restarting
 void iam_rebase_float(ImGuiID id, ImGuiID channel_id, float new_target, float dt);  // Smoothly redirect float animation to new target.
 void iam_rebase_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 new_target, float dt);  // Smoothly redirect vec2 animation to new target.
 void iam_rebase_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt);  // Smoothly redirect vec4 animation to new target.
 void iam_rebase_color(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt); // Smoothly redirect color animation to new target.
+void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt);      // Smoothly redirect int animation to new target.
+
+// Color blending utility
+ImVec4 iam_get_blended_color(ImVec4 a_srgb, ImVec4 b_srgb, float t, int color_space);  // Blend two sRGB colors in specified color space.
 
 // ----------------------------------------------------
 // Convenience shorthands for common easings
@@ -451,17 +459,20 @@ struct iam_noise_opts {
 };
 
 // Sample noise at a point (returns value in [-1, 1])
-float  iam_noise(float x, float y, iam_noise_opts const& opts = iam_noise_opts());                    // 2D noise
+float  iam_noise_2d(float x, float y, iam_noise_opts const& opts = iam_noise_opts());                    // 2D noise
 float  iam_noise_3d(float x, float y, float z, iam_noise_opts const& opts = iam_noise_opts());        // 3D noise
 
 // Animated noise channels - continuous noise that evolves over time
-float  iam_noise_channel(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt);       // 1D animated noise
+float  iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt);  // 1D animated noise
 ImVec2 iam_noise_channel_vec2(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, iam_noise_opts const& opts, float dt); // 2D animated noise
 ImVec4 iam_noise_channel_vec4(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, iam_noise_opts const& opts, float dt); // 4D animated noise
+ImVec4 iam_noise_channel_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt); // Animated color noise in specified color space
 
 // Convenience: smooth random movement (like wiggle but using noise)
-float  iam_smooth_noise(ImGuiID id, float amplitude, float speed, float dt);                          // Simple 1D smooth noise
+float  iam_smooth_noise_float(ImGuiID id, float amplitude, float speed, float dt);                          // Simple 1D smooth noise
 ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt);                    // Simple 2D smooth noise
+ImVec4 iam_smooth_noise_vec4(ImGuiID id, ImVec4 amplitude, float speed, float dt);                    // Simple 4D smooth noise
+ImVec4 iam_smooth_noise_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt); // Smooth noise for colors in specified color space
 
 // ----------------------------------------------------
 // Style Interpolation - animate between ImGuiStyle themes
@@ -491,38 +502,21 @@ void iam_style_unregister(ImGuiID style_id);
 // Gradient Interpolation - animate between color gradients
 // ----------------------------------------------------
 
-// Maximum number of stops in a gradient
-#define IAM_GRADIENT_MAX_STOPS 8
-
-// Single color stop in a gradient
-struct iam_gradient_stop {
-	float position;              // Position along gradient [0,1]
-	ImVec4 color;                // Color at this position (sRGB)
-
-	iam_gradient_stop() : position(0), color(1, 1, 1, 1) {}
-	iam_gradient_stop(float pos, ImVec4 col) : position(pos), color(col) {}
-	iam_gradient_stop(float pos, ImU32 col) : position(pos) {
-		color = ImGui::ColorConvertU32ToFloat4(col);
-	}
-};
-
-// Color gradient with up to 8 stops
+// Color gradient with any number of stops (sorted by position)
 struct iam_gradient {
-	iam_gradient_stop stops[IAM_GRADIENT_MAX_STOPS];
-	int stop_count;
+	ImVector<float> positions;   // Positions along gradient [0,1], kept sorted
+	ImVector<ImVec4> colors;     // Colors at each position (sRGB)
 
-	iam_gradient() : stop_count(0) {}
+	iam_gradient() {}
 
-	// Add a stop to the gradient
-	iam_gradient& add(float position, ImVec4 color) {
-		if (stop_count < IAM_GRADIENT_MAX_STOPS) {
-			stops[stop_count++] = iam_gradient_stop(position, color);
-		}
-		return *this;
-	}
+	// Add a stop to the gradient (automatically sorted by position)
+	iam_gradient& add(float position, ImVec4 color);
 	iam_gradient& add(float position, ImU32 color) {
 		return add(position, ImGui::ColorConvertU32ToFloat4(color));
 	}
+
+	// Get stop count
+	int stop_count() const { return positions.Size; }
 
 	// Sample the gradient at position t [0,1]
 	ImVec4 sample(float t, int color_space = iam_col_oklab) const;
@@ -555,8 +549,8 @@ enum iam_rotation_mode {
 // 2D transform (position, rotation, scale)
 struct iam_transform {
 	ImVec2 position;             // Translation
-	float rotation;              // Rotation in radians
 	ImVec2 scale;                // Scale (1,1 = identity)
+	float rotation;              // Rotation in radians
 
 	iam_transform() : position(0, 0), rotation(0), scale(1, 1) {}
 	iam_transform(ImVec2 pos, float rot = 0, ImVec2 scl = ImVec2(1, 1))
@@ -610,7 +604,8 @@ enum iam_channel_type {
 	iam_chan_float = 0,
 	iam_chan_vec2,
 	iam_chan_vec4,
-	iam_chan_int
+	iam_chan_int,
+	iam_chan_color    // Color with color space (stores in vec4 + color_space metadata)
 };
 
 // Result codes
@@ -652,6 +647,7 @@ public:
 	iam_clip& key_vec2(ImGuiID channel, float time, ImVec2 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 	iam_clip& key_vec4(ImGuiID channel, float time, ImVec4 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 	iam_clip& key_int(ImGuiID channel, float time, int value, int ease_type = iam_ease_linear);
+	iam_clip& key_color(ImGuiID channel, float time, ImVec4 value, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
 	// Spring-based keyframe (float only)
 	iam_clip& key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring);
@@ -720,6 +716,7 @@ public:
 	bool get_vec2(ImGuiID channel, ImVec2* out) const;
 	bool get_vec4(ImGuiID channel, ImVec4* out) const;
 	bool get_int(ImGuiID channel, int* out) const;
+	bool get_color(ImGuiID channel, ImVec4* out, int color_space = iam_col_oklab) const;  // Color blended in specified color space.
 
 	// Check validity
 	bool valid() const;
