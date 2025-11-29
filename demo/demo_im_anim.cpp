@@ -139,127 +139,172 @@ static void ShowHeroAnimation()
 	}
 
 	// ========================================================
-	// LAYER 2: TRANSFORM SHOWCASE RECTANGLE (Rotation + Scale)
+	// LAYER 2: HERO ELEMENT - Right Strophoid with Pro Motion Design
 	// ========================================================
+	// Narrative: ENTRANCE (0-0.2) → ANTICIPATION (0.2-0.25) → LOOP SHOWCASE (0.25-0.75) → SETTLE (0.75-1.0)
+	float hero_intensity = 0.0f;  // Used by other layers to dim during hero moment
 	{
-		// One rectangle with full transform: position along a RIGHT STROPHOID curve
-		// Strophoid parametric equations:
-		//   raw_x(s) = (s² - 1) / (s² + 1)
-		//   raw_y(s) = s * (s² - 1) / (s² + 1)
-		// Rotated 90° so the curve goes left-to-right with loop in middle
-
-		const float PI = 3.14159265f;
 		float center_x = cp.x + cs.x * 0.5f;
 		float center_y = cp.y + cs.y * 0.5f;
-		float travel = cs.x - 120.0f;  // Horizontal span of the curve
+		float travel = cs.x - 120.0f;
 
-		// Scale factor: raw_y spans [-1.2, 1.2] for s in [-2, 2], so 2.4 total
-		// We want the curve to span 'travel' horizontally
 		float curve_scale = travel / 2.4f;
-		float loop_height = curve_scale * 0.25f;  // Height of the loop (reduced more)
+		float loop_height = curve_scale * 0.25f;
 
-		// Lambda to compute position on the RIGHT STROPHOID
-		// s ∈ [-2, 2] traces the full curve with loop
-		// Rotated 90° and flipped Y: x follows raw_y, y follows +raw_x (loop goes DOWN)
+		// RIGHT STROPHOID position
 		auto strophoid_pos = [&](float t) -> ImVec2 {
-			float s = -2.0f + 4.0f * t;  // Map t:[0,1] to s:[-2,2]
+			float s = -2.0f + 4.0f * t;
 			float s2 = s * s;
 			float denom = s2 + 1.0f;
 			float factor = (s2 - 1.0f) / denom;
-
-			float raw_x = factor;        // ranges: 0.6 → -1 → 0.6
-			float raw_y = s * factor;    // ranges: -1.2 → 0 → 1.2
-
-			// Rotate 90° + flip Y: new_x = raw_y, new_y = +raw_x (loop goes down)
+			float raw_x = factor;
+			float raw_y = s * factor;
 			float x = center_x + raw_y * curve_scale;
 			float y = center_y + raw_x * loop_height;
 			return ImVec2(x, y);
 		};
 
-		// Lambda to compute tangent (derivative) for rotation
-		// d(factor)/ds = 4s / (s²+1)²
-		// d(s·factor)/ds = (s⁴ + 4s² - 1) / (s²+1)²
+		// Strophoid tangent for rotation
 		auto strophoid_tangent = [&](float t) -> ImVec2 {
 			float s = -2.0f + 4.0f * t;
 			float s2 = s * s;
 			float denom = s2 + 1.0f;
 			float denom2 = denom * denom;
-
-			// Derivatives of raw coordinates w.r.t. s
 			float d_raw_x = 4.0f * s / denom2;
 			float d_raw_y = (s2 * s2 + 4.0f * s2 - 1.0f) / denom2;
-
-			// Rotated + flipped: dx/ds = d_raw_y, dy/ds = +d_raw_x
-			// Chain rule: dx/dt = dx/ds * ds/dt, where ds/dt = 4
 			float dx = d_raw_y * 4.0f * curve_scale;
 			float dy = d_raw_x * 4.0f * loop_height;
 			return ImVec2(dx, dy);
 		};
 
-		// Alias for compatibility with existing code
-		auto loop_curve_pos = strophoid_pos;
-		auto loop_curve_tangent = strophoid_tangent;
+		// ===== TIMING: 5s cycle with narrative phases =====
+		float cycle_duration = 5.0f;
+		float local_t = fmodf(T, cycle_duration);
 
-		// Animation: 4s travel + 0.5s pause
-		float local_t = fmodf(T, 4.5f);
-		float progress = ImClamp(local_t / 4.0f, 0.0f, 1.0f);
+		// Phase breakdown (in normalized 0-1 space over motion duration)
+		// Motion happens in 3.5s, then 1.5s hold at end
+		float motion_duration = 3.5f;
+		float raw_progress = ImClamp(local_t / motion_duration, 0.0f, 1.0f);
 
-		// Apply bounce easing to the progress
-		float eased = iam_eval_preset(iam_ease_out_bounce, progress);
+		// ===== CUSTOM EASING: Smooth with anticipation =====
+		// Phase 1: Entrance (0 - 0.2) - smooth ease out
+		// Phase 2: Anticipation (0.18 - 0.25) - slight slowdown before loop
+		// Phase 3: Loop (0.25 - 0.75) - smooth through with slight slow-mo at apex (0.5)
+		// Phase 4: Exit & Settle (0.75 - 1.0) - ease out to rest
 
-		// Position on the continuous loop curve
-		ImVec2 pos = loop_curve_pos(eased);
-		ImVec2 tangent = loop_curve_tangent(eased);
+		float eased;
+		if (raw_progress < 0.20f) {
+			// Entrance: smooth acceleration
+			float pt = raw_progress / 0.20f;
+			eased = iam_eval_preset(iam_ease_out_cubic, pt) * 0.20f;
+		}
+		else if (raw_progress < 0.25f) {
+			// Anticipation: slow down slightly (builds tension before the loop)
+			float pt = (raw_progress - 0.20f) / 0.05f;
+			eased = 0.20f + iam_eval_preset(iam_ease_in_out_quad, pt) * 0.05f;
+		}
+		else if (raw_progress < 0.75f) {
+			// Loop showcase: smooth motion through the strophoid loop
+			float pt = (raw_progress - 0.25f) / 0.50f;
+			eased = 0.25f + iam_eval_preset(iam_ease_in_out_quad, pt) * 0.50f;
+		}
+		else {
+			// Settle: smooth deceleration to rest
+			float pt = (raw_progress - 0.75f) / 0.25f;
+			eased = 0.75f + iam_eval_preset(iam_ease_out_cubic, pt) * 0.25f;
+		}
+
+		// Hero intensity for other layers (peaks during loop)
+		hero_intensity = (raw_progress > 0.2f && raw_progress < 0.8f)
+			? (1.0f - powf(fabsf(raw_progress - 0.5f) * 3.33f, 2.0f)) : 0.0f;
+		hero_intensity = ImClamp(hero_intensity, 0.0f, 1.0f);
+
+		// ===== POSITION =====
+		ImVec2 pos = strophoid_pos(eased);
+		ImVec2 tangent = strophoid_tangent(eased);
 		float path_angle = atan2f(tangent.y, tangent.x);
 
-		// ROTATION: Follow tangent + extra spin with elastic easing
-		float rot_eased = iam_eval_preset(iam_ease_out_elastic, progress);
-		float rotation = path_angle + rot_eased * PI * 2.0f;
+		// ===== ROTATION: Clean - just follow the path =====
+		float rotation = path_angle;
 
-		// SCALE: Burlesque exaggerated effect - dramatic swings
-		float scale_eased = iam_eval_preset(iam_ease_out_elastic, progress);
-		float base_scale = 0.2f + 0.9f * scale_eased;  // Starts tiny, grows big
-		// Strong pulse that peaks during the loop (around progress 0.3-0.7)
-		float loop_intensity = 1.0f - powf(fabsf(progress - 0.5f) * 2.0f, 2.0f);
-		float pulse = sinf(progress * PI * 6.0f) * 0.35f * loop_intensity;
-		// Add a "squash and stretch" effect based on velocity
-		float squash = sinf(progress * PI * 4.0f) * 0.2f * (1.0f - progress);
-		float scale = base_scale + pulse + squash;
+		// ===== SCALE: Intentional, not chaotic =====
+		// - Start at normal size
+		// - Slight shrink during anticipation (0.18-0.25)
+		// - Grow entering the loop (0.25-0.4)
+		// - Peak at loop crossing/apex (0.5)
+		// - Shrink exiting loop (0.6-0.75)
+		// - Settle to normal (0.75-1.0)
+		float scale_base = 1.0f;
+		if (raw_progress < 0.18f) {
+			scale_base = 0.9f + 0.1f * iam_eval_preset(iam_ease_out_cubic, raw_progress / 0.18f);
+		}
+		else if (raw_progress < 0.25f) {
+			// Anticipation: slight shrink (like pulling back before a jump)
+			float st = (raw_progress - 0.18f) / 0.07f;
+			scale_base = 1.0f - 0.15f * iam_eval_preset(iam_ease_in_out_quad, st);
+		}
+		else if (raw_progress < 0.5f) {
+			// Entering loop: grow
+			float st = (raw_progress - 0.25f) / 0.25f;
+			scale_base = 0.85f + 0.35f * iam_eval_preset(iam_ease_out_back, st);
+		}
+		else if (raw_progress < 0.75f) {
+			// Exiting loop: shrink back
+			float st = (raw_progress - 0.5f) / 0.25f;
+			scale_base = 1.2f - 0.2f * iam_eval_preset(iam_ease_in_out_quad, st);
+		}
+		else {
+			// Settle
+			float st = (raw_progress - 0.75f) / 0.25f;
+			scale_base = 1.0f + 0.05f * (1.0f - iam_eval_preset(iam_ease_out_cubic, st));
+		}
+		float scale = scale_base;
 
-		// Draw the continuous loop curve path hint
-		ImVec2 prev_curve_pt = loop_curve_pos(0.0f);
-		for (int i = 1; i <= 80; i++) {
-			float ct = (float)i / 80.0f;
-			ImVec2 curve_pt = loop_curve_pos(ct);
-			int alpha = 25 + (int)(15.0f * sinf(ct * PI * 4.0f));
-			dl->AddLine(prev_curve_pt, curve_pt, IM_COL32(91, 194, 231, alpha), 2.0f);
+		// ===== DRAW PATH HINT (subtle, fades during hero moment) =====
+		int path_alpha_base = (int)(25.0f * (1.0f - hero_intensity * 0.5f));
+		ImVec2 prev_curve_pt = strophoid_pos(0.0f);
+		for (int i = 1; i <= 60; i++) {
+			float ct = (float)i / 60.0f;
+			ImVec2 curve_pt = strophoid_pos(ct);
+			// Highlight the part of path we've traveled
+			int alpha = (ct < eased) ? path_alpha_base + 15 : path_alpha_base;
+			dl->AddLine(prev_curve_pt, curve_pt, IM_COL32(91, 194, 231, alpha), 1.5f);
 			prev_curve_pt = curve_pt;
 		}
 
-		// Motion trail with rotation - using same continuous curve
-		for (int tr = 6; tr >= 1; tr--) {
-			float trail_progress = ImMax(0.0f, progress - tr * 0.04f);
-			float trail_eased = iam_eval_preset(iam_ease_out_bounce, trail_progress);
-			float trail_rot_eased = iam_eval_preset(iam_ease_out_elastic, trail_progress);
-
-			ImVec2 trail_pos = loop_curve_pos(trail_eased);
-			ImVec2 trail_tan = loop_curve_tangent(trail_eased);
-			float trail_path_angle = atan2f(trail_tan.y, trail_tan.x);
-			float trail_rot = trail_path_angle + trail_rot_eased * PI * 2.0f;
-			float trail_scale = (0.3f + 0.7f * iam_eval_preset(iam_ease_out_back, trail_progress)) * (1.0f - tr * 0.08f);
-
-			int alpha = 50 - tr * 7;
-			DrawRotatedRect(dl, trail_pos, ImVec2(40.0f * trail_scale, 24.0f * trail_scale), trail_rot,
-				IM_COL32(91, 194, 231, alpha), 0);
+		// ===== MOTION TRAIL (subtle, only during movement) =====
+		if (raw_progress > 0.05f && raw_progress < 0.95f) {
+			int trail_count = 4;
+			for (int tr = trail_count; tr >= 1; tr--) {
+				float trail_offset = tr * 0.025f;
+				float trail_eased = ImMax(0.0f, eased - trail_offset);
+				ImVec2 trail_pos = strophoid_pos(trail_eased);
+				ImVec2 trail_tan = strophoid_tangent(trail_eased);
+				float trail_rot = atan2f(trail_tan.y, trail_tan.x);
+				float trail_scale = scale * (1.0f - tr * 0.12f);
+				int alpha = (int)(40.0f * (1.0f - (float)tr / trail_count) * (1.0f - fabsf(raw_progress - 0.5f)));
+				if (alpha > 5) {
+					DrawRotatedRect(dl, trail_pos, ImVec2(44.0f * trail_scale, 26.0f * trail_scale), trail_rot,
+						IM_COL32(91, 194, 231, alpha), 0);
+				}
+			}
 		}
 
-		// Main rectangle
+		// ===== MAIN RECTANGLE =====
 		ImVec2 rect_size = ImVec2(44.0f * scale, 26.0f * scale);
-		DrawRotatedRect(dl, pos, rect_size, rotation, C1, IM_COL32(255, 255, 255, 180));
-
-		// Inner detail to show rotation clearly
-		DrawRotatedRect(dl, pos, ImVec2(rect_size.x * 0.4f, rect_size.y * 0.4f), rotation, C2, 0);
+		// Glow during hero moment
+		if (hero_intensity > 0.1f) {
+			int glow_alpha = (int)(30.0f * hero_intensity);
+			DrawRotatedRect(dl, pos, ImVec2(rect_size.x + 8, rect_size.y + 8), rotation,
+				IM_COL32(91, 194, 231, glow_alpha), 0);
+		}
+		DrawRotatedRect(dl, pos, rect_size, rotation, C1, IM_COL32(255, 255, 255, 200));
+		// Inner accent
+		DrawRotatedRect(dl, pos, ImVec2(rect_size.x * 0.35f, rect_size.y * 0.35f), rotation, C2, 0);
 	}
+
+	// Store hero_intensity for use by other layers (dims background during showcase)
+	(void)hero_intensity; // Will be used below
 
 	// ========================================================
 	// LAYER 2b: ADDITIONAL PATH RECTANGLES
