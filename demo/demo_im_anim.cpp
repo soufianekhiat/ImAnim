@@ -37,20 +37,13 @@ static void ApplyOpenAll()
 // HELPER: Use iam_eval_preset from im_anim API for easing evaluation
 
 // ============================================================
-// SECTION: Hero Animation (Showcase)
+// SECTION: Hero Animation (Showcase) - Brand Reveal Style
 // ============================================================
 
-// Attempt at motion design: custom easing with bezier for snappy feel
+// Snappy easings for punchy motion
 static float EaseOutExpo(float t) { return t >= 1.0f ? 1.0f : 1.0f - powf(2.0f, -10.0f * t); }
-static float EaseOutQuint(float t) { return 1.0f - powf(1.0f - t, 5.0f); }
-static float EaseInOutQuart(float t) { return t < 0.5f ? 8.0f * t * t * t * t : 1.0f - powf(-2.0f * t + 2.0f, 4.0f) / 2.0f; }
-
-// Attempt at motion design: attempt at a smooth remap for phased animations
-static float Remap(float value, float inMin, float inMax, float outMin, float outMax) {
-	float t = (value - inMin) / (inMax - inMin);
-	t = ImClamp(t, 0.0f, 1.0f);
-	return outMin + t * (outMax - outMin);
-}
+static float EaseOutCubic(float t) { return 1.0f - powf(1.0f - t, 3.0f); }
+static float EaseOutBack(float t) { float c = 2.5f; return 1.0f + (c + 1.0f) * powf(t - 1.0f, 3.0f) + c * powf(t - 1.0f, 2.0f); }
 
 static void ShowHeroAnimation()
 {
@@ -58,334 +51,295 @@ static void ShowHeroAnimation()
 	static float hero_time = 0.0f;
 	hero_time += dt;
 
-	// === TIMING STRUCTURE ===
-	// Total cycle: 8 seconds
-	// Phase 1 (0.0-2.0s): Anticipation - energy gathers
-	// Phase 2 (2.0-3.5s): Impact - logo reveals with punch
-	// Phase 3 (3.5-8.0s): Settle - gentle ambient loop
-	const float CYCLE = 8.0f;
-	float cycle_time = fmodf(hero_time, CYCLE);
+	// === TIMING - Tight 5 second cycle ===
+	// Beat 1: 0.0-0.6s  - HOLD (tension)
+	// Beat 2: 0.6-0.75s - FLASH (impact)
+	// Beat 3: 0.75-1.3s - LOGO SLAM
+	// Beat 4: 1.3-1.6s  - SUBTITLE WIPE
+	// Beat 5: 1.6-2.2s  - FEATURES CASCADE
+	// Beat 6: 2.2-5.0s  - AMBIENT
+	const float CYCLE = 5.0f;
+	float t = fmodf(hero_time, CYCLE);
 
-	// Phase progress values (0-1 within each phase)
-	float phase1_t = Remap(cycle_time, 0.0f, 2.0f, 0.0f, 1.0f);
-	float phase2_t = Remap(cycle_time, 2.0f, 3.5f, 0.0f, 1.0f);
-
-	// === SETUP ===
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 300.0f);
-	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 10.0f);
+	ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, 280.0f);
+	ImVec2 center = ImVec2(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f - 8.0f);
 
-	// === COLOR PALETTE (refined, cohesive) ===
-	const ImU32 col_bg_dark = IM_COL32(12, 14, 24, 255);
-	const ImU32 col_bg_mid = IM_COL32(18, 22, 38, 255);
+	// === BACKGROUND - Pure black during hold, then gradient ===
+	float bg_reveal = (t < 0.6f) ? 0.0f : ImClamp((t - 0.6f) / 0.3f, 0.0f, 1.0f);
+	ImU32 bg_color = IM_COL32((int)(8 * bg_reveal), (int)(10 * bg_reveal), (int)(18 * bg_reveal), 255);
+	draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), bg_color);
 
-	// === BACKGROUND ===
-	// Subtle vignette gradient
-	draw_list->AddRectFilledMultiColor(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		col_bg_mid, col_bg_mid, col_bg_dark, col_bg_dark);
-
-	// === LAYER 1: RADIAL LINES (anticipation energy) ===
-	if (cycle_time < 3.5f) {
-		int num_lines = 24;
-		float line_alpha = (cycle_time < 2.0f)
-			? EaseOutQuint(phase1_t) * 0.3f                    // Fade in during phase 1
-			: (1.0f - EaseOutExpo(phase2_t)) * 0.3f;          // Fade out during phase 2
-
-		for (int i = 0; i < num_lines; i++) {
-			float angle = (float)i / num_lines * 6.28318f;
-
-			// Lines extend outward during anticipation
-			float line_progress = (cycle_time < 2.0f)
-				? EaseInOutQuart(phase1_t)
-				: 1.0f;
-
-			float inner_r = 40.0f + 20.0f * line_progress;
-			float outer_r = 80.0f + 60.0f * line_progress;
-
-			ImVec2 p1 = ImVec2(center.x + cosf(angle) * inner_r, center.y + sinf(angle) * inner_r * 0.6f);
-			ImVec2 p2 = ImVec2(center.x + cosf(angle) * outer_r, center.y + sinf(angle) * outer_r * 0.6f);
-
-			ImU32 line_col = IM_COL32(90, 140, 255, (int)(line_alpha * 255));
-			draw_list->AddLine(p1, p2, line_col, 1.5f);
+	// === BEAT 1: TENSION - Pulsing dot in center ===
+	if (t < 0.75f) {
+		float pulse = sinf(t * 18.0f) * 0.5f + 0.5f;
+		float dot_size = 3.0f + pulse * 4.0f;
+		float dot_alpha = (t < 0.6f) ? (0.4f + pulse * 0.4f) : (1.0f - (t - 0.6f) / 0.15f);
+		if (dot_alpha > 0.0f) {
+			draw_list->AddCircleFilled(center, dot_size * 3, IM_COL32(100, 140, 255, (int)(dot_alpha * 30)));
+			draw_list->AddCircleFilled(center, dot_size, IM_COL32(150, 180, 255, (int)(dot_alpha * 255)));
 		}
 	}
 
-	// === LAYER 2: CONVERGING PARTICLES ===
-	const int num_particles = 16;
-	for (int i = 0; i < num_particles; i++) {
-		float seed = (float)i * 7.31f + 0.5f;
-		float base_angle = seed * 2.39996f; // Golden angle distribution
-		float base_dist = 120.0f + fmodf(seed * 47.0f, 80.0f);
-
-		// During phase 1: particles converge toward center
-		// During phase 2+: particles orbit gently
-		float dist, angle;
-		if (cycle_time < 2.0f) {
-			float converge = EaseInOutQuart(phase1_t);
-			dist = base_dist * (1.0f - converge * 0.7f);
-			angle = base_angle + converge * 0.5f;
-		} else {
-			dist = base_dist * 0.3f + 20.0f;
-			angle = base_angle + hero_time * (0.15f + fmodf(seed, 0.1f));
-		}
-
-		float px = center.x + cosf(angle) * dist;
-		float py = center.y + sinf(angle) * dist * 0.55f;
-
-		// Particle alpha based on phase
-		float p_alpha = (cycle_time < 2.0f)
-			? 0.3f + 0.4f * EaseOutQuint(phase1_t)
-			: 0.5f + 0.2f * sinf(hero_time * 2.0f + seed);
-
-		// Size pulses subtly
-		float p_size = 2.0f + 1.5f * sinf(hero_time * 3.0f + seed * 2.0f);
-
-		// Alternate colors between primary and secondary
-		ImU32 p_col = (i % 3 == 0)
-			? IM_COL32(90, 140, 255, (int)(p_alpha * 200))
-			: (i % 3 == 1)
-				? IM_COL32(160, 120, 255, (int)(p_alpha * 180))
-				: IM_COL32(80, 200, 220, (int)(p_alpha * 160));
-
-		// Glow
-		draw_list->AddCircleFilled(ImVec2(px, py), p_size * 2.5f, IM_COL32(100, 140, 220, (int)(p_alpha * 40)));
-		draw_list->AddCircleFilled(ImVec2(px, py), p_size, p_col);
-	}
-
-	// === LAYER 3: IMPACT RING (phase 2 only) ===
-	if (cycle_time >= 2.0f && cycle_time < 4.0f) {
-		float ring_t = Remap(cycle_time, 2.0f, 4.0f, 0.0f, 1.0f);
-		float ring_radius = 20.0f + EaseOutExpo(ring_t) * 150.0f;
-		float ring_alpha = (1.0f - EaseOutQuint(ring_t)) * 0.6f;
-		float ring_thickness = 3.0f * (1.0f - ring_t * 0.7f);
-
-		draw_list->AddCircle(center, ring_radius, IM_COL32(90, 160, 255, (int)(ring_alpha * 255)), 64, ring_thickness);
-
-		// Secondary ring (delayed)
-		if (ring_t > 0.15f) {
-			float ring2_t = Remap(ring_t, 0.15f, 1.0f, 0.0f, 1.0f);
-			float ring2_radius = 15.0f + EaseOutExpo(ring2_t) * 120.0f;
-			float ring2_alpha = (1.0f - EaseOutQuint(ring2_t)) * 0.4f;
-			draw_list->AddCircle(center, ring2_radius, IM_COL32(160, 120, 255, (int)(ring2_alpha * 255)), 48, 2.0f);
+	// === BEAT 2: FLASH - Screen flash at impact ===
+	if (t >= 0.6f && t < 0.9f) {
+		float flash_t = (t - 0.6f) / 0.3f;
+		float flash_alpha = (flash_t < 0.3f) ? EaseOutExpo(flash_t / 0.3f) : (1.0f - EaseOutCubic((flash_t - 0.3f) / 0.7f));
+		flash_alpha *= 0.7f;
+		if (flash_alpha > 0.01f) {
+			draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+				IM_COL32(200, 220, 255, (int)(flash_alpha * 255)));
 		}
 	}
 
-	// === LAYER 4: CENTRAL GLOW ===
-	float glow_intensity = (cycle_time < 2.0f)
-		? 0.3f + 0.4f * EaseOutQuint(phase1_t)                             // Build up
-		: (cycle_time < 3.5f)
-			? 0.7f + 0.3f * (1.0f - EaseOutExpo(phase2_t * 0.5f))          // Peak at impact
-			: 0.5f + 0.15f * sinf(hero_time * 1.5f);                        // Gentle pulse
+	// === BEAT 2: PARTICLE BURST - Explosion from center ===
+	if (t >= 0.6f && t < 2.0f) {
+		float burst_t = (t - 0.6f) / 1.4f;
+		const int num_burst = 24;
+		for (int i = 0; i < num_burst; i++) {
+			float angle = (float)i / num_burst * 6.28318f + 0.3f;
+			float speed = 180.0f + (i % 5) * 40.0f;
+			float dist = EaseOutExpo(burst_t) * speed;
+			float px = center.x + cosf(angle) * dist;
+			float py = center.y + sinf(angle) * dist * 0.5f;
 
-	for (int g = 5; g >= 0; g--) {
-		float gr = 25.0f + g * 18.0f;
-		int ga = (int)((6 - g) * 7 * glow_intensity);
-		draw_list->AddCircleFilled(center, gr, IM_COL32(80, 120, 200, ga));
-	}
+			float particle_alpha = (1.0f - burst_t) * 0.8f;
+			float particle_size = 3.0f * (1.0f - burst_t * 0.5f);
 
-	// === LAYER 5: ORBITING ACCENTS (3 elegant orbiters) ===
-	if (cycle_time >= 2.5f) {
-		float orbit_fade = ImClamp((cycle_time - 2.5f) / 1.0f, 0.0f, 1.0f);
-
-		for (int i = 0; i < 3; i++) {
-			float orbit_speed = 0.4f + i * 0.12f;
-			float orbit_radius = 55.0f + i * 22.0f;
-			float orbit_angle = hero_time * orbit_speed + i * 2.094f; // 120 degrees apart
-
-			// Elliptical orbit with depth
-			float ox = center.x + cosf(orbit_angle) * orbit_radius;
-			float oy = center.y + sinf(orbit_angle) * orbit_radius * 0.45f;
-
-			// Size based on "depth" (y position in orbit)
-			float depth = 0.7f + 0.3f * sinf(orbit_angle);
-			float o_size = (5.0f + i * 1.5f) * depth;
-
-			// Trail
-			const int trail_count = 6;
-			for (int t = trail_count; t >= 1; t--) {
-				float trail_angle = orbit_angle - t * 0.12f;
-				float tx = center.x + cosf(trail_angle) * orbit_radius;
-				float ty = center.y + sinf(trail_angle) * orbit_radius * 0.45f;
-				float trail_alpha = orbit_fade * (1.0f - (float)t / trail_count) * 0.35f * depth;
-
-				ImU32 trail_col = (i == 0) ? IM_COL32(90, 140, 255, (int)(trail_alpha * 255))
-					: (i == 1) ? IM_COL32(160, 120, 255, (int)(trail_alpha * 255))
-					: IM_COL32(80, 200, 220, (int)(trail_alpha * 255));
-
-				draw_list->AddCircleFilled(ImVec2(tx, ty), o_size * (1.0f - t * 0.1f), trail_col);
+			if (particle_alpha > 0.01f) {
+				ImU32 p_col = (i % 3 == 0) ? IM_COL32(100, 160, 255, (int)(particle_alpha * 255))
+					: (i % 3 == 1) ? IM_COL32(180, 140, 255, (int)(particle_alpha * 255))
+					: IM_COL32(80, 220, 230, (int)(particle_alpha * 255));
+				draw_list->AddCircleFilled(ImVec2(px, py), particle_size, p_col);
 			}
-
-			// Main orbiter
-			float o_alpha = orbit_fade * depth;
-			ImU32 o_glow = (i == 0) ? IM_COL32(90, 140, 255, (int)(o_alpha * 60))
-				: (i == 1) ? IM_COL32(160, 120, 255, (int)(o_alpha * 60))
-				: IM_COL32(80, 200, 220, (int)(o_alpha * 60));
-			ImU32 o_core = (i == 0) ? IM_COL32(120, 170, 255, (int)(o_alpha * 255))
-				: (i == 1) ? IM_COL32(180, 150, 255, (int)(o_alpha * 255))
-				: IM_COL32(100, 220, 235, (int)(o_alpha * 255));
-
-			draw_list->AddCircleFilled(ImVec2(ox, oy), o_size * 2.0f, o_glow);
-			draw_list->AddCircleFilled(ImVec2(ox, oy), o_size, o_core);
-			draw_list->AddCircle(ImVec2(ox, oy), o_size, IM_COL32(255, 255, 255, (int)(o_alpha * 120)), 0, 1.0f);
 		}
 	}
 
-	// === LAYER 6: LOGO TEXT ===
+	// === BEAT 3: LOGO SLAM - Scale punch with overshoot ===
 	const char* title = "ImAnim";
-	const int title_len = 6;
 	float base_font_size = ImGui::GetFontSize();
-	float title_scale = 3.0f;
-	float char_spacing = base_font_size * title_scale * 0.58f;
-	float title_width = char_spacing * title_len;
-	float title_x = center.x - title_width * 0.5f;
-	float title_y = center.y - 28.0f;
 
-	for (int c = 0; c < title_len; c++) {
-		// Staggered reveal timing
-		float char_delay = c * 0.08f;
-		float char_appear_time = 2.1f + char_delay;
+	if (t >= 0.75f) {
+		float logo_t = ImClamp((t - 0.75f) / 0.35f, 0.0f, 1.0f);
 
-		float char_alpha, char_scale, char_y_offset;
-
-		if (cycle_time < char_appear_time) {
-			// Not yet visible
-			char_alpha = 0.0f;
-			char_scale = 0.0f;
-			char_y_offset = 20.0f;
-		} else if (cycle_time < char_appear_time + 0.5f) {
-			// Reveal animation
-			float reveal_t = (cycle_time - char_appear_time) / 0.5f;
-			char_alpha = EaseOutQuint(reveal_t);
-			char_scale = 0.5f + 0.5f * iam_eval_preset(iam_ease_out_back, reveal_t); // Overshoot!
-			char_y_offset = 20.0f * (1.0f - EaseOutExpo(reveal_t));
+		// SLAM: Starts at 180%, settles to 100% with overshoot
+		float scale_punch;
+		if (logo_t < 1.0f) {
+			float raw = EaseOutBack(logo_t);
+			scale_punch = 1.8f - 0.8f * raw; // 1.8 -> 1.0 with overshoot below 1.0 then back
 		} else {
-			// Settled state with subtle wave
-			char_alpha = 1.0f;
-			char_scale = 1.0f + 0.02f * sinf(hero_time * 2.5f + c * 0.4f);
-			char_y_offset = sinf(hero_time * 2.0f + c * 0.6f) * 2.5f;
+			// Subtle breathing in ambient
+			scale_punch = 1.0f + sinf(hero_time * 2.0f) * 0.015f;
 		}
 
-		if (char_alpha < 0.01f) continue;
+		float title_scale = 3.2f * scale_punch;
+		float char_spacing = base_font_size * 3.2f * 0.56f;
+		float title_width = char_spacing * 6;
+		float title_x = center.x - title_width * 0.5f;
+		float title_y = center.y - base_font_size * 3.2f * 0.4f;
 
-		// Color: subtle gradient across letters (blue to purple)
-		float char_hue = 0.6f + (float)c / title_len * 0.12f;
-		ImVec4 char_rgb;
-		ImGui::ColorConvertHSVtoRGB(char_hue, 0.45f, 1.0f, char_rgb.x, char_rgb.y, char_rgb.z);
+		// Alpha: instant on
+		float logo_alpha = (logo_t < 0.1f) ? logo_t / 0.1f : 1.0f;
 
-		float cx = title_x + c * char_spacing;
-		ImVec2 char_pos = ImVec2(cx, title_y + char_y_offset);
-		float font_size = ImMax(1.0f, base_font_size * title_scale * char_scale);
+		// Y offset: slight drop
+		float y_offset = (logo_t < 1.0f) ? -15.0f * (1.0f - EaseOutExpo(logo_t)) : 0.0f;
 
-		char char_str[2] = { title[c], '\0' };
+		for (int c = 0; c < 6; c++) {
+			// Slight stagger for each letter (very fast)
+			float char_delay = c * 0.02f;
+			float char_t = ImClamp((logo_t - char_delay) * 1.2f, 0.0f, 1.0f);
+			if (char_t < 0.01f) continue;
 
-		// Shadow (offset down-right)
-		draw_list->AddText(nullptr, font_size, ImVec2(char_pos.x + 3, char_pos.y + 3),
-			IM_COL32(0, 0, 0, (int)(char_alpha * 80)), char_str);
+			float char_alpha = logo_alpha * char_t;
+			float char_scale_offset = (1.0f - char_t) * 0.3f;
 
-		// Glow layer
-		draw_list->AddText(nullptr, font_size + 2, ImVec2(char_pos.x - 1, char_pos.y - 1),
-			IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(char_alpha * 50)), char_str);
+			// Color gradient: electric blue to purple
+			float hue = 0.58f + (float)c / 6 * 0.1f;
+			ImVec4 col;
+			ImGui::ColorConvertHSVtoRGB(hue, 0.6f, 1.0f, col.x, col.y, col.z);
 
-		// Main text
-		draw_list->AddText(nullptr, font_size, char_pos,
-			IM_COL32((int)(char_rgb.x * 255), (int)(char_rgb.y * 255), (int)(char_rgb.z * 255), (int)(char_alpha * 255)), char_str);
+			float cx = title_x + c * char_spacing;
+			float final_scale = title_scale * (1.0f + char_scale_offset);
+			float font_size = ImMax(1.0f, base_font_size * final_scale);
+
+			char ch[2] = { title[c], '\0' };
+			ImVec2 pos = ImVec2(cx, title_y + y_offset);
+
+			// Hard shadow
+			draw_list->AddText(nullptr, font_size, ImVec2(pos.x + 4, pos.y + 4),
+				IM_COL32(0, 0, 0, (int)(char_alpha * 150)), ch);
+
+			// Glow
+			draw_list->AddText(nullptr, font_size + 3, ImVec2(pos.x - 1, pos.y - 1),
+				IM_COL32((int)(col.x * 255), (int)(col.y * 255), (int)(col.z * 255), (int)(char_alpha * 80)), ch);
+
+			// Main
+			draw_list->AddText(nullptr, font_size, pos,
+				IM_COL32((int)(col.x * 255), (int)(col.y * 255), (int)(col.z * 255), (int)(char_alpha * 255)), ch);
+		}
+
+		// === HORIZONTAL LINE ACCENT ===
+		if (t >= 1.0f) {
+			float line_t = ImClamp((t - 1.0f) / 0.25f, 0.0f, 1.0f);
+			float line_width = EaseOutExpo(line_t) * (canvas_size.x * 0.35f);
+			float line_y = title_y + base_font_size * 3.2f + 8.0f;
+			float line_alpha = (t < 2.2f) ? 1.0f : ImMax(0.3f, 1.0f - (t - 2.2f) * 0.3f);
+
+			draw_list->AddLine(
+				ImVec2(center.x - line_width, line_y),
+				ImVec2(center.x + line_width, line_y),
+				IM_COL32(100, 150, 255, (int)(line_alpha * 180)), 2.0f);
+
+			// End dots
+			if (line_t > 0.5f) {
+				float dot_a = (line_t - 0.5f) * 2.0f;
+				draw_list->AddCircleFilled(ImVec2(center.x - line_width, line_y), 3.0f, IM_COL32(150, 180, 255, (int)(dot_a * line_alpha * 255)));
+				draw_list->AddCircleFilled(ImVec2(center.x + line_width, line_y), 3.0f, IM_COL32(150, 180, 255, (int)(dot_a * line_alpha * 255)));
+			}
+		}
 	}
 
-	// === LAYER 7: SUBTITLE ===
-	const char* subtitle = "Fluid animations for Dear ImGui";
-	ImVec2 subtitle_size = ImGui::CalcTextSize(subtitle);
+	// === BEAT 4: SUBTITLE - Wipe reveal from center ===
+	if (t >= 1.3f) {
+		const char* subtitle = "Fluid animations for Dear ImGui";
+		ImVec2 sub_size = ImGui::CalcTextSize(subtitle);
+		float sub_y = center.y + 38.0f;
 
-	// Subtitle appears after title
-	float sub_appear = Remap(cycle_time, 2.8f, 3.3f, 0.0f, 1.0f);
-	float sub_alpha = EaseOutQuint(sub_appear) * (0.55f + 0.15f * sinf(hero_time * 1.0f));
+		float wipe_t = ImClamp((t - 1.3f) / 0.3f, 0.0f, 1.0f);
+		float wipe_width = EaseOutCubic(wipe_t) * sub_size.x * 0.5f;
 
-	if (sub_alpha > 0.01f) {
-		float sub_y_offset = 8.0f * (1.0f - EaseOutExpo(sub_appear));
-		draw_list->AddText(
-			ImVec2(center.x - subtitle_size.x * 0.5f, center.y + 28.0f + sub_y_offset),
-			IM_COL32(160, 175, 210, (int)(sub_alpha * 255)), subtitle);
+		// Clipping simulation: draw text, but only reveal portion
+		float sub_alpha = (t < 2.2f) ? 0.7f : ImMax(0.4f, 0.7f - (t - 2.2f) * 0.1f);
+
+		// Draw full text with clip approximation (from center outward)
+		float text_x = center.x - sub_size.x * 0.5f;
+		float clip_left = center.x - wipe_width;
+		float clip_right = center.x + wipe_width;
+
+		// We'll draw character by character for wipe effect
+		float char_x = text_x;
+		for (const char* p = subtitle; *p; p++) {
+			char ch[2] = { *p, '\0' };
+			ImVec2 char_size = ImGui::CalcTextSize(ch);
+
+			// Check if character is within revealed area
+			float char_center = char_x + char_size.x * 0.5f;
+			if (char_center >= clip_left && char_center <= clip_right) {
+				draw_list->AddText(ImVec2(char_x, sub_y), IM_COL32(160, 175, 210, (int)(sub_alpha * 255)), ch);
+			}
+			char_x += char_size.x;
+		}
 	}
 
-	// === LAYER 8: FEATURE PILLS ===
+	// === BEAT 5: FEATURES CASCADE - Rapid fire from left ===
 	const char* features[] = { "Easings", "Springs", "Paths", "Colors", "Clips" };
-	const int num_features = 5;
+	float pills_y = canvas_pos.y + canvas_size.y - 32.0f;
 
-	// Calculate layout
-	float pill_spacing = 10.0f;
-	float pill_heights = ImGui::GetFontSize() + 8.0f;
-	float total_pills_width = 0.0f;
-	float pill_widths[5];
-	for (int f = 0; f < num_features; f++) {
-		pill_widths[f] = ImGui::CalcTextSize(features[f]).x + 18.0f;
-		total_pills_width += pill_widths[f];
+	// Calculate total width for centering
+	float total_w = 0;
+	float feat_widths[5];
+	for (int i = 0; i < 5; i++) {
+		feat_widths[i] = ImGui::CalcTextSize(features[i]).x + 20.0f;
+		total_w += feat_widths[i] + 8.0f;
 	}
-	total_pills_width += pill_spacing * (num_features - 1);
+	total_w -= 8.0f;
+	float feat_x = center.x - total_w * 0.5f;
 
-	float pills_x = center.x - total_pills_width * 0.5f;
-	float pills_y = canvas_pos.y + canvas_size.y - 28.0f;
+	for (int i = 0; i < 5; i++) {
+		// Each pill: 0.06s apart, 0.15s animation
+		float pill_start = 1.6f + i * 0.06f;
+		float pill_t = ImClamp((t - pill_start) / 0.15f, 0.0f, 1.0f);
 
-	for (int f = 0; f < num_features; f++) {
-		// Staggered appear from center outward
-		int appear_order = (f < num_features / 2) ? (num_features / 2 - f) : (f - num_features / 2);
-		float pill_delay = appear_order * 0.1f;
-		float pill_appear_time = 3.2f + pill_delay;
-
-		float pill_alpha, pill_scale;
-		if (cycle_time < pill_appear_time) {
-			pill_alpha = 0.0f;
-			pill_scale = 0.0f;
-		} else if (cycle_time < pill_appear_time + 0.4f) {
-			float pt = (cycle_time - pill_appear_time) / 0.4f;
-			pill_alpha = EaseOutQuint(pt);
-			pill_scale = iam_eval_preset(iam_ease_out_back, pt);
-		} else {
-			pill_alpha = 1.0f;
-			pill_scale = 1.0f;
-		}
-
-		if (pill_alpha < 0.01f || pill_scale < 0.01f) {
-			pills_x += pill_widths[f] + pill_spacing;
+		if (pill_t < 0.01f) {
+			feat_x += feat_widths[i] + 8.0f;
 			continue;
 		}
 
-		ImVec2 text_size = ImGui::CalcTextSize(features[f]);
-		float pw = pill_widths[f] * pill_scale;
-		float ph = pill_heights * pill_scale;
+		// Slide from left with overshoot
+		float slide_x = -30.0f * (1.0f - EaseOutBack(pill_t));
+		float pill_alpha = pill_t;
+		float pill_scale = 0.7f + 0.3f * EaseOutBack(pill_t);
 
-		ImVec2 pill_center = ImVec2(pills_x + pill_widths[f] * 0.5f, pills_y);
-		ImVec2 pill_min = ImVec2(pill_center.x - pw * 0.5f, pill_center.y - ph * 0.5f);
-		ImVec2 pill_max = ImVec2(pill_center.x + pw * 0.5f, pill_center.y + ph * 0.5f);
+		ImVec2 text_size = ImGui::CalcTextSize(features[i]);
+		float pw = feat_widths[i] * pill_scale;
+		float ph = (ImGui::GetFontSize() + 10.0f) * pill_scale;
 
-		// Subtle color variation per pill
-		float pill_hue = 0.58f + (float)f / num_features * 0.15f;
-		ImVec4 pill_rgb;
-		ImGui::ColorConvertHSVtoRGB(pill_hue, 0.35f, 0.18f, pill_rgb.x, pill_rgb.y, pill_rgb.z);
-		ImU32 pill_bg = IM_COL32((int)(pill_rgb.x * 255), (int)(pill_rgb.y * 255), (int)(pill_rgb.z * 255), (int)(pill_alpha * 220));
+		ImVec2 pill_pos = ImVec2(feat_x + feat_widths[i] * 0.5f + slide_x, pills_y);
+		ImVec2 pill_min = ImVec2(pill_pos.x - pw * 0.5f, pill_pos.y - ph * 0.5f);
+		ImVec2 pill_max = ImVec2(pill_pos.x + pw * 0.5f, pill_pos.y + ph * 0.5f);
 
-		ImGui::ColorConvertHSVtoRGB(pill_hue, 0.4f, 0.45f, pill_rgb.x, pill_rgb.y, pill_rgb.z);
-		ImU32 pill_border = IM_COL32((int)(pill_rgb.x * 255), (int)(pill_rgb.y * 255), (int)(pill_rgb.z * 255), (int)(pill_alpha * 255));
+		// Color per pill
+		float hue = 0.55f + i * 0.05f;
+		ImVec4 pill_col;
+		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 0.2f, pill_col.x, pill_col.y, pill_col.z);
+		ImVec4 border_col;
+		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 0.5f, border_col.x, border_col.y, border_col.z);
 
-		// Rounded pill shape
-		float rounding = ph * 0.5f;
-		draw_list->AddRectFilled(pill_min, pill_max, pill_bg, rounding);
-		draw_list->AddRect(pill_min, pill_max, pill_border, rounding, 0, 1.0f);
+		// Pill background
+		draw_list->AddRectFilled(pill_min, pill_max,
+			IM_COL32((int)(pill_col.x * 255), (int)(pill_col.y * 255), (int)(pill_col.z * 255), (int)(pill_alpha * 230)),
+			ph * 0.5f);
+		draw_list->AddRect(pill_min, pill_max,
+			IM_COL32((int)(border_col.x * 255), (int)(border_col.y * 255), (int)(border_col.z * 255), (int)(pill_alpha * 255)),
+			ph * 0.5f, 0, 1.5f);
 
 		// Text
 		float font_size = ImMax(1.0f, ImGui::GetFontSize() * pill_scale);
-		ImVec2 text_pos = ImVec2(
-			pill_center.x - text_size.x * 0.5f * pill_scale,
-			pill_center.y - text_size.y * 0.5f * pill_scale);
+		ImVec2 text_pos = ImVec2(pill_pos.x - text_size.x * pill_scale * 0.5f, pill_pos.y - text_size.y * pill_scale * 0.5f);
 		draw_list->AddText(nullptr, font_size, text_pos,
-			IM_COL32(210, 220, 240, (int)(pill_alpha * 255)), features[f]);
+			IM_COL32(220, 230, 255, (int)(pill_alpha * 255)), features[i]);
 
-		pills_x += pill_widths[f] + pill_spacing;
+		feat_x += feat_widths[i] + 8.0f;
 	}
 
-	// === BORDER (subtle) ===
-	draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(60, 80, 140, 80), 4.0f, 0, 1.0f);
+	// === AMBIENT: Subtle floating particles ===
+	if (t >= 2.0f) {
+		float ambient_alpha = ImClamp((t - 2.0f) / 0.5f, 0.0f, 1.0f) * 0.4f;
+		for (int i = 0; i < 12; i++) {
+			float seed = i * 5.7f;
+			float px = canvas_pos.x + fmodf(seed * 73.0f + hero_time * (5.0f + fmodf(seed, 3.0f)), canvas_size.x);
+			float py = canvas_pos.y + fmodf(seed * 127.0f + hero_time * (2.0f + fmodf(seed * 0.5f, 2.0f)), canvas_size.y);
+			float ps = 1.5f + sinf(hero_time * 2.0f + seed) * 0.5f;
+			draw_list->AddCircleFilled(ImVec2(px, py), ps, IM_COL32(150, 180, 255, (int)(ambient_alpha * 120)));
+		}
+	}
+
+	// === SCANLINES - Tech aesthetic ===
+	if (t >= 0.7f && t < 1.5f) {
+		float scan_alpha = (t < 1.0f) ? (t - 0.7f) / 0.3f : 1.0f - (t - 1.0f) / 0.5f;
+		scan_alpha *= 0.08f;
+		for (float y = canvas_pos.y; y < canvas_pos.y + canvas_size.y; y += 4.0f) {
+			draw_list->AddLine(
+				ImVec2(canvas_pos.x, y),
+				ImVec2(canvas_pos.x + canvas_size.x, y),
+				IM_COL32(255, 255, 255, (int)(scan_alpha * 255)), 1.0f);
+		}
+	}
+
+	// === CORNER ACCENTS ===
+	if (t >= 1.8f) {
+		float corner_t = ImClamp((t - 1.8f) / 0.3f, 0.0f, 1.0f);
+		float corner_len = 25.0f * EaseOutCubic(corner_t);
+		float corner_alpha = corner_t * 0.6f;
+		ImU32 corner_col = IM_COL32(100, 140, 255, (int)(corner_alpha * 255));
+
+		// Top-left
+		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + 8 + corner_len, canvas_pos.y + 8), corner_col, 2.0f);
+		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + 8, canvas_pos.y + 8 + corner_len), corner_col, 2.0f);
+
+		// Top-right
+		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + canvas_size.x - 8 - corner_len, canvas_pos.y + 8), corner_col, 2.0f);
+		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8), ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + 8 + corner_len), corner_col, 2.0f);
+
+		// Bottom-left
+		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + 8 + corner_len, canvas_pos.y + canvas_size.y - 8), corner_col, 2.0f);
+		draw_list->AddLine(ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + 8, canvas_pos.y + canvas_size.y - 8 - corner_len), corner_col, 2.0f);
+
+		// Bottom-right
+		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + canvas_size.x - 8 - corner_len, canvas_pos.y + canvas_size.y - 8), corner_col, 2.0f);
+		draw_list->AddLine(ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8), ImVec2(canvas_pos.x + canvas_size.x - 8, canvas_pos.y + canvas_size.y - 8 - corner_len), corner_col, 2.0f);
+	}
 
 	// Reserve space
 	ImGui::Dummy(canvas_size);
