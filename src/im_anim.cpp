@@ -448,116 +448,192 @@ static ImGuiID make_key(ImGuiID id, ImGuiID ch) {
 	return ImHashData(&k, sizeof(k));
 }
 
+// Forward declare global time for channels to use
+static double g_global_time = 0.0;
+
 struct float_chan {
 	float	current, start, target;
-	float	dur, t;
+	float	dur, t;  // t is cached progress for backward compatibility
+	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
-	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
+	unsigned sleeping;
 	float	pending_target;
 	float_chan() {
-		current=0; start=0; target=0; dur=1e-6f; t=1.f;
+		current=0; start=0; target=0; dur=1e-6f; t=1.0f; start_time=0;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
 	}
-	void set(float trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
-	void tick(float dt) { if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t); current = start + (target - start) * k; }
+	void set(float trg, float d, iam_ease_desc const& e, int pol) {
+		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
+	}
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+	float evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.f) { current = target; sleeping = 1; return current; }
+		float k = eval(ez, t);
+		current = start + (target - start) * k;
+		return current;
+	}
+	void tick(float) { evaluate(); }
 };
 
 struct vec2_chan {
 	ImVec2	current, start, target;
-	float	dur, t;
+	float	dur, t;  // t is cached progress for backward compatibility
+	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
-	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
+	unsigned sleeping;
 	ImVec2	pending_target;
 	vec2_chan() {
-		current=ImVec2(0,0); start=current; target=current; dur=1e-6f; t=1.f;
+		current=ImVec2(0,0); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec2(0,0);
 	}
-	void set(ImVec2 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
-	void tick(float dt) {
-		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+	void set(ImVec2 trg, float d, iam_ease_desc const& e, int pol) {
+		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
+	}
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+	ImVec2 evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.f) { current = target; sleeping = 1; return current; }
+		float k = eval(ez, t);
 		current.x = start.x + (target.x - start.x) * k;
 		current.y = start.y + (target.y - start.y) * k;
+		return current;
 	}
+	void tick(float) { evaluate(); }
 };
 
 struct vec4_chan {
 	ImVec4	current, start, target;
-	float	dur, t;
+	float	dur, t;  // t is cached progress for backward compatibility
+	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
-	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
+	unsigned sleeping;
 	ImVec4	pending_target;
 	vec4_chan() {
-		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.f;
+		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec4(0,0,0,0);
 	}
-	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
-	void tick(float dt) {
-		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol) {
+		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
+	}
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+	ImVec4 evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.f) { current = target; sleeping = 1; return current; }
+		float k = eval(ez, t);
 		current.x = start.x + (target.x - start.x) * k;
 		current.y = start.y + (target.y - start.y) * k;
 		current.z = start.z + (target.z - start.z) * k;
 		current.w = start.w + (target.w - start.w) * k;
+		return current;
 	}
+	void tick(float) { evaluate(); }
 };
 
 struct int_chan {
 	int		current, start, target;
-	float	dur, t;
+	float	dur, t;  // t is cached progress for backward compatibility
+	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	unsigned last_seen_frame;
 	unsigned has_pending;
-	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
+	unsigned sleeping;
 	int		pending_target;
 	int_chan() {
-		current=0; start=0; target=0; dur=1e-6f; t=1.f;
+		current=0; start=0; target=0; dur=1e-6f; t=1.0f; start_time=0;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
 	}
-	void set(int trg, float d, iam_ease_desc const& e, int pol) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; sleeping=0; }
-	void tick(float dt) {
-		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
+	void set(int trg, float d, iam_ease_desc const& e, int pol) {
+		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
+	}
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+	int evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.f) { current = target; sleeping = 1; return current; }
+		float k = eval(ez, t);
 		float v = (float)start + ((float)target - (float)start) * k;
 		current = (int)ImFloor(v + 0.5f);
+		return current;
 	}
+	void tick(float) { evaluate(); }
 };
 
 struct color_chan {
 	ImVec4	current, start, target;
-	float	dur, t;
+	float	dur, t;  // t is cached progress for backward compatibility
+	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	int		space;
 	unsigned last_seen_frame;
-	unsigned sleeping;  // Sleep optimization: skip processing when animation complete
+	unsigned sleeping;
 	color_chan() {
-		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.f;
+		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
 		ez = { iam_ease_out_cubic, 0,0,0,0 };
 		policy = iam_policy_crossfade;
 		space = iam_col_srgb_linear;
 		last_seen_frame = 0; sleeping = 1;
 	}
-	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) { start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); t=0; ez=e; policy=pol; space=sp; sleeping=0; }
-	void tick(float dt) {
-		if (t>=1.f){ current=target; sleeping=1; return; } if (dt>0) t += dt/dur; float k = eval(ez, t);
-		current = color::lerp_color(start, target, k, space);
+	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) {
+		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; space=sp; sleeping=0;
 	}
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+	ImVec4 evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.f) { current = target; sleeping = 1; return current; }
+		float k = eval(ez, t);
+		current = color::lerp_color(start, target, k, space);
+		return current;
+	}
+	void tick(float) { evaluate(); }
 };
 
 // Per-type pools
@@ -567,6 +643,8 @@ struct pool_t {
 	unsigned frame = 0;
 	void begin() { ++frame; }
 	T* get(ImGuiID key) { T* c = pool.GetOrAddByKey(key); c->last_seen_frame = frame; return c; }
+	T* try_get(ImGuiID key) { return pool.GetByKey(key); }  // Returns nullptr if not found
+	bool exists(ImGuiID key) { return pool.GetByKey(key) != nullptr; }
 	void gc(unsigned max_age) {
 		for (int i = 0; i < pool.GetMapSize(); ++i) {
 			if (T* c = pool.TryGetMapData(i)) {
@@ -590,6 +668,9 @@ static float g_time_scale = 1.0f;
 
 // Global frame counter for oscillators and procedural animations
 static unsigned g_frame = 0;
+
+// Lazy initialization - defer channel creation until animation is needed
+static bool g_lazy_init_enabled = true;
 
 // Note: g_custom_ease is forward-declared earlier and initialized to nullptr here
 
@@ -682,6 +763,8 @@ void iam_update_begin_frame() {
 	iam_detail::g_int.begin();
 	iam_detail::g_color.begin();
 	iam_detail::g_frame++;
+	// Accumulate global time (scaled)
+	iam_detail::g_global_time += ImGui::GetIO().DeltaTime * iam_detail::g_time_scale;
 	iam_scroll_update_internal(ImGui::GetIO().DeltaTime);
 }
 
@@ -712,6 +795,18 @@ void iam_set_global_time_scale(float scale) {
 
 float iam_get_global_time_scale() {
 	return iam_detail::g_time_scale;
+}
+
+// ----------------------------------------------------
+// Lazy Initialization API implementations
+// ----------------------------------------------------
+
+void iam_set_lazy_init(bool enable) {
+	iam_detail::g_lazy_init_enabled = enable;
+}
+
+bool iam_is_lazy_init_enabled() {
+	return iam_detail::g_lazy_init_enabled;
 }
 
 // ----------------------------------------------------
@@ -804,98 +899,168 @@ float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
 }
 
-float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	ImGuiID key = iam_detail::make_key(id, channel_id);
-	iam_detail::float_chan* c = iam_detail::g_float.get(key);
-	// Fast path: sleeping and target unchanged - skip all processing
+float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+
+	// Lazy init: if channel doesn't exist and target is default (0), skip channel creation
+	if (g_lazy_init_enabled) {
+		float_chan* existing = g_float.try_get(key);
+		if (!existing && fabsf(target) <= 1e-6f) {
+			return target;
+		}
+	}
+
+	float_chan* c = g_float.get(key);
+
+	// Fast path: sleeping and target unchanged
 	if (c->sleeping && fabsf(c->target - target) <= 1e-6f && !c->has_pending) {
 		return c->current;
 	}
-	dt *= iam_detail::g_time_scale;
+
+	// Compute current progress
+	float t_now = c->sleeping ? 1.0f : (float)((g_global_time - c->start_time) / c->dur);
+	bool anim_complete = t_now >= 1.0f;
+
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target - target) > 1e-6f) || (c->t >= 1.0f);
+	                    (fabsf(c->target - target) > 1e-6f) || anim_complete;
 	if (change) {
-		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
-	} else { c->tick(dt); }
-	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
-	return c->current;
+		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) {
+			c->pending_target = target; c->has_pending = 1;
+		}
+		else if (policy == iam_policy_cut) {
+			c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1;
+		}
+		else {
+			c->evaluate();  // Update current before setting new target
+			c->set(target, dur, ez, policy);
+		}
+	}
+	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
+	return c->evaluate();
 }
 
-ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	ImGuiID key = iam_detail::make_key(id, channel_id);
-	iam_detail::vec2_chan* c = iam_detail::g_vec2.get(key);
-	// Fast path: sleeping and target unchanged - skip all processing
+ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+
+	if (g_lazy_init_enabled) {
+		vec2_chan* existing = g_vec2.try_get(key);
+		if (!existing && fabsf(target.x) + fabsf(target.y) <= 1e-6f) {
+			return target;
+		}
+	}
+
+	vec2_chan* c = g_vec2.get(key);
+
 	if (c->sleeping && fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) <= 1e-6f && !c->has_pending) {
 		return c->current;
 	}
-	dt *= iam_detail::g_time_scale;
+
+	float t_now = c->sleeping ? 1.0f : (float)((g_global_time - c->start_time) / c->dur);
+	bool anim_complete = t_now >= 1.0f;
+
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) > 1e-6f) || (c->t >= 1.0f);
+	                    (fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) > 1e-6f) || anim_complete;
 	if (change) {
-		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
-	} else { c->tick(dt); }
-	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
-	return c->current;
+		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else { c->evaluate(); c->set(target, dur, ez, policy); }
+	}
+	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
+	return c->evaluate();
 }
 
-ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	ImGuiID key = iam_detail::make_key(id, channel_id);
-	iam_detail::vec4_chan* c = iam_detail::g_vec4.get(key);
-	// Fast path: sleeping and target unchanged - skip all processing
+ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+
+	if (g_lazy_init_enabled) {
+		vec4_chan* existing = g_vec4.try_get(key);
+		if (!existing && fabsf(target.x)+fabsf(target.y)+fabsf(target.z)+fabsf(target.w) <= 1e-6f) {
+			return target;
+		}
+	}
+
+	vec4_chan* c = g_vec4.get(key);
+
 	if (c->sleeping && fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) <= 1e-6f && !c->has_pending) {
 		return c->current;
 	}
-	dt *= iam_detail::g_time_scale;
+
+	float t_now = c->sleeping ? 1.0f : (float)((g_global_time - c->start_time) / c->dur);
+	bool anim_complete = t_now >= 1.0f;
+
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) > 1e-6f) || (c->t >= 1.0f);
+	                    (fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) > 1e-6f) || anim_complete;
 	if (change) {
-		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
-	} else { c->tick(dt); }
-	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
-	return c->current;
+		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else { c->evaluate(); c->set(target, dur, ez, policy); }
+	}
+	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
+	return c->evaluate();
 }
 
-int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	dt *= iam_detail::g_time_scale;
-	ImGuiID key = iam_detail::make_key(id, channel_id);
-	iam_detail::int_chan* c = iam_detail::g_int.get(key);
-	// Fast path: sleeping and target unchanged - skip all processing
+int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+
+	if (g_lazy_init_enabled) {
+		int_chan* existing = g_int.try_get(key);
+		if (!existing && target == 0) {
+			return target;
+		}
+	}
+
+	int_chan* c = g_int.get(key);
+
 	if (c->sleeping && c->target == target && !c->has_pending) { return c->current; }
+
+	float t_now = c->sleeping ? 1.0f : (float)((g_global_time - c->start_time) / c->dur);
+	bool anim_complete = t_now >= 1.0f;
+
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (c->target != target) || (c->t >= 1.0f);
+	                    (c->target != target) || anim_complete;
 	if (change) {
-		if (policy == iam_policy_queue && c->t < 1.0f && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
-		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; }
-		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target, dur, ez, policy); c->tick(dt); }
-	} else { c->tick(dt); }
-	if (c->t >= 1.0f && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
-	return c->current;
+		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else { c->evaluate(); c->set(target, dur, ez, policy); }
+	}
+	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
+	return c->evaluate();
 }
 
-ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt) {
-	dt *= iam_detail::g_time_scale;
-	ImGuiID key = iam_detail::make_key(id, channel_id);
-	iam_detail::color_chan* c = iam_detail::g_color.get(key);
-	// Fast path: sleeping and target unchanged - skip all processing
+ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float /*dt*/) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+
+	if (g_lazy_init_enabled) {
+		color_chan* existing = g_color.try_get(key);
+		if (!existing && fabsf(target_srgb.x)+fabsf(target_srgb.y)+fabsf(target_srgb.z)+fabsf(target_srgb.w) <= 1e-6f) {
+			return target_srgb;
+		}
+	}
+
+	color_chan* c = g_color.get(key);
+
 	if (c->sleeping && (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w)) <= 1e-6f) { return c->current; }
+
+	float t_now = c->sleeping ? 1.0f : (float)((g_global_time - c->start_time) / c->dur);
+	bool anim_complete = t_now >= 1.0f;
+
 	bool const change = (c->policy!=policy) || (c->space != color_space) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || (c->t >= 1.0f);
+	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || anim_complete;
 	if (change) {
-		if (policy == iam_policy_cut) { c->current = c->start = c->target = target_srgb; c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->space = color_space; }
-		else { if (c->t < 1.0f && dt > 0) c->tick(dt); c->set(target_srgb, dur, ez, policy, color_space); c->tick(dt); }
-	} else { c->tick(dt); }
-	return c->current;
+		if (policy == iam_policy_cut) { c->current = c->start = c->target = target_srgb; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->space = color_space; c->sleeping = 1; }
+		else { c->evaluate(); c->set(target_srgb, dur, ez, policy, color_space); }
+	}
+	return c->evaluate();
 }
 
 // ============================================================
@@ -962,9 +1127,9 @@ ImVec4 iam_tween_color_per_axis(ImGuiID id, ImGuiID channel_id, ImVec4 target_sr
 		if (changed) {
 			if (policy == iam_policy_cut) {
 				c->current = c->start = c->target = target_val;
-				c->t = 1.0f; c->dur = 1e-6f; c->ez = e; c->policy = policy;
+				c->sleeping = 1; c->dur = 1e-6f; c->ez = e; c->policy = policy;
 			} else {
-				if (c->t < 1.0f && dt > 0) c->tick(dt);
+				if (c->progress() < 1.0f && dt > 0) c->tick(dt);
 				c->set(target_val, dur, e, policy);
 				c->tick(dt);
 			}
@@ -1017,11 +1182,11 @@ void iam_rebase_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 new_target, float dt
 	int idx = iam_detail::g_vec2.pool.Map.GetInt(key, -1);
 	if (idx == -1) return;
 	iam_detail::vec2_chan* c = iam_detail::g_vec2.pool.GetByIndex(idx);
-	if (c->t < 1.0f && dt > 0) c->tick(dt);
-	float remain = (1.0f - (c->t < 1.0f ? c->t : 1.0f)) * c->dur;
+	if (c->progress() < 1.0f && dt > 0) c->tick(dt);
+	float remain = (1.0f - (c->progress() < 1.0f ? c->t : 1.0f)) * c->dur;
 	c->start = c->current;
 	c->target = new_target;
-	c->t = 0.0f;
+	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
 	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
 }
 
@@ -1066,11 +1231,11 @@ void iam_rebase_float(ImGuiID id, ImGuiID channel_id, float new_target, float dt
 	int idx = iam_detail::g_float.pool.Map.GetInt(key, -1);
 	if (idx == -1) return;
 	iam_detail::float_chan* c = iam_detail::g_float.pool.GetByIndex(idx);
-	if (c->t < 1.0f && dt > 0) c->tick(dt);
-	float remain = (1.0f - (c->t < 1.0f ? c->t : 1.0f)) * c->dur;
+	if (c->progress() < 1.0f && dt > 0) c->tick(dt);
+	float remain = (1.0f - (c->progress() < 1.0f ? c->t : 1.0f)) * c->dur;
 	c->start = c->current;
 	c->target = new_target;
-	c->t = 0.0f;
+	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
 	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
 }
 
@@ -1079,11 +1244,11 @@ void iam_rebase_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt
 	int idx = iam_detail::g_vec4.pool.Map.GetInt(key, -1);
 	if (idx == -1) return;
 	iam_detail::vec4_chan* c = iam_detail::g_vec4.pool.GetByIndex(idx);
-	if (c->t < 1.0f && dt > 0) c->tick(dt);
-	float remain = (1.0f - (c->t < 1.0f ? c->t : 1.0f)) * c->dur;
+	if (c->progress() < 1.0f && dt > 0) c->tick(dt);
+	float remain = (1.0f - (c->progress() < 1.0f ? c->t : 1.0f)) * c->dur;
 	c->start = c->current;
 	c->target = new_target;
-	c->t = 0.0f;
+	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
 	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
 }
 
@@ -1092,11 +1257,11 @@ void iam_rebase_color(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float d
 	int idx = iam_detail::g_color.pool.Map.GetInt(key, -1);
 	if (idx == -1) return;
 	iam_detail::color_chan* c = iam_detail::g_color.pool.GetByIndex(idx);
-	if (c->t < 1.0f && dt > 0) c->tick(dt);
-	float remain = (1.0f - (c->t < 1.0f ? c->t : 1.0f)) * c->dur;
+	if (c->progress() < 1.0f && dt > 0) c->tick(dt);
+	float remain = (1.0f - (c->progress() < 1.0f ? c->t : 1.0f)) * c->dur;
 	c->start = c->current;
 	c->target = new_target;
-	c->t = 0.0f;
+	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
 	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
 }
 
@@ -3593,7 +3758,7 @@ ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur
 				c->set(target, dur, ez, policy);
 				break;
 			case iam_policy_queue:
-				if (c->t < 1.0f && !c->has_pending) {
+				if (c->progress() < 1.0f && !c->has_pending) {
 					c->has_pending = 1;
 					c->pending_target = target;
 				} else {
@@ -3609,7 +3774,7 @@ ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur
 	c->tick(dt);
 
 	// Handle pending
-	if (c->has_pending && c->t >= 1.0f) {
+	if (c->has_pending && c->progress() >= 1.0f) {
 		c->set(c->pending_target, dur, ez, policy);
 		c->has_pending = 0;
 	}
@@ -3654,7 +3819,7 @@ float iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, floa
 				c->set(target, dur, ez, policy);
 				break;
 			case iam_policy_queue:
-				if (c->t < 1.0f && !c->has_pending) {
+				if (c->progress() < 1.0f && !c->has_pending) {
 					c->has_pending = 1;
 					c->pending_target = target;
 				} else {
@@ -3669,7 +3834,7 @@ float iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, floa
 
 	c->tick(dt);
 
-	if (c->has_pending && c->t >= 1.0f) {
+	if (c->has_pending && c->progress() >= 1.0f) {
 		c->set(c->pending_target, dur, ez, policy);
 		c->has_pending = 0;
 	}
@@ -3934,7 +4099,7 @@ ImVec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiID path_a, ImGu
 
 	// Check if path tween needs update
 	float path_target = 1.0f;
-	if (path_c->target != path_target || path_c->t >= 1.0f) {
+	if (path_c->target != path_target || path_c->progress() >= 1.0f) {
 		if (policy == iam_policy_cut) {
 			path_c->current = 0.0f;
 			path_c->set(path_target, dur, path_ease, policy);
@@ -3949,10 +4114,10 @@ ImVec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiID path_a, ImGu
 	float_chan* blend_c = g_float.get(blend_key);
 
 	// Check if blend tween needs update
-	if (fabsf(blend_c->target - target_blend) > 1e-6f || blend_c->t >= 1.0f) {
+	if (fabsf(blend_c->target - target_blend) > 1e-6f || blend_c->progress() >= 1.0f) {
 		if (policy == iam_policy_cut) {
 			blend_c->current = blend_c->start = blend_c->target = target_blend;
-			blend_c->t = 1.0f;
+			blend_c->sleeping = 1;
 		} else {
 			blend_c->set(target_blend, dur, morph_ease, policy);
 		}
@@ -5181,7 +5346,8 @@ namespace iam_gradient_detail {
 
 struct gradient_chan {
 	iam_gradient current, start, target;
-	float dur, t;
+	float dur, t;  // t is cached progress for backward compatibility
+	double start_time;
 	iam_ease_desc ez;
 	int policy;
 	int color_space;
@@ -5189,7 +5355,7 @@ struct gradient_chan {
 	unsigned sleeping;
 
 	gradient_chan() {
-		dur = 1e-6f; t = 1.0f;
+		dur = 1e-6f; t = 1.0f; start_time = 0;
 		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
 		policy = iam_policy_crossfade;
 		color_space = iam_col_oklab;
@@ -5201,6 +5367,7 @@ struct gradient_chan {
 		start = current;
 		target = trg;
 		dur = (d <= 1e-6f ? 1e-6f : d);
+		start_time = iam_detail::g_global_time;
 		t = 0;
 		ez = e;
 		policy = pol;
@@ -5208,12 +5375,23 @@ struct gradient_chan {
 		sleeping = 0;
 	}
 
-	void tick(float dt) {
-		if (t >= 1.0f) { current = target; sleeping = 1; return; }
-		if (dt > 0) t += dt / dur;
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((iam_detail::g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+
+	iam_gradient evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.0f) { current = target; sleeping = 1; return current; }
 		float k = iam_detail::eval(ez, t);
 		current = iam_gradient_lerp(start, target, k, color_space);
+		return current;
 	}
+
+	void tick(float) { evaluate(); }
 };
 
 static ImPool<gradient_chan> g_gradient_pool;
@@ -5245,7 +5423,7 @@ iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient con
 	// Check if target changed
 	bool change = (c->policy != policy) || (c->ez.type != ez.type) ||
 	              (c->ez.p0 != ez.p0) || (c->ez.p1 != ez.p1) || (c->ez.p2 != ez.p2) || (c->ez.p3 != ez.p3) ||
-	              (c->t >= 1.0f) || (c->target.stop_count != target.stop_count);
+	              (c->progress() >= 1.0f) || (c->target.stop_count != target.stop_count);
 
 	if (!change) {
 		for (int i = 0; i < target.stop_count && !change; ++i) {
@@ -5260,10 +5438,10 @@ iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient con
 	if (change) {
 		if (policy == iam_policy_cut) {
 			c->current = c->start = c->target = target;
-			c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->color_space = color_space;
+			c->sleeping = 1; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->color_space = color_space;
 			c->sleeping = 1;
 		} else {
-			if (c->t < 1.0f && dt > 0) c->tick(dt);
+			if (c->progress() < 1.0f && dt > 0) c->tick(dt);
 			c->set(target, dur, ez, policy, color_space);
 			c->tick(dt);
 		}
@@ -5437,7 +5615,8 @@ namespace iam_transform_detail {
 
 struct transform_chan {
 	iam_transform current, start, target;
-	float dur, t;
+	float dur, t;  // t is cached progress for backward compatibility
+	double start_time;
 	iam_ease_desc ez;
 	int policy;
 	int rotation_mode;
@@ -5445,7 +5624,7 @@ struct transform_chan {
 	unsigned sleeping;
 
 	transform_chan() {
-		dur = 1e-6f; t = 1.0f;
+		dur = 1e-6f; t = 1.0f; start_time = 0;
 		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
 		policy = iam_policy_crossfade;
 		rotation_mode = iam_rotation_shortest;
@@ -5457,6 +5636,7 @@ struct transform_chan {
 		start = current;
 		target = trg;
 		dur = (d <= 1e-6f ? 1e-6f : d);
+		start_time = iam_detail::g_global_time;
 		t = 0;
 		ez = e;
 		policy = pol;
@@ -5464,12 +5644,23 @@ struct transform_chan {
 		sleeping = 0;
 	}
 
-	void tick(float dt) {
-		if (t >= 1.0f) { current = target; sleeping = 1; return; }
-		if (dt > 0) t += dt / dur;
+	float progress() {
+		if (sleeping) { t = 1.0f; return 1.0f; }
+		t = (float)((iam_detail::g_global_time - start_time) / dur);
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		return t;
+	}
+
+	iam_transform evaluate() {
+		if (sleeping) return current;
+		progress();
+		if (t >= 1.0f) { current = target; sleeping = 1; return current; }
 		float k = iam_detail::eval(ez, t);
 		current = iam_transform_lerp(start, target, k, rotation_mode);
+		return current;
 	}
+
+	void tick(float) { evaluate(); }
 };
 
 static ImPool<transform_chan> g_transform_pool;
@@ -5502,16 +5693,16 @@ iam_transform iam_tween_transform(ImGuiID id, ImGuiID channel_id, iam_transform 
 
 	bool change = (c->policy != policy) || (c->rotation_mode != rotation_mode) || (c->ez.type != ez.type) ||
 	              (c->ez.p0 != ez.p0) || (c->ez.p1 != ez.p1) || (c->ez.p2 != ez.p2) || (c->ez.p3 != ez.p3) ||
-	              (pos_diff > 1e-6f) || (rot_diff > 1e-6f) || (scale_diff > 1e-6f) || (c->t >= 1.0f);
+	              (pos_diff > 1e-6f) || (rot_diff > 1e-6f) || (scale_diff > 1e-6f) || (c->progress() >= 1.0f);
 
 	if (change) {
 		if (policy == iam_policy_cut) {
 			c->current = c->start = c->target = target;
-			c->t = 1.0f; c->dur = 1e-6f; c->ez = ez; c->policy = policy;
+			c->sleeping = 1; c->dur = 1e-6f; c->ez = ez; c->policy = policy;
 			c->rotation_mode = rotation_mode;
 			c->sleeping = 1;
 		} else {
-			if (c->t < 1.0f && dt > 0) c->tick(dt);
+			if (c->progress() < 1.0f && dt > 0) c->tick(dt);
 			c->set(target, dur, ez, policy, rotation_mode);
 			c->tick(dt);
 		}
@@ -5861,12 +6052,18 @@ void iam_show_unified_inspector(bool* p_open) {
 						ImGui::TextDisabled("No profiler sections recorded.");
 						ImGui::TextDisabled("Use iam_profiler_begin(\"name\") and iam_profiler_end() in code.");
 					} else {
-						// Sort sections by time for display
+						float avail_width = ImGui::GetContentRegionAvail().x;
+						float col0_width = 180.0f;  // Section name
+						float col1_width = 80.0f;   // Time
+						float col2_width = 50.0f;   // Calls
+						float col3_width = avail_width - col0_width - col1_width - col2_width - 20.0f;  // Graph (remaining)
+						if (col3_width < 100.0f) col3_width = 100.0f;
+
 						ImGui::Columns(4, "ProfilerSections");
-						ImGui::SetColumnWidth(0, 200);
-						ImGui::SetColumnWidth(1, 100);
-						ImGui::SetColumnWidth(2, 60);
-						ImGui::SetColumnWidth(3, 280);
+						ImGui::SetColumnWidth(0, col0_width);
+						ImGui::SetColumnWidth(1, col1_width);
+						ImGui::SetColumnWidth(2, col2_width);
+						ImGui::SetColumnWidth(3, col3_width);
 						ImGui::Text("Section"); ImGui::NextColumn();
 						ImGui::Text("Time (ms)"); ImGui::NextColumn();
 						ImGui::Text("Calls"); ImGui::NextColumn();
@@ -5893,7 +6090,7 @@ void iam_show_unified_inspector(bool* p_open) {
 							ImGui::Text("%d", sec.call_count); ImGui::NextColumn();
 							ImGui::PushID(i);
 							ImGui::PlotLines("##SectionGraph", sec.history, iam_detail::PROFILER_HISTORY_SIZE,
-								sec.history_idx, nullptr, 0.0f, sec_max * 1.2f, ImVec2(250, row_height));
+								sec.history_idx, nullptr, 0.0f, sec_max * 1.2f, ImVec2(-1, row_height));
 							ImGui::PopID();
 							ImGui::NextColumn();
 						}
