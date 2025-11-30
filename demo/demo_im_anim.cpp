@@ -2542,9 +2542,10 @@ static void InitDemoClips()
 	// Race: 5 squares with stagger delay, timescale set per-instance to sync arrival
 	// Single clip with 3s duration, stagger adds 0.5s delay per index
 	// After play, we set timescale per instance: speed = T / (T - delay)
+	// Using key_float_rel so position is automatically relative to window content width
 	iam_clip::begin(CLIP_VAR_RACE)
-		.key_float(CLIP_CH_POS_X, 0.0f, 0.0f, iam_ease_linear)
-		.key_float(CLIP_CH_POS_X, 3.0f, 1.0f, iam_ease_linear)
+		.key_float_rel(CLIP_CH_POS_X, 0.0f, 0.0f, 35.0f, iam_anchor_window_content, 0, iam_ease_linear)   // Start at margin (35px)
+		.key_float_rel(CLIP_CH_POS_X, 3.0f, 1.0f, -35.0f, iam_anchor_window_content, 0, iam_ease_linear)  // End at 100% - margin
 		.key_float(CLIP_CH_ALPHA, 0.0f, 1.0f, iam_ease_linear)
 		.set_stagger(5, 0.5f, 0.0f)  // 5 items, 0.5s delay between each
 		.end();
@@ -3708,15 +3709,16 @@ static void ShowClipSystemDemo()
 
 		ImGui::Spacing();
 		ImGui::TextDisabled("Top=slow start, Bottom=fast start. All finish together!");
+		ImGui::TextDisabled("Using key_float_rel() - position auto-scales with window width");
 		ImGui::Spacing();
 
-		// Use anchor system for responsive width
+		// Canvas sizing - width comes from content region
 		ImVec2 content_size = iam_anchor_size(iam_anchor_window_content);
 		float canvas_w = content_size.x;
 		float row_h = 35.0f;
 		float canvas_h = NUM_RACERS * row_h + 10.0f;
 		float square_size = 25.0f;
-		float margin = square_size * 0.5f + 5.0f;
+		float margin = 35.0f;  // Matches the px_bias in clip definition
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -3737,18 +3739,18 @@ static void ShowClipSystemDemo()
 			ImVec2(canvas_pos.x + margin, canvas_pos.y + canvas_h - 5),
 			IM_COL32(100, 255, 100, 150), 2.0f);
 
-		float track_width = canvas_w - margin * 2 - square_size;
-
 		for (int i = 0; i < NUM_RACERS; i++) {
-			float pos_x = 0.0f;
+			float pos_x = margin;  // Default to start position
 			float alpha = 0.5f;
 			iam_instance inst = iam_get_instance(racer_inst_ids[i]);
 			if (inst.valid()) {
+				// get_float now returns actual pixel position thanks to key_float_rel!
 				inst.get_float(CLIP_CH_POS_X, &pos_x);
 				inst.get_float(CLIP_CH_ALPHA, &alpha);
 			}
 
-			float x = canvas_pos.x + margin + pos_x * track_width;
+			// pos_x is now the actual X position relative to content area
+			float x = canvas_pos.x + pos_x;
 			float y = canvas_pos.y + 5 + i * row_h + row_h * 0.5f;
 
 			int a = (int)(alpha * 255);

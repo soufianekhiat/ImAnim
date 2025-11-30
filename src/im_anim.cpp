@@ -1308,6 +1308,7 @@ struct keyframe {
 	bool		is_spring;
 	iam_spring_params spring;
 	float		value[4];	// f=value[0], v2=(value[0],value[1]), v4=(value[0..3]), i=*(int*)&value[0], color=(value[0..3])
+	float		value_ext[4];// Extended storage for relative types (px_bias for vec4_rel/color_rel)
 
 	// Variation data for repeat with variation feature
 	bool				has_variation;
@@ -1321,6 +1322,7 @@ struct keyframe {
 		bezier[0] = bezier[1] = bezier[2] = bezier[3] = 0;
 		spring = { 1.0f, 120.0f, 20.0f, 0.0f };
 		value[0] = value[1] = value[2] = value[3] = 0;
+		value_ext[0] = value_ext[1] = value_ext[2] = value_ext[3] = 0;
 		memset(&var_float, 0, sizeof(var_float));
 		memset(&var_int, 0, sizeof(var_int));
 		memset(&var_vec2, 0, sizeof(var_vec2));
@@ -1338,6 +1340,32 @@ struct keyframe {
 	int get_int() const { return *(int*)&value[0]; }
 	void set_color(ImVec4 c) { value[0] = c.x; value[1] = c.y; value[2] = c.z; value[3] = c.w; }
 	ImVec4 get_color() const { return ImVec4(value[0], value[1], value[2], value[3]); }
+
+	// Relative (anchor) value accessors: float uses value[0]=percent, value[1]=px_bias
+	void set_float_rel(float percent, float px_bias) { value[0] = percent; value[1] = px_bias; }
+	float get_float_rel_percent() const { return value[0]; }
+	float get_float_rel_px_bias() const { return value[1]; }
+
+	// Relative vec2: value[0,1]=percent.xy, value[2,3]=px_bias.xy
+	void set_vec2_rel(ImVec2 percent, ImVec2 px_bias) { value[0] = percent.x; value[1] = percent.y; value[2] = px_bias.x; value[3] = px_bias.y; }
+	ImVec2 get_vec2_rel_percent() const { return ImVec2(value[0], value[1]); }
+	ImVec2 get_vec2_rel_px_bias() const { return ImVec2(value[2], value[3]); }
+
+	// Relative vec4: value[0..3]=percent.xyzw, value_ext[0..3]=px_bias.xyzw
+	void set_vec4_rel(ImVec4 percent, ImVec4 px_bias) {
+		value[0] = percent.x; value[1] = percent.y; value[2] = percent.z; value[3] = percent.w;
+		value_ext[0] = px_bias.x; value_ext[1] = px_bias.y; value_ext[2] = px_bias.z; value_ext[3] = px_bias.w;
+	}
+	ImVec4 get_vec4_rel_percent() const { return ImVec4(value[0], value[1], value[2], value[3]); }
+	ImVec4 get_vec4_rel_px_bias() const { return ImVec4(value_ext[0], value_ext[1], value_ext[2], value_ext[3]); }
+
+	// Relative color: value[0..3]=percent.rgba, value_ext[0..3]=px_bias.rgba
+	void set_color_rel(ImVec4 percent, ImVec4 px_bias) {
+		value[0] = percent.x; value[1] = percent.y; value[2] = percent.z; value[3] = percent.w;
+		value_ext[0] = px_bias.x; value_ext[1] = px_bias.y; value_ext[2] = px_bias.z; value_ext[3] = px_bias.w;
+	}
+	ImVec4 get_color_rel_percent() const { return ImVec4(value[0], value[1], value[2], value[3]); }
+	ImVec4 get_color_rel_px_bias() const { return ImVec4(value_ext[0], value_ext[1], value_ext[2], value_ext[3]); }
 };
 
 // iam_track: sorted keyframes for a single channel
@@ -1347,7 +1375,12 @@ struct iam_track {
 	int					color_space;  // For iam_chan_color tracks
 	ImVector<keyframe>	keys;
 
-	iam_track() : channel(0), type(0), color_space(iam_col_oklab) {}
+	// Anchor-relative support (for key_float_rel, key_vec2_rel)
+	bool				is_relative;	// If true, values are percent+px_bias, resolved at get time
+	int					anchor_space;	// iam_anchor_space (window_content, window, viewport, etc.)
+	int					anchor_axis;	// For float: 0=x, 1=y (ignored for vec2/vec4)
+
+	iam_track() : channel(0), type(0), color_space(iam_col_oklab), is_relative(false), anchor_space(0), anchor_axis(0) {}
 };
 
 // Timeline marker
@@ -1439,9 +1472,14 @@ struct iam_instance_data {
 	struct vec2_entry { ImGuiID ch; ImVec2 v; };
 	struct vec4_entry { ImGuiID ch; ImVec4 v; };
 	struct color_entry { ImGuiID ch; ImVec4 v; int color_space; };
+	// Relative types need 8 floats: percent(4) + px_bias(4)
+	struct vec4_rel_entry { ImGuiID ch; ImVec4 percent; ImVec4 px_bias; };
+	struct color_rel_entry { ImGuiID ch; ImVec4 percent; ImVec4 px_bias; int color_space; };
 	ImVector<vec2_entry> values_vec2;
 	ImVector<vec4_entry> values_vec4;
 	ImVector<color_entry> values_color;
+	ImVector<vec4_rel_entry> values_vec4_rel;
+	ImVector<color_rel_entry> values_color_rel;
 
 	// Layered blending output (written by iam_layer_end)
 	ImGuiStorage	blended_float;
@@ -2031,6 +2069,120 @@ static void eval_iam_track(iam_track const& trk, float t, iam_instance_data* ins
 			}
 			break;
 		}
+		case iam_chan_float_rel: {
+			// Interpolate percent and px_bias separately, store as vec2 (percent, px_bias)
+			float percent_a = k0->get_float_rel_percent(), percent_b = k1->get_float_rel_percent();
+			float px_bias_a = k0->get_float_rel_px_bias(), px_bias_b = k1->get_float_rel_px_bias();
+			float percent = percent_a + (percent_b - percent_a) * w;
+			float px_bias = px_bias_a + (px_bias_b - px_bias_a) * w;
+			// Store as vec2 for later resolution (percent in x, px_bias in y)
+			ImVec2 v(percent, px_bias);
+			bool found = false;
+			for (int i = 0; i < inst->values_vec2.Size; ++i) {
+				if (inst->values_vec2[i].ch == trk.channel) {
+					inst->values_vec2[i].v = v;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				iam_instance_data::vec2_entry e; e.ch = trk.channel; e.v = v;
+				inst->values_vec2.push_back(e);
+			}
+			break;
+		}
+		case iam_chan_vec2_rel: {
+			// Interpolate percent and px_bias separately, store as vec4 (percent.xy, px_bias.xy)
+			ImVec2 percent_a = k0->get_vec2_rel_percent(), percent_b = k1->get_vec2_rel_percent();
+			ImVec2 px_bias_a = k0->get_vec2_rel_px_bias(), px_bias_b = k1->get_vec2_rel_px_bias();
+			ImVec2 percent(percent_a.x + (percent_b.x - percent_a.x) * w, percent_a.y + (percent_b.y - percent_a.y) * w);
+			ImVec2 px_bias(px_bias_a.x + (px_bias_b.x - px_bias_a.x) * w, px_bias_a.y + (px_bias_b.y - px_bias_a.y) * w);
+			// Store as vec4 (percent.x, percent.y, px_bias.x, px_bias.y)
+			ImVec4 v(percent.x, percent.y, px_bias.x, px_bias.y);
+			bool found = false;
+			for (int i = 0; i < inst->values_vec4.Size; ++i) {
+				if (inst->values_vec4[i].ch == trk.channel) {
+					inst->values_vec4[i].v = v;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				iam_instance_data::vec4_entry e; e.ch = trk.channel; e.v = v;
+				inst->values_vec4.push_back(e);
+			}
+			break;
+		}
+		case iam_chan_vec4_rel: {
+			// Interpolate percent and px_bias separately
+			ImVec4 percent_a = k0->get_vec4_rel_percent(), percent_b = k1->get_vec4_rel_percent();
+			ImVec4 px_bias_a = k0->get_vec4_rel_px_bias(), px_bias_b = k1->get_vec4_rel_px_bias();
+			ImVec4 percent(
+				percent_a.x + (percent_b.x - percent_a.x) * w,
+				percent_a.y + (percent_b.y - percent_a.y) * w,
+				percent_a.z + (percent_b.z - percent_a.z) * w,
+				percent_a.w + (percent_b.w - percent_a.w) * w
+			);
+			ImVec4 px_bias(
+				px_bias_a.x + (px_bias_b.x - px_bias_a.x) * w,
+				px_bias_a.y + (px_bias_b.y - px_bias_a.y) * w,
+				px_bias_a.z + (px_bias_b.z - px_bias_a.z) * w,
+				px_bias_a.w + (px_bias_b.w - px_bias_a.w) * w
+			);
+			bool found = false;
+			for (int i = 0; i < inst->values_vec4_rel.Size; ++i) {
+				if (inst->values_vec4_rel[i].ch == trk.channel) {
+					inst->values_vec4_rel[i].percent = percent;
+					inst->values_vec4_rel[i].px_bias = px_bias;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				iam_instance_data::vec4_rel_entry e;
+				e.ch = trk.channel;
+				e.percent = percent;
+				e.px_bias = px_bias;
+				inst->values_vec4_rel.push_back(e);
+			}
+			break;
+		}
+		case iam_chan_color_rel: {
+			// Interpolate percent and px_bias separately (color blending not applied to percent/bias)
+			ImVec4 percent_a = k0->get_color_rel_percent(), percent_b = k1->get_color_rel_percent();
+			ImVec4 px_bias_a = k0->get_color_rel_px_bias(), px_bias_b = k1->get_color_rel_px_bias();
+			ImVec4 percent(
+				percent_a.x + (percent_b.x - percent_a.x) * w,
+				percent_a.y + (percent_b.y - percent_a.y) * w,
+				percent_a.z + (percent_b.z - percent_a.z) * w,
+				percent_a.w + (percent_b.w - percent_a.w) * w
+			);
+			ImVec4 px_bias(
+				px_bias_a.x + (px_bias_b.x - px_bias_a.x) * w,
+				px_bias_a.y + (px_bias_b.y - px_bias_a.y) * w,
+				px_bias_a.z + (px_bias_b.z - px_bias_a.z) * w,
+				px_bias_a.w + (px_bias_b.w - px_bias_a.w) * w
+			);
+			bool found = false;
+			for (int i = 0; i < inst->values_color_rel.Size; ++i) {
+				if (inst->values_color_rel[i].ch == trk.channel) {
+					inst->values_color_rel[i].percent = percent;
+					inst->values_color_rel[i].px_bias = px_bias;
+					inst->values_color_rel[i].color_space = trk.color_space;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				iam_instance_data::color_rel_entry e;
+				e.ch = trk.channel;
+				e.percent = percent;
+				e.px_bias = px_bias;
+				e.color_space = trk.color_space;
+				inst->values_color_rel.push_back(e);
+			}
+			break;
+		}
 	}
 }
 
@@ -2216,6 +2368,98 @@ iam_clip& iam_clip::key_float_spring(ImGuiID channel, float time, float target, 
 	k.is_spring = true;
 	k.spring = spring;
 	k.set_float(target);
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+// Anchor-relative keyframes
+iam_clip& iam_clip::key_float_rel(ImGuiID channel, float time, float percent, float px_bias, int anchor_space, int axis, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_float_rel;
+	k.ease_type = ease_type;
+	k.set_float_rel(percent, px_bias);
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	// Store anchor info in the keyframe for track setup during end()
+	// We abuse color_space field temporarily to store anchor_space | (axis << 8)
+	k.color_space = anchor_space | (axis << 8);
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_vec2_rel(ImGuiID channel, float time, ImVec2 percent, ImVec2 px_bias, int anchor_space, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_vec2_rel;
+	k.ease_type = ease_type;
+	k.set_vec2_rel(percent, px_bias);
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	// Store anchor info
+	k.color_space = anchor_space;
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_vec4_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int anchor_space, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_vec4_rel;
+	k.ease_type = ease_type;
+	k.set_vec4_rel(percent, px_bias);
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	// Store anchor info
+	k.color_space = anchor_space;
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_color_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int color_space, int anchor_space, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_color_rel;
+	k.ease_type = ease_type;
+	k.color_space = color_space;
+	k.set_color_rel(percent, px_bias);
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	// Store anchor_space in a different way - use high bits of color_space
+	// color_space uses low 8 bits, anchor_space in bits 8-15
+	k.color_space = (color_space & 0xFF) | ((anchor_space & 0xFF) << 8);
 	clip->build_keys.push_back(k);
 	if (actual_time > clip->duration) clip->duration = actual_time;
 	return *this;
@@ -2505,6 +2749,25 @@ void iam_clip::end() {
 			if (k.type == iam_chan_color) {
 				trk->color_space = k.color_space;
 			}
+			// Set up anchor info for relative tracks
+			if (k.type == iam_chan_float_rel) {
+				trk->is_relative = true;
+				trk->anchor_space = k.color_space & 0xFF;
+				trk->anchor_axis = (k.color_space >> 8) & 0xFF;
+			} else if (k.type == iam_chan_vec2_rel) {
+				trk->is_relative = true;
+				trk->anchor_space = k.color_space;
+				trk->anchor_axis = 0;  // Not used for vec2
+			} else if (k.type == iam_chan_vec4_rel) {
+				trk->is_relative = true;
+				trk->anchor_space = k.color_space;
+				trk->anchor_axis = 0;  // Not used for vec4
+			} else if (k.type == iam_chan_color_rel) {
+				trk->is_relative = true;
+				trk->color_space = k.color_space & 0xFF;  // Extract color_space from low bits
+				trk->anchor_space = (k.color_space >> 8) & 0xFF;  // Extract anchor_space from high bits
+				trk->anchor_axis = 0;
+			}
 		}
 
 		trk->keys.push_back(k);
@@ -2650,15 +2913,69 @@ bool iam_instance::is_paused() const {
 }
 
 bool iam_instance::get_float(ImGuiID channel, float* out) const {
+	using namespace iam_clip_detail;
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (!inst || !out) return false;
+
+	// Check if this channel is a relative float track (stored as vec2: percent, px_bias)
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (clip) {
+		for (int t = 0; t < clip->iam_tracks.Size; ++t) {
+			iam_track& trk = clip->iam_tracks[t];
+			if (trk.channel == channel && trk.type == iam_chan_float_rel) {
+				// Find the stored percent/px_bias in values_vec2
+				for (int i = 0; i < inst->values_vec2.Size; ++i) {
+					if (inst->values_vec2[i].ch == channel) {
+						float percent = inst->values_vec2[i].v.x;
+						float px_bias = inst->values_vec2[i].v.y;
+						// Resolve anchor
+						ImVec2 anchor = iam_anchor_size(trk.anchor_space);
+						float base = (trk.anchor_axis == 0) ? anchor.x : anchor.y;
+						*out = base * percent + px_bias;
+						return true;
+					}
+				}
+				*out = 0.0f;
+				return false;
+			}
+		}
+	}
+
+	// Normal float channel
 	*out = inst->values_float.GetFloat(channel, 0.0f);
 	return true;
 }
 
 bool iam_instance::get_vec2(ImGuiID channel, ImVec2* out) const {
+	using namespace iam_clip_detail;
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (!inst || !out) return false;
+
+	// Check if this channel is a relative vec2 track (stored as vec4: percent.xy, px_bias.xy)
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (clip) {
+		for (int t = 0; t < clip->iam_tracks.Size; ++t) {
+			iam_track& trk = clip->iam_tracks[t];
+			if (trk.channel == channel && trk.type == iam_chan_vec2_rel) {
+				// Find the stored percent/px_bias in values_vec4
+				for (int i = 0; i < inst->values_vec4.Size; ++i) {
+					if (inst->values_vec4[i].ch == channel) {
+						ImVec4& v = inst->values_vec4[i].v;
+						ImVec2 percent(v.x, v.y);
+						ImVec2 px_bias(v.z, v.w);
+						// Resolve anchor
+						ImVec2 anchor = iam_anchor_size(trk.anchor_space);
+						*out = ImVec2(anchor.x * percent.x + px_bias.x, anchor.y * percent.y + px_bias.y);
+						return true;
+					}
+				}
+				*out = ImVec2(0, 0);
+				return false;
+			}
+		}
+	}
+
+	// Normal vec2 channel
 	for (int i = 0; i < inst->values_vec2.Size; ++i) {
 		if (inst->values_vec2[i].ch == channel) {
 			*out = inst->values_vec2[i].v;
@@ -2670,8 +2987,39 @@ bool iam_instance::get_vec2(ImGuiID channel, ImVec2* out) const {
 }
 
 bool iam_instance::get_vec4(ImGuiID channel, ImVec4* out) const {
+	using namespace iam_clip_detail;
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (!inst || !out) return false;
+
+	// Check if this channel is a relative vec4 track
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (clip) {
+		for (int t = 0; t < clip->iam_tracks.Size; ++t) {
+			iam_track& trk = clip->iam_tracks[t];
+			if (trk.channel == channel && trk.type == iam_chan_vec4_rel) {
+				// Find the stored percent/px_bias in values_vec4_rel
+				for (int i = 0; i < inst->values_vec4_rel.Size; ++i) {
+					if (inst->values_vec4_rel[i].ch == channel) {
+						ImVec4 percent = inst->values_vec4_rel[i].percent;
+						ImVec4 px_bias = inst->values_vec4_rel[i].px_bias;
+						// Resolve anchor - x,y use anchor dimensions, z,w pass through
+						ImVec2 anchor = iam_anchor_size(trk.anchor_space);
+						*out = ImVec4(
+							anchor.x * percent.x + px_bias.x,
+							anchor.y * percent.y + px_bias.y,
+							percent.z + px_bias.z,  // z,w not anchor-relative
+							percent.w + px_bias.w
+						);
+						return true;
+					}
+				}
+				*out = ImVec4(0, 0, 0, 0);
+				return false;
+			}
+		}
+	}
+
+	// Normal vec4 channel
 	for (int i = 0; i < inst->values_vec4.Size; ++i) {
 		if (inst->values_vec4[i].ch == channel) {
 			*out = inst->values_vec4[i].v;
@@ -2690,8 +3038,41 @@ bool iam_instance::get_int(ImGuiID channel, int* out) const {
 }
 
 bool iam_instance::get_color(ImGuiID channel, ImVec4* out, int color_space) const {
+	using namespace iam_clip_detail;
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (!inst || !out) return false;
+
+	// Check if this channel is a relative color track
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (clip) {
+		for (int t = 0; t < clip->iam_tracks.Size; ++t) {
+			iam_track& trk = clip->iam_tracks[t];
+			if (trk.channel == channel && trk.type == iam_chan_color_rel) {
+				// Find the stored percent/px_bias in values_color_rel
+				for (int i = 0; i < inst->values_color_rel.Size; ++i) {
+					if (inst->values_color_rel[i].ch == channel) {
+						ImVec4 percent = inst->values_color_rel[i].percent;
+						ImVec4 px_bias = inst->values_color_rel[i].px_bias;
+						// Resolve anchor - apply to all 4 components (RGBA)
+						ImVec2 anchor = iam_anchor_size(trk.anchor_space);
+						// For color, use anchor.x for R,B and anchor.y for G,A (or could be all same)
+						// Most common use: all components scale the same way
+						*out = ImVec4(
+							anchor.x * percent.x + px_bias.x,
+							anchor.y * percent.y + px_bias.y,
+							anchor.x * percent.z + px_bias.z,
+							anchor.y * percent.w + px_bias.w
+						);
+						return true;
+					}
+				}
+				*out = ImVec4(0, 0, 0, 1);
+				return false;
+			}
+		}
+	}
+
+	// Normal color channel
 	for (int i = 0; i < inst->values_color.Size; ++i) {
 		if (inst->values_color[i].ch == channel) {
 			// If requested color space differs from stored, convert

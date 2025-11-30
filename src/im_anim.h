@@ -607,7 +607,11 @@ enum iam_channel_type {
 	iam_chan_vec2,
 	iam_chan_vec4,
 	iam_chan_int,
-	iam_chan_color    // Color with color space (stores in vec4 + color_space metadata)
+	iam_chan_color,     // Color with color space (stores in vec4 + color_space metadata)
+	iam_chan_float_rel, // Float relative to anchor (percent + px_bias)
+	iam_chan_vec2_rel,  // Vec2 relative to anchor (percent.xy + px_bias.xy)
+	iam_chan_vec4_rel,  // Vec4 relative to anchor (percent.xy + px_bias.xy for x,y; z,w absolute)
+	iam_chan_color_rel  // Color relative to anchor (for position-based color effects)
 };
 
 // Result codes
@@ -927,6 +931,12 @@ public:
 
 	// Spring-based keyframe (float only)
 	iam_clip& key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring);
+
+	// Anchor-relative keyframes (values resolved relative to window/viewport at get time)
+	iam_clip& key_float_rel(ImGuiID channel, float time, float percent, float px_bias, int anchor_space, int axis, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec2_rel(ImGuiID channel, float time, ImVec2 percent, ImVec2 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec4_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_color_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int color_space, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
 	// Timeline grouping - sequential and parallel keyframe blocks
 	iam_clip& seq_begin();  // Start sequential block (keyframes after seq_end start after this block)
