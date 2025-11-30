@@ -2283,6 +2283,13 @@ static const ImGuiID CLIP_STAGGER_LIST = 0x100B;
 static const ImGuiID CLIP_STAGGER_GRID = 0x100C;
 static const ImGuiID CLIP_STAGGER_CARDS = 0x100D;
 static const ImGuiID CLIP_COLOR_OKLCH = 0x100E;
+static const ImGuiID CLIP_VAR_BOUNCE = 0x100F;
+static const ImGuiID CLIP_VAR_DECAY = 0x1010;
+static const ImGuiID CLIP_VAR_RANDOM = 0x1011;
+static const ImGuiID CLIP_VAR_COLOR = 0x1012;
+static const ImGuiID CLIP_VAR_TIMING = 0x1013;
+static const ImGuiID CLIP_VAR_PARTICLES = 0x1014;
+static const ImGuiID CLIP_VAR_RACE = 0x1015;
 
 // Channel IDs for clips
 static const ImGuiID CLIP_CH_ALPHA = 0x2001;
@@ -2470,6 +2477,76 @@ static void InitDemoClips()
 		.key_color(CLIP_CH_COLOR, 4.0f, ImVec4(0.8f, 0.2f, 0.9f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Purple
 		.key_color(CLIP_CH_COLOR, 5.0f, ImVec4(1.0f, 0.2f, 0.2f, 1.0f), iam_col_oklch, iam_ease_in_out_cubic)   // Back to Red
 		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Variation clips - demonstrating per-loop parameter variations
+	// Bouncing ball with decaying height
+	iam_clip::begin(CLIP_VAR_BOUNCE)
+		.key_float_var(CLIP_CH_POS_Y, 0.0f, 0.0f, iam_varf_none(), iam_ease_out_quad)
+		.key_float_var(CLIP_CH_POS_Y, 0.25f, -100.0f, iam_varf_mul(0.7f), iam_ease_out_quad)  // Height decays 70% each loop
+		.key_float_var(CLIP_CH_POS_Y, 0.5f, 0.0f, iam_varf_none(), iam_ease_in_quad)
+		.set_duration_var(iam_varf_mul(0.85f))  // Duration also shortens
+		.set_loop(true, iam_dir_normal, 8)
+		.end();
+
+	// Scale decay animation - gets smaller each loop
+	iam_clip::begin(CLIP_VAR_DECAY)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 1.0f, iam_ease_linear)
+		.key_float_var(CLIP_CH_SCALE, 0.0f, 1.0f, iam_varf_mul(0.8f), iam_ease_out_cubic)
+		.key_float_var(CLIP_CH_SCALE, 0.5f, 1.2f, iam_varf_mul(0.8f), iam_ease_in_out_cubic)
+		.key_float_var(CLIP_CH_SCALE, 1.0f, 1.0f, iam_varf_mul(0.8f), iam_ease_in_cubic)
+		.set_loop(true, iam_dir_normal, 6)
+		.end();
+
+	// Random position variation - jitter effect
+	iam_clip::begin(CLIP_VAR_RANDOM)
+		.key_vec2_var(CLIP_CH_OFFSET, 0.0f, ImVec2(0, 0),
+			iam_varv2_axis(iam_varf_rand(20.0f), iam_varf_rand(20.0f)), iam_ease_out_elastic)
+		.key_vec2_var(CLIP_CH_OFFSET, 0.3f, ImVec2(0, 0),
+			iam_varv2_axis(iam_varf_rand(20.0f), iam_varf_rand(20.0f)), iam_ease_out_cubic)
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Color hue shift variation - cycles through colors
+	iam_clip::begin(CLIP_VAR_COLOR)
+		.key_color_var(CLIP_CH_COLOR, 0.0f, ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+			iam_varc_channel(iam_varf_none(), iam_varf_inc(0.15f), iam_varf_none(), iam_varf_none()), iam_col_oklch, iam_ease_in_out_cubic)
+		.key_color_var(CLIP_CH_COLOR, 0.5f, ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
+			iam_varc_channel(iam_varf_none(), iam_varf_inc(0.15f), iam_varf_none(), iam_varf_none()), iam_col_oklch, iam_ease_in_out_cubic)
+		.key_color_var(CLIP_CH_COLOR, 1.0f, ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+			iam_varc_channel(iam_varf_none(), iam_varf_inc(0.15f), iam_varf_none(), iam_varf_none()), iam_col_oklch, iam_ease_in_out_cubic)
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Timing variation - accelerating animation
+	iam_clip::begin(CLIP_VAR_TIMING)
+		.key_float(CLIP_CH_ROTATION, 0.0f, 0.0f, iam_ease_in_out_cubic)
+		.key_float(CLIP_CH_ROTATION, 1.0f, 360.0f, iam_ease_in_out_cubic)
+		.set_timescale_var(iam_varf_mul(1.2f))  // Gets 20% faster each loop
+		.set_loop(true, iam_dir_normal, 10)
+		.end();
+
+	// Grid of elements - staggered start, scale and speed pingpong up/down
+	iam_clip::begin(CLIP_VAR_PARTICLES)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 1.0f, iam_ease_linear)
+		.key_float_var(CLIP_CH_SCALE, 0.0f, 0.5f, iam_varf_pingpong(0.08f), iam_ease_out_back)
+		.key_float_var(CLIP_CH_SCALE, 0.5f, 1.0f, iam_varf_pingpong(0.08f), iam_ease_in_out_cubic)
+		.key_float_var(CLIP_CH_SCALE, 1.0f, 0.5f, iam_varf_pingpong(0.08f), iam_ease_in_cubic)
+		.key_float_var(CLIP_CH_ROTATION, 0.0f, 0.0f, iam_varf_inc(15.0f), iam_ease_in_out_cubic)
+		.key_float_var(CLIP_CH_ROTATION, 1.0f, 30.0f, iam_varf_inc(15.0f), iam_ease_in_out_cubic)
+		.set_timescale_var(iam_varf_pingpong(0.15f))  // Speed oscillates: faster then slower
+		.set_stagger(15, 0.08f, 0.0f)
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Race: 5 squares with stagger delay, timescale set per-instance to sync arrival
+	// Single clip with 3s duration, stagger adds 0.5s delay per index
+	// After play, we set timescale per instance: speed = T / (T - delay)
+	iam_clip::begin(CLIP_VAR_RACE)
+		.key_float(CLIP_CH_POS_X, 0.0f, 0.0f, iam_ease_linear)
+		.key_float(CLIP_CH_POS_X, 3.0f, 1.0f, iam_ease_linear)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 1.0f, iam_ease_linear)
+		.set_stagger(5, 0.5f, 0.0f)  // 5 items, 0.5s delay between each
 		.end();
 }
 
@@ -3234,6 +3311,465 @@ static void ShowClipSystemDemo()
 		ImGui::TreePop();
 	}
 
+	// ============================================================
+	// Variation Demos
+	// ============================================================
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Bouncing Ball Decay")) {
+		ImGui::TextWrapped(
+			"A bouncing ball where each bounce gets lower (70%% of previous height) "
+			"and faster (85%% of previous duration). Uses iam_varf_mul() for multiplicative decay.");
+
+		static ImGuiID inst_bounce = ImHashStr("var_bounce_inst");
+
+		if (ImGui::Button("Start Bounce")) {
+			iam_play(CLIP_VAR_BOUNCE, inst_bounce);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##bounce")) {
+			iam_instance inst = iam_get_instance(inst_bounce);
+			if (inst.valid()) inst.destroy();
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float canvas_w = 300.0f;
+		float canvas_h = 150.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		// Ground line
+		draw_list->AddLine(
+			ImVec2(canvas_pos.x + 10, canvas_pos.y + canvas_h - 20),
+			ImVec2(canvas_pos.x + canvas_w - 10, canvas_pos.y + canvas_h - 20),
+			IM_COL32(100, 100, 100, 255), 2.0f);
+
+		float pos_y = 0.0f;
+		iam_instance inst = iam_get_instance(inst_bounce);
+		if (inst.valid()) {
+			inst.get_float(CLIP_CH_POS_Y, &pos_y);
+		}
+
+		float ball_x = canvas_pos.x + canvas_w * 0.5f;
+		float ball_y = canvas_pos.y + canvas_h - 35 + pos_y;
+		float ball_radius = 15.0f;
+
+		draw_list->AddCircleFilled(ImVec2(ball_x, ball_y), ball_radius, IM_COL32(255, 120, 50, 255));
+		draw_list->AddCircle(ImVec2(ball_x, ball_y), ball_radius, IM_COL32(255, 180, 100, 255), 0, 2.0f);
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Scale Decay")) {
+		ImGui::TextWrapped(
+			"A pulsing element that gets smaller with each loop. Scale decreases by "
+			"20%% each iteration using iam_varf_mul(0.8f).");
+
+		static ImGuiID inst_decay = ImHashStr("var_decay_inst");
+
+		if (ImGui::Button("Start Decay")) {
+			iam_play(CLIP_VAR_DECAY, inst_decay);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##decay")) {
+			iam_instance inst = iam_get_instance(inst_decay);
+			if (inst.valid()) inst.destroy();
+		}
+
+		ImGui::Spacing();
+
+		float alpha = 1.0f, scale = 1.0f;
+		iam_instance inst = iam_get_instance(inst_decay);
+		if (inst.valid()) {
+			inst.get_float(CLIP_CH_ALPHA, &alpha);
+			inst.get_float(CLIP_CH_SCALE, &scale);
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float canvas_size = 150.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size, canvas_pos.y + canvas_size),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		float center_x = canvas_pos.x + canvas_size * 0.5f;
+		float center_y = canvas_pos.y + canvas_size * 0.5f;
+		float rect_size = 50.0f * scale;
+
+		int a = (int)(alpha * 255);
+		draw_list->AddRectFilled(
+			ImVec2(center_x - rect_size, center_y - rect_size),
+			ImVec2(center_x + rect_size, center_y + rect_size),
+			IM_COL32(100, 200, 255, a), 8.0f);
+
+		ImGui::Dummy(ImVec2(canvas_size, canvas_size));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Random Jitter")) {
+		ImGui::TextWrapped(
+			"Each loop iteration applies a random offset to the position using "
+			"iam_varf_rand(). The offset varies between -20 and +20 pixels per axis.");
+
+		static ImGuiID inst_random = ImHashStr("var_random_inst");
+		static bool random_started = false;
+
+		if (!random_started) {
+			iam_play(CLIP_VAR_RANDOM, inst_random);
+			random_started = true;
+		}
+
+		if (ImGui::Button("Restart##random")) {
+			iam_play(CLIP_VAR_RANDOM, inst_random);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Stop##random")) {
+			iam_instance inst = iam_get_instance(inst_random);
+			if (inst.valid()) inst.destroy();
+			random_started = false;
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 offset(0, 0);
+		iam_instance inst = iam_get_instance(inst_random);
+		if (inst.valid()) {
+			inst.get_vec2(CLIP_CH_OFFSET, &offset);
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float canvas_size = 150.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size, canvas_pos.y + canvas_size),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		float center_x = canvas_pos.x + canvas_size * 0.5f + offset.x;
+		float center_y = canvas_pos.y + canvas_size * 0.5f + offset.y;
+
+		draw_list->AddCircleFilled(ImVec2(center_x, center_y), 20.0f, IM_COL32(255, 200, 100, 255));
+
+		ImGui::Dummy(ImVec2(canvas_size, canvas_size));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Color Shift")) {
+		ImGui::TextWrapped(
+			"Each loop increments the hue in OKLCH color space using iam_varf_inc(). "
+			"The color smoothly cycles through the spectrum.");
+
+		static ImGuiID inst_color = ImHashStr("var_color_inst");
+		static bool color_started = false;
+
+		if (!color_started) {
+			iam_play(CLIP_VAR_COLOR, inst_color);
+			color_started = true;
+		}
+
+		if (ImGui::Button("Restart##color")) {
+			iam_play(CLIP_VAR_COLOR, inst_color);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Stop##color")) {
+			iam_instance inst = iam_get_instance(inst_color);
+			if (inst.valid()) inst.destroy();
+			color_started = false;
+		}
+
+		ImGui::Spacing();
+
+		ImVec4 color(1.0f, 0.3f, 0.3f, 1.0f);
+		iam_instance inst = iam_get_instance(inst_color);
+		if (inst.valid()) {
+			inst.get_color(CLIP_CH_COLOR, &color);
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float canvas_w = 200.0f;
+		float canvas_h = 80.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		ImU32 col = IM_COL32(
+			(int)(color.x * 255),
+			(int)(color.y * 255),
+			(int)(color.z * 255),
+			(int)(color.w * 255));
+
+		draw_list->AddRectFilled(
+			ImVec2(canvas_pos.x + 20, canvas_pos.y + 15),
+			ImVec2(canvas_pos.x + canvas_w - 20, canvas_pos.y + canvas_h - 15),
+			col, 12.0f);
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Accelerating Spin")) {
+		ImGui::TextWrapped(
+			"A spinning element that gets 20%% faster each loop using set_timescale_var(). "
+			"Demonstrates timing variation.");
+
+		static ImGuiID inst_timing = ImHashStr("var_timing_inst");
+
+		if (ImGui::Button("Start Spin")) {
+			iam_play(CLIP_VAR_TIMING, inst_timing);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##timing")) {
+			iam_instance inst = iam_get_instance(inst_timing);
+			if (inst.valid()) inst.destroy();
+		}
+
+		ImGui::Spacing();
+
+		float rotation = 0.0f;
+		iam_instance inst = iam_get_instance(inst_timing);
+		if (inst.valid()) {
+			inst.get_float(CLIP_CH_ROTATION, &rotation);
+		}
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float canvas_size = 150.0f;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_size, canvas_pos.y + canvas_size),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		float center_x = canvas_pos.x + canvas_size * 0.5f;
+		float center_y = canvas_pos.y + canvas_size * 0.5f;
+		float arm_length = 40.0f;
+
+		// Convert degrees to radians
+		float rad = rotation * 3.14159265f / 180.0f;
+
+		// Draw a spinning line/arm
+		ImVec2 end_pos(
+			center_x + cosf(rad) * arm_length,
+			center_y + sinf(rad) * arm_length);
+
+		draw_list->AddLine(ImVec2(center_x, center_y), end_pos, IM_COL32(100, 255, 150, 255), 4.0f);
+		draw_list->AddCircleFilled(end_pos, 8.0f, IM_COL32(100, 255, 150, 255));
+		draw_list->AddCircleFilled(ImVec2(center_x, center_y), 6.0f, IM_COL32(200, 200, 200, 255));
+
+		ImGui::Dummy(ImVec2(canvas_size, canvas_size));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Staggered Grid (N Instances)")) {
+		ImGui::TextWrapped(
+			"A grid with staggered timing (top-left to bottom-right). Scale and speed use "
+			"pingpong variation (grow then shrink), rotation increments continuously.");
+
+		static const int GRID_COLS = 5;
+		static const int GRID_ROWS = 3;
+		static const int NUM_ITEMS = GRID_COLS * GRID_ROWS;
+		static ImGuiID grid_inst_ids[NUM_ITEMS];
+		static bool grid_initialized = false;
+		if (!grid_initialized) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "var_grid_%d", i);
+				grid_inst_ids[i] = ImHashStr(buf);
+			}
+			grid_initialized = true;
+		}
+
+		if (ImGui::Button("Start")) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				iam_play_stagger(CLIP_VAR_PARTICLES, grid_inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##grid")) {
+			for (int i = 0; i < NUM_ITEMS; i++) {
+				iam_instance inst = iam_get_instance(grid_inst_ids[i]);
+				if (inst.valid()) inst.destroy();
+			}
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("Pingpong: scale/speed increase then decrease, loops forever");
+		ImGui::Spacing();
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		float cell_size = 50.0f;
+		float spacing = 10.0f;
+		float canvas_w = GRID_COLS * (cell_size + spacing) + spacing;
+		float canvas_h = GRID_ROWS * (cell_size + spacing) + spacing;
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		for (int row = 0; row < GRID_ROWS; row++) {
+			for (int col = 0; col < GRID_COLS; col++) {
+				int idx = row * GRID_COLS + col;
+
+				float cx = canvas_pos.x + spacing + col * (cell_size + spacing) + cell_size * 0.5f;
+				float cy = canvas_pos.y + spacing + row * (cell_size + spacing) + cell_size * 0.5f;
+
+				float alpha = 0.3f, scale = 0.6f, rotation = 0.0f;
+				iam_instance inst = iam_get_instance(grid_inst_ids[idx]);
+				if (inst.valid()) {
+					inst.get_float(CLIP_CH_ALPHA, &alpha);
+					inst.get_float(CLIP_CH_SCALE, &scale);
+					inst.get_float(CLIP_CH_ROTATION, &rotation);
+				}
+
+				float rad = rotation * 3.14159265f / 180.0f;
+				float cos_r = cosf(rad);
+				float sin_r = sinf(rad);
+
+				float half = (cell_size * 0.35f) * scale;
+
+				// Rotated square corners
+				ImVec2 corners[4] = {
+					ImVec2(cx + (-half * cos_r - -half * sin_r), cy + (-half * sin_r + -half * cos_r)),
+					ImVec2(cx + ( half * cos_r - -half * sin_r), cy + ( half * sin_r + -half * cos_r)),
+					ImVec2(cx + ( half * cos_r -  half * sin_r), cy + ( half * sin_r +  half * cos_r)),
+					ImVec2(cx + (-half * cos_r -  half * sin_r), cy + (-half * sin_r +  half * cos_r)),
+				};
+
+				int a = (int)(alpha * 255);
+				// Gradient based on grid position
+				float t = (float)idx / (float)(NUM_ITEMS - 1);
+				int r = (int)(100 + 155 * t);
+				int g = (int)(180 - 80 * t);
+				int b = (int)(220 - 120 * t);
+				ImU32 col_fill = IM_COL32(r, g, b, a);
+				ImU32 col_border = IM_COL32(255, 255, 255, a * 2 / 3);
+
+				draw_list->AddQuadFilled(corners[0], corners[1], corners[2], corners[3], col_fill);
+				draw_list->AddQuad(corners[0], corners[1], corners[2], corners[3], col_border, 2.0f);
+			}
+		}
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+		ImGui::TreePop();
+	}
+
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Variation: Synchronized Race")) {
+		ImGui::TextWrapped(
+			"5 squares start at different times with different speeds, but all arrive "
+			"at the right edge simultaneously. Uses stagger + per-instance set_time_scale().");
+
+		static const int NUM_RACERS = 5;
+		static const float TOTAL_TIME = 3.0f;
+		static const float DELAY_STEP = 0.5f;
+		static ImGuiID racer_inst_ids[NUM_RACERS];
+		static bool racers_initialized = false;
+		if (!racers_initialized) {
+			for (int i = 0; i < NUM_RACERS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "var_racer_%d", i);
+				racer_inst_ids[i] = ImHashStr(buf);
+			}
+			racers_initialized = true;
+		}
+
+		if (ImGui::Button("Start Race")) {
+			for (int i = 0; i < NUM_RACERS; i++) {
+				iam_instance inst = iam_play_stagger(CLIP_VAR_RACE, racer_inst_ids[i], i);
+				// Set timescale so all arrive at the same time
+				// Row i has delay = i * DELAY_STEP, so travel time = TOTAL_TIME - delay
+				// Speed = TOTAL_TIME / travel_time
+				float delay = i * DELAY_STEP;
+				float travel_time = TOTAL_TIME - delay;
+				float speed = TOTAL_TIME / travel_time;
+				inst.set_time_scale(speed);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##race")) {
+			for (int i = 0; i < NUM_RACERS; i++) {
+				iam_instance inst = iam_get_instance(racer_inst_ids[i]);
+				if (inst.valid()) inst.destroy();
+			}
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("Top=slow start, Bottom=fast start. All finish together!");
+		ImGui::Spacing();
+
+		// Use anchor system for responsive width
+		ImVec2 content_size = iam_anchor_size(iam_anchor_window_content);
+		float canvas_w = content_size.x;
+		float row_h = 35.0f;
+		float canvas_h = NUM_RACERS * row_h + 10.0f;
+		float square_size = 25.0f;
+		float margin = square_size * 0.5f + 5.0f;
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+		draw_list->AddRectFilled(canvas_pos,
+			ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(20, 25, 35, 255), 8.0f);
+
+		// Draw finish line
+		draw_list->AddLine(
+			ImVec2(canvas_pos.x + canvas_w - margin, canvas_pos.y + 5),
+			ImVec2(canvas_pos.x + canvas_w - margin, canvas_pos.y + canvas_h - 5),
+			IM_COL32(255, 100, 100, 150), 2.0f);
+
+		// Draw start line
+		draw_list->AddLine(
+			ImVec2(canvas_pos.x + margin, canvas_pos.y + 5),
+			ImVec2(canvas_pos.x + margin, canvas_pos.y + canvas_h - 5),
+			IM_COL32(100, 255, 100, 150), 2.0f);
+
+		float track_width = canvas_w - margin * 2 - square_size;
+
+		for (int i = 0; i < NUM_RACERS; i++) {
+			float pos_x = 0.0f;
+			float alpha = 0.5f;
+			iam_instance inst = iam_get_instance(racer_inst_ids[i]);
+			if (inst.valid()) {
+				inst.get_float(CLIP_CH_POS_X, &pos_x);
+				inst.get_float(CLIP_CH_ALPHA, &alpha);
+			}
+
+			float x = canvas_pos.x + margin + pos_x * track_width;
+			float y = canvas_pos.y + 5 + i * row_h + row_h * 0.5f;
+
+			int a = (int)(alpha * 255);
+			// Color gradient: green (fast) to red (slow)
+			float t = (float)i / (float)(NUM_RACERS - 1);
+			int r = (int)(100 + 155 * (1.0f - t));
+			int g = (int)(100 + 155 * t);
+			int b = 100;
+			ImU32 col = IM_COL32(r, g, b, a);
+
+			float half = square_size * 0.5f;
+			draw_list->AddRectFilled(
+				ImVec2(x - half, y - half),
+				ImVec2(x + half, y + half),
+				col, 4.0f);
+		}
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+		ImGui::TreePop();
+	}
+
 }
 
 // ============================================================
@@ -3829,108 +4365,163 @@ static void ShowLayeringDemo()
 }
 
 // ============================================================
-// SECTION: ImDrawList Animations
+// SECTION: ImDrawList Animations with ImAnim
 // ============================================================
+
+// Clip IDs for DrawList demos
+static const ImGuiID CLIP_DL_CUBE_X = 0x3001;
+static const ImGuiID CLIP_DL_CUBE_Y = 0x3002;
+static const ImGuiID CLIP_DL_CUBE_Z = 0x3003;
+static const ImGuiID CLIP_DL_RING = 0x3004;
+// CLIP_DL_BOUNCE removed - replaced with Lissajous Curve using oscillators
+// CLIP_DL_MORPH removed - replaced with Breathing Heartbeat using oscillator
+
+// Channel IDs for DrawList demos
+static const ImGuiID CLIP_DL_CH_ANGLE = 0x3101;
+static const ImGuiID CLIP_DL_CH_RADIUS = 0x3102;
+static const ImGuiID CLIP_DL_CH_ALPHA = 0x3103;
+// CLIP_DL_CH_POS_X and CLIP_DL_CH_POS_Y removed - no longer used
+// CLIP_DL_CH_MORPH removed - no longer used
+
+static bool s_drawlist_clips_initialized = false;
+
+static void InitDrawListClips()
+{
+	if (s_drawlist_clips_initialized) return;
+	s_drawlist_clips_initialized = true;
+
+	// Cube rotation clips - continuous looping with "whoosh" easing
+	// Using in_out_cubic for smooth acceleration/deceleration per rotation
+	iam_clip::begin(CLIP_DL_CUBE_X)
+		.key_float(CLIP_DL_CH_ANGLE, 0.0f, 0.0f, iam_ease_in_out_cubic)
+		.key_float(CLIP_DL_CH_ANGLE, 3.0f, 6.28318f, iam_ease_in_out_cubic)  // Full rotation in 3s
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	iam_clip::begin(CLIP_DL_CUBE_Y)
+		.key_float(CLIP_DL_CH_ANGLE, 0.0f, 0.0f, iam_ease_in_out_cubic)
+		.key_float(CLIP_DL_CH_ANGLE, 1.9f, 6.28318f, iam_ease_in_out_cubic)  // Full rotation in 1.9s
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	iam_clip::begin(CLIP_DL_CUBE_Z)
+		.key_float(CLIP_DL_CH_ANGLE, 0.0f, 0.0f, iam_ease_in_out_cubic)
+		.key_float(CLIP_DL_CH_ANGLE, 7.0f, 6.28318f, iam_ease_in_out_cubic)  // Full rotation in 7s
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Pulsing ring - expand and fade
+	iam_clip::begin(CLIP_DL_RING)
+		.key_float(CLIP_DL_CH_RADIUS, 0.0f, 10.0f, iam_ease_out_cubic)
+		.key_float(CLIP_DL_CH_RADIUS, 2.0f, 70.0f, iam_ease_out_cubic)
+		.key_float(CLIP_DL_CH_ALPHA, 0.0f, 1.0f, iam_ease_linear)
+		.key_float(CLIP_DL_CH_ALPHA, 2.0f, 0.0f, iam_ease_linear)
+		.set_stagger(4, 0.5f, 0.0f)  // 4 rings, 0.5s apart
+		.set_loop(true, iam_dir_normal, -1)
+		.end();
+
+	// Bouncing ball clip removed - replaced with Lissajous Curve using oscillators
+	// Morphing shape clip removed - replaced with Breathing Heartbeat using oscillator
+}
+
 static void ShowDrawListDemo()
 {
 	float dt = GetSafeDeltaTime();
+	InitDrawListClips();
 
 	ImGui::TextWrapped(
-		"Custom drawing with ImDrawList can be animated using tweens for smooth, "
-		"professional visual effects.");
+		"Custom ImDrawList rendering animated with ImAnim clips and tweens. "
+		"All animations use the clip system for clean, declarative control.");
 
 	ImGui::Spacing();
 	ImGui::Separator();
 
-	// Rotating 3D Cube
+	// Rotating 3D Cube using clips
 	ApplyOpenAll();
 	if (ImGui::TreeNodeEx("3D Rotating Cube")) {
-		ImGui::TextDisabled("Wireframe cube with animated rotation");
+		ImGui::TextDisabled("Wireframe cube animated with 3 looping rotation clips");
 
-		static float angle_x = 0.0f;
-		static float angle_y = 0.0f;
-		static float angle_z = 0.0f;
-		static bool auto_rotate = true;
+		static ImGuiID inst_x = ImHashStr("dl_cube_x");
+		static ImGuiID inst_y = ImHashStr("dl_cube_y");
+		static ImGuiID inst_z = ImHashStr("dl_cube_z");
+		static bool cube_started = false;
 
-		ImGui::Checkbox("Auto Rotate", &auto_rotate);
-		if (!auto_rotate) {
-			ImGui::SliderFloat("X Rotation", &angle_x, 0.0f, 6.28f);
-			ImGui::SliderFloat("Y Rotation", &angle_y, 0.0f, 6.28f);
-			ImGui::SliderFloat("Z Rotation", &angle_z, 0.0f, 6.28f);
-		} else {
-			angle_x += dt * 0.7f;
-			angle_y += dt * 1.1f;
-			angle_z += dt * 0.3f;
+		if (!cube_started) {
+			iam_play(CLIP_DL_CUBE_X, inst_x);
+			iam_play(CLIP_DL_CUBE_Y, inst_y);
+			iam_play(CLIP_DL_CUBE_Z, inst_z);
+			cube_started = true;
 		}
+
+		if (ImGui::Button("Restart##cube")) {
+			iam_play(CLIP_DL_CUBE_X, inst_x);
+			iam_play(CLIP_DL_CUBE_Y, inst_y);
+			iam_play(CLIP_DL_CUBE_Z, inst_z);
+		}
+
+		// Get rotation angles from clips
+		float angle_x = 0.0f, angle_y = 0.0f, angle_z = 0.0f;
+		iam_instance ix = iam_get_instance(inst_x);
+		iam_instance iy = iam_get_instance(inst_y);
+		iam_instance iz = iam_get_instance(inst_z);
+		if (ix.valid()) ix.get_float(CLIP_DL_CH_ANGLE, &angle_x);
+		if (iy.valid()) iy.get_float(CLIP_DL_CH_ANGLE, &angle_y);
+		if (iz.valid()) iz.get_float(CLIP_DL_CH_ANGLE, &angle_z);
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(250, 200);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-		// Background
 		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
 			IM_COL32(20, 20, 30, 255));
 
 		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
 		float cube_size = 60.0f;
 
-		// Define cube vertices (8 corners)
 		float vertices[8][3] = {
-			{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},  // Back face
-			{-1, -1,  1}, {1, -1,  1}, {1, 1,  1}, {-1, 1,  1}   // Front face
+			{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
+			{-1, -1,  1}, {1, -1,  1}, {1, 1,  1}, {-1, 1,  1}
 		};
 
-		// Rotate and project vertices
 		ImVec2 projected[8];
+		float rotated_z[8];
 		for (int i = 0; i < 8; ++i) {
 			float x = vertices[i][0], y = vertices[i][1], z = vertices[i][2];
 
-			// Rotate around X
 			float y1 = y * ImCos(angle_x) - z * ImSin(angle_x);
 			float z1 = y * ImSin(angle_x) + z * ImCos(angle_x);
 			y = y1; z = z1;
 
-			// Rotate around Y
 			float x1 = x * ImCos(angle_y) + z * ImSin(angle_y);
 			z1 = -x * ImSin(angle_y) + z * ImCos(angle_y);
 			x = x1; z = z1;
 
-			// Rotate around Z
 			x1 = x * ImCos(angle_z) - y * ImSin(angle_z);
 			y1 = x * ImSin(angle_z) + y * ImCos(angle_z);
 			x = x1; y = y1;
 
-			// Simple perspective projection
+			rotated_z[i] = z;
 			float perspective = 3.0f / (3.0f + z);
 			projected[i] = ImVec2(center.x + x * cube_size * perspective,
 								  center.y + y * cube_size * perspective);
 		}
 
-		// Draw edges with depth-based color
 		int edges[12][2] = {
-			{0,1},{1,2},{2,3},{3,0},  // Back face
-			{4,5},{5,6},{6,7},{7,4},  // Front face
-			{0,4},{1,5},{2,6},{3,7}   // Connecting edges
+			{0,1},{1,2},{2,3},{3,0}, {4,5},{5,6},{6,7},{7,4}, {0,4},{1,5},{2,6},{3,7}
 		};
 
 		for (int i = 0; i < 12; ++i) {
 			int v0 = edges[i][0], v1 = edges[i][1];
-			// Color based on average Z depth
-			float z0 = vertices[v0][2], z1 = vertices[v1][2];
-			float avg_z = (z0 + z1) * 0.5f;
+			float avg_z = (rotated_z[v0] + rotated_z[v1]) * 0.5f;
 			int brightness = (int)(180 + avg_z * 50);
-			if (brightness < 80) brightness = 80;
-			if (brightness > 255) brightness = 255;
+			brightness = ImClamp(brightness, 80, 255);
 			draw_list->AddLine(projected[v0], projected[v1],
 				IM_COL32(brightness, brightness/2, brightness, 255), 2.0f);
 		}
 
-		// Draw vertices as small dots
 		for (int i = 0; i < 8; ++i) {
-			float z = vertices[i][2];
-			int brightness = (int)(200 + z * 40);
-			if (brightness < 100) brightness = 100;
-			if (brightness > 255) brightness = 255;
+			int brightness = (int)(200 + rotated_z[i] * 40);
+			brightness = ImClamp(brightness, 100, 255);
 			draw_list->AddCircleFilled(projected[i], 4.0f, IM_COL32(100, brightness, 255, 255));
 		}
 
@@ -3940,13 +4531,37 @@ static void ShowDrawListDemo()
 
 	ImGui::Spacing();
 
-	// Pulsing Rings
+	// Pulsing Rings using staggered clips
 	ApplyOpenAll();
 	if (ImGui::TreeNode("Pulsing Rings")) {
-		ImGui::TextDisabled("Animated expanding rings with easing");
+		ImGui::TextDisabled("4 rings animated with staggered clip instances");
 
-		static float ring_time = 0.0f;
-		ring_time += dt;
+		static const int NUM_RINGS = 4;
+		static ImGuiID ring_inst_ids[NUM_RINGS];
+		static bool rings_initialized = false;
+		static bool rings_started = false;
+
+		if (!rings_initialized) {
+			for (int i = 0; i < NUM_RINGS; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "dl_ring_%d", i);
+				ring_inst_ids[i] = ImHashStr(buf);
+			}
+			rings_initialized = true;
+		}
+
+		if (!rings_started) {
+			for (int i = 0; i < NUM_RINGS; i++) {
+				iam_play_stagger(CLIP_DL_RING, ring_inst_ids[i], i);
+			}
+			rings_started = true;
+		}
+
+		if (ImGui::Button("Restart##rings")) {
+			for (int i = 0; i < NUM_RINGS; i++) {
+				iam_play_stagger(CLIP_DL_RING, ring_inst_ids[i], i);
+			}
+		}
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(250, 150);
@@ -3957,20 +4572,20 @@ static void ShowDrawListDemo()
 
 		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
 
-		// Draw multiple rings at different phases
-		for (int i = 0; i < 4; ++i) {
-			float phase = ImFmod(ring_time + i * 0.5f, 2.0f);
-			float t = phase / 2.0f;
-			float eased = iam_eval_preset(iam_ease_out_cubic, t);
-			float radius = 10.0f + eased * 60.0f;
-			int alpha = (int)((1.0f - t) * 200);
-			if (alpha < 0) alpha = 0;
+		for (int i = 0; i < NUM_RINGS; ++i) {
+			float radius = 10.0f, alpha = 0.0f;
+			iam_instance inst = iam_get_instance(ring_inst_ids[i]);
+			if (inst.valid()) {
+				inst.get_float(CLIP_DL_CH_RADIUS, &radius);
+				inst.get_float(CLIP_DL_CH_ALPHA, &alpha);
+			}
 
-			ImU32 col = IM_COL32(100, 150, 255, alpha);
-			draw_list->AddCircle(center, radius, col, 0, 2.0f);
+			if (alpha > 0.01f) {
+				int a = (int)(alpha * 200);
+				draw_list->AddCircle(center, radius, IM_COL32(100, 150, 255, a), 0, 2.0f);
+			}
 		}
 
-		// Center dot
 		draw_list->AddCircleFilled(center, 6.0f, IM_COL32(100, 200, 255, 255));
 
 		ImGui::Dummy(canvas_size);
@@ -3979,65 +4594,55 @@ static void ShowDrawListDemo()
 
 	ImGui::Spacing();
 
-	// Orbiting Particles
+	// Pendulum Wave - mesmerizing physics visualization
 	ApplyOpenAll();
-	if (ImGui::TreeNode("Orbiting Particles")) {
-		ImGui::TextDisabled("Particles following elliptical paths");
-
-		static float orbit_time = 0.0f;
-		orbit_time += dt;
+	if (ImGui::TreeNode("Pendulum Wave")) {
+		ImGui::TextDisabled("15 pendulums with slightly different frequencies using iam_oscillate");
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(280, 160);
+		ImVec2 canvas_size(320, 180);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-			IM_COL32(10, 15, 25, 255));
+			IM_COL32(15, 15, 25, 255));
 
-		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+		// Draw the top bar
+		float bar_y = canvas_pos.y + 20.0f;
+		draw_list->AddLine(ImVec2(canvas_pos.x + 20.0f, bar_y), ImVec2(canvas_pos.x + canvas_size.x - 20.0f, bar_y),
+			IM_COL32(80, 80, 100, 255), 3.0f);
 
-		// Draw orbit paths (ellipses)
-		for (int orbit = 0; orbit < 3; ++orbit) {
-			float rx = 40.0f + orbit * 30.0f;
-			float ry = 25.0f + orbit * 18.0f;
-			draw_list->AddEllipse(center, ImVec2(rx, ry), IM_COL32(60, 60, 80, 100), 0.0f, 32, 1.0f);
+		const int NUM_PENDULUMS = 15;
+		float spacing = (canvas_size.x - 40.0f) / (NUM_PENDULUMS - 1);
+		float base_length = 120.0f;
+
+		for (int i = 0; i < NUM_PENDULUMS; ++i) {
+			float pivot_x = canvas_pos.x + 20.0f + i * spacing;
+			float pivot_y = bar_y;
+
+			// Each pendulum has slightly different frequency
+			// After 30 seconds, they realign (wave pattern)
+			float freq_mult = 1.0f + i * 0.02f;  // 1.0, 1.02, 1.04, ..., 1.28
+
+			ImGuiID pend_id = ImHashStr("pendulum") + i;
+			float angle = iam_oscillate(pend_id, 0.4f, 0.4f * freq_mult, iam_wave_sine, 0.0f, dt);
+
+			// Pendulum length decreases slightly for visual appeal
+			float length = base_length - i * 2.0f;
+			float bob_x = pivot_x + ImSin(angle) * length;
+			float bob_y = pivot_y + ImCos(angle) * length;
+
+			// Draw string
+			draw_list->AddLine(ImVec2(pivot_x, pivot_y), ImVec2(bob_x, bob_y),
+				IM_COL32(100, 100, 120, 200), 1.5f);
+
+			// Draw bob with gradient color based on position
+			float t = (float)i / (NUM_PENDULUMS - 1);
+			int r = (int)(100 + 155 * t);
+			int g = (int)(200 - 100 * t);
+			int b = (int)(255 - 155 * t);
+			draw_list->AddCircleFilled(ImVec2(bob_x, bob_y), 8.0f, IM_COL32(r, g, b, 255));
+			draw_list->AddCircle(ImVec2(bob_x, bob_y), 8.0f, IM_COL32(255, 255, 255, 100), 0, 1.5f);
 		}
-
-		// Draw orbiting particles
-		int num_particles = 8;
-		for (int i = 0; i < num_particles; ++i) {
-			int orbit = i % 3;
-			float rx = 40.0f + orbit * 30.0f;
-			float ry = 25.0f + orbit * 18.0f;
-			float speed = 1.0f - orbit * 0.2f;
-			float angle = orbit_time * speed + i * 0.8f;
-
-			float px = center.x + ImCos(angle) * rx;
-			float py = center.y + ImSin(angle) * ry;
-
-			// Color based on orbit
-			ImU32 colors[] = {
-				IM_COL32(255, 100, 100, 255),
-				IM_COL32(100, 255, 100, 255),
-				IM_COL32(100, 100, 255, 255)
-			};
-
-			// Draw trail
-			for (int t = 1; t <= 5; ++t) {
-				float trail_angle = angle - t * 0.08f;
-				float tx = center.x + ImCos(trail_angle) * rx;
-				float ty = center.y + ImSin(trail_angle) * ry;
-				int alpha = 150 - t * 25;
-				draw_list->AddCircleFilled(ImVec2(tx, ty), 3.0f - t * 0.4f,
-					(colors[orbit] & 0x00FFFFFF) | ((alpha & 0xFF) << 24));
-			}
-
-			draw_list->AddCircleFilled(ImVec2(px, py), 5.0f, colors[orbit]);
-		}
-
-		// Center "sun"
-		draw_list->AddCircleFilled(center, 12.0f, IM_COL32(255, 200, 100, 255));
-		draw_list->AddCircleFilled(center, 8.0f, IM_COL32(255, 255, 200, 255));
 
 		ImGui::Dummy(canvas_size);
 		ImGui::TreePop();
@@ -4045,65 +4650,63 @@ static void ShowDrawListDemo()
 
 	ImGui::Spacing();
 
-	// Bouncing Ball with Trail
+	// Lissajous Curve - beautiful mathematical pattern from two oscillators
 	ApplyOpenAll();
-	if (ImGui::TreeNode("Bouncing Ball")) {
-		ImGui::TextDisabled("Ball bouncing with motion trail");
-
-		static float ball_time = 0.0f;
-		ball_time += dt;
+	if (ImGui::TreeNode("Lissajous Curve")) {
+		ImGui::TextDisabled("Two oscillators at different frequencies create evolving patterns");
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(300, 120);
+		ImVec2 canvas_size(280, 180);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-			IM_COL32(25, 20, 30, 255));
+			IM_COL32(10, 10, 20, 255));
 
-		// Animate horizontal position (slower, smoother)
-		float cycle = ImFmod(ball_time * 0.4f, 1.0f);
-		float x_t = cycle * 2.0f;
-		if (x_t > 1.0f) x_t = 2.0f - x_t;
-		float ball_x = canvas_pos.x + 30.0f + x_t * (canvas_size.x - 60.0f);
+		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+		float radius_x = canvas_size.x * 0.4f;
+		float radius_y = canvas_size.y * 0.4f;
 
-		// Bounce animation (vertical) - use sine for smooth arc
-		float bounce_cycle = ImFmod(ball_time * 0.8f, 1.0f);
-		float bounce_eased = ImSin(bounce_cycle * 3.14159f);  // Simple sine arc
-		float ball_y = canvas_pos.y + canvas_size.y - 20.0f - bounce_eased * 70.0f;
+		// Two oscillators with frequency ratio that slowly changes
+		// This creates evolving Lissajous patterns
+		ImGuiID phase_id = ImHashStr("lissajous_phase");
+		float phase_shift = iam_oscillate(phase_id, IM_PI, 0.02f, iam_wave_sawtooth, 0.0f, dt);
 
-		// Draw shadow
-		float shadow_scale = 0.3f + 0.7f * (1.0f - bounce_eased);
-		draw_list->AddEllipseFilled(ImVec2(ball_x, canvas_pos.y + canvas_size.y - 10.0f),
-			ImVec2(15.0f * shadow_scale, 5.0f * shadow_scale),
-			IM_COL32(0, 0, 0, (int)(100 * shadow_scale)));
+		// Draw the curve trail (history of points)
+		const int TRAIL_POINTS = 200;
+		ImVec2 trail[TRAIL_POINTS];
 
-		// Draw trail (fewer, more spaced out)
-		for (int t = 1; t <= 5; ++t) {
-			float trail_time = ball_time - t * 0.04f;
-			float trail_cycle = ImFmod(trail_time * 0.4f, 1.0f);
-			float trail_x_t = trail_cycle * 2.0f;
-			if (trail_x_t > 1.0f) trail_x_t = 2.0f - trail_x_t;
-			float trail_x = canvas_pos.x + 30.0f + trail_x_t * (canvas_size.x - 60.0f);
+		float freq_x = 3.0f;
+		float freq_y = 2.0f;
 
-			float trail_bounce_cycle = ImFmod(trail_time * 0.8f, 1.0f);
-			float trail_bounce = ImSin(trail_bounce_cycle * 3.14159f);
-			float trail_y = canvas_pos.y + canvas_size.y - 20.0f - trail_bounce * 70.0f;
-
-			int alpha = 100 - t * 18;
-			if (alpha > 0) {
-				draw_list->AddCircleFilled(ImVec2(trail_x, trail_y), 10.0f - t * 1.5f,
-					IM_COL32(255, 150, 50, alpha));
-			}
+		for (int i = 0; i < TRAIL_POINTS; ++i) {
+			float t = (float)i / TRAIL_POINTS * 2.0f * IM_PI;
+			float x = ImSin(freq_x * t + phase_shift);
+			float y = ImSin(freq_y * t);
+			trail[i] = ImVec2(center.x + x * radius_x, center.y + y * radius_y);
 		}
 
-		// Draw ball
-		draw_list->AddCircleFilled(ImVec2(ball_x, ball_y), 12.0f, IM_COL32(255, 180, 80, 255));
-		draw_list->AddCircleFilled(ImVec2(ball_x - 3, ball_y - 3), 4.0f, IM_COL32(255, 255, 200, 200));
+		// Draw gradient trail
+		for (int i = 1; i < TRAIL_POINTS; ++i) {
+			float t = (float)i / TRAIL_POINTS;
+			int r = (int)(100 + 155 * t);
+			int g = (int)(50 + 100 * (1.0f - t));
+			int b = (int)(200 + 55 * t);
+			int a = (int)(50 + 200 * t);
+			draw_list->AddLine(trail[i-1], trail[i], IM_COL32(r, g, b, a), 2.0f);
+		}
 
-		// Ground line
-		draw_list->AddLine(ImVec2(canvas_pos.x, canvas_pos.y + canvas_size.y - 5),
-			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y - 5),
-			IM_COL32(80, 80, 100, 255), 2.0f);
+		// Draw moving dot at current position
+		ImGuiID dot_id = ImHashStr("lissajous_dot");
+		float dot_t = iam_oscillate(dot_id, IM_PI, 0.3f, iam_wave_sawtooth, 0.0f, dt);
+		dot_t = (dot_t + IM_PI) / (2.0f * IM_PI) * 2.0f * IM_PI;  // Normalize to 0-2PI
+
+		float dot_x = center.x + ImSin(freq_x * dot_t + phase_shift) * radius_x;
+		float dot_y = center.y + ImSin(freq_y * dot_t) * radius_y;
+
+		// Glow
+		draw_list->AddCircleFilled(ImVec2(dot_x, dot_y), 12.0f, IM_COL32(150, 100, 255, 50));
+		draw_list->AddCircleFilled(ImVec2(dot_x, dot_y), 8.0f, IM_COL32(200, 150, 255, 100));
+		draw_list->AddCircleFilled(ImVec2(dot_x, dot_y), 5.0f, IM_COL32(255, 255, 255, 255));
 
 		ImGui::Dummy(canvas_size);
 		ImGui::TreePop();
@@ -4111,115 +4714,121 @@ static void ShowDrawListDemo()
 
 	ImGui::Spacing();
 
-	// Morphing Shape (animated interpolation between shapes)
+	// Breathing Heartbeat - pulsing heart with ECG line
 	ApplyOpenAll();
-	if (ImGui::TreeNode("Morphing Shape")) {
-		ImGui::TextDisabled("Smooth interpolation between different shapes");
-
-		static float morph_time = 0.0f;
-		static int morph_ease = iam_ease_out_elastic;
-		morph_time += dt * 0.3f;
-
-		const char* ease_names[] = {
-			"Linear", "InOutCubic", "OutBack", "OutElastic", "OutBounce", "InOutSine"
-		};
-		int ease_types[] = {
-			iam_ease_linear, iam_ease_in_out_cubic, iam_ease_out_back,
-			iam_ease_out_elastic, iam_ease_out_bounce, iam_ease_in_out_sine
-		};
-		static int ease_idx = 3;  // OutElastic by default
-		ImGui::SetNextItemWidth(120);
-		if (ImGui::Combo("Easing", &ease_idx, ease_names, IM_ARRAYSIZE(ease_names))) {
-			morph_ease = ease_types[ease_idx];
-		}
+	if (ImGui::TreeNode("Breathing Heartbeat")) {
+		ImGui::TextDisabled("Heart pulse animation using iam_oscillate with custom timing");
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(220, 180);
+		ImVec2 canvas_size(320, 180);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-			IM_COL32(20, 20, 35, 255));
+			IM_COL32(15, 10, 15, 255));
 
-		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+		// Heart position (left side)
+		ImVec2 heart_center(canvas_pos.x + 80.0f, canvas_pos.y + canvas_size.y * 0.45f);
 
-		// Cycle through shapes: circle -> triangle -> square -> pentagon -> circle
-		float cycle = ImFmod(morph_time, 4.0f);
-		int shape_from = (int)cycle;
-		int shape_to = (shape_from + 1) % 4;
-		float t = cycle - shape_from;
-		float eased_t = iam_eval_preset(morph_ease, t);
+		// Heartbeat oscillation - double bump pattern
+		ImGuiID heart_id = ImHashStr("heartbeat");
+		float beat_phase = iam_oscillate(heart_id, 1.0f, 1.2f, iam_wave_sawtooth, 0.0f, dt);
+		beat_phase = (beat_phase + 1.0f) * 0.5f;  // Normalize to 0-1
 
-		// Generate points for each shape
-		auto get_shape_point = [](int shape, int point_idx, int num_points, float radius) -> ImVec2 {
-			if (shape == 0) {  // Circle
-				float angle = (float)point_idx / num_points * 2.0f * IM_PI - IM_PI * 0.5f;
-				return ImVec2(ImCos(angle) * radius, ImSin(angle) * radius);
-			} else {
-				int sides = shape + 2;  // 3, 4, 5 sides
-				float angle = (float)(point_idx % sides) / sides * 2.0f * IM_PI - IM_PI * 0.5f;
-				return ImVec2(ImCos(angle) * radius, ImSin(angle) * radius);
-			}
-		};
+		// Create double-bump heartbeat curve
+		float pulse = 0.0f;
+		if (beat_phase < 0.1f) {
+			// First bump (quick rise)
+			pulse = beat_phase / 0.1f;
+		} else if (beat_phase < 0.2f) {
+			// First bump (quick fall)
+			pulse = 1.0f - (beat_phase - 0.1f) / 0.1f;
+		} else if (beat_phase < 0.25f) {
+			// Brief pause
+			pulse = 0.0f;
+		} else if (beat_phase < 0.35f) {
+			// Second bump (smaller, slower rise)
+			pulse = 0.6f * (beat_phase - 0.25f) / 0.1f;
+		} else if (beat_phase < 0.5f) {
+			// Second bump (slower fall)
+			pulse = 0.6f * (1.0f - (beat_phase - 0.35f) / 0.15f);
+		}
+		// Rest of cycle is 0
 
-		// Draw morphing polygon
-		const int num_points = 60;
-		const float radius = 60.0f;
-		ImVec2 points[num_points];
+		float heart_scale = 35.0f + pulse * 8.0f;
+		int heart_alpha = 180 + (int)(pulse * 75.0f);
 
-		for (int i = 0; i < num_points; ++i) {
-			float angle_norm = (float)i / num_points;
-
-			// Calculate position on each shape
-			auto shape_pos = [&](int shape) -> ImVec2 {
-				if (shape == 0) {  // Circle
-					float a = angle_norm * 2.0f * IM_PI - IM_PI * 0.5f;
-					return ImVec2(ImCos(a), ImSin(a));
-				} else {
-					int sides = shape + 2;
-					float segment = 1.0f / sides;
-					int seg_idx = (int)(angle_norm / segment);
-					float seg_t = ImFmod(angle_norm, segment) / segment;
-					float a0 = (float)seg_idx / sides * 2.0f * IM_PI - IM_PI * 0.5f;
-					float a1 = (float)(seg_idx + 1) / sides * 2.0f * IM_PI - IM_PI * 0.5f;
-					return ImVec2(
-						ImCos(a0) * (1 - seg_t) + ImCos(a1) * seg_t,
-						ImSin(a0) * (1 - seg_t) + ImSin(a1) * seg_t
-					);
-				}
-			};
-
-			ImVec2 p0 = shape_pos(shape_from);
-			ImVec2 p1 = shape_pos(shape_to);
-
-			points[i] = ImVec2(
-				center.x + (p0.x * (1 - eased_t) + p1.x * eased_t) * radius,
-				center.y + (p0.y * (1 - eased_t) + p1.y * eased_t) * radius
+		// Draw heart shape
+		const int HEART_SEGMENTS = 32;
+		ImVec2 heart_points[HEART_SEGMENTS];
+		for (int i = 0; i < HEART_SEGMENTS; ++i) {
+			float t = (float)i / HEART_SEGMENTS * 2.0f * IM_PI;
+			// Heart parametric equation
+			float x = 16.0f * ImPow(ImSin(t), 3.0f);
+			float y = -(13.0f * ImCos(t) - 5.0f * ImCos(2*t) - 2.0f * ImCos(3*t) - ImCos(4*t));
+			heart_points[i] = ImVec2(
+				heart_center.x + x * heart_scale / 16.0f,
+				heart_center.y + y * heart_scale / 16.0f
 			);
 		}
 
-		// Color based on current shape
-		ImU32 colors[] = {
-			IM_COL32(255, 100, 150, 255), // Circle: pink
-			IM_COL32(100, 255, 150, 255), // Triangle: green
-			IM_COL32(100, 150, 255, 255), // Square: blue
-			IM_COL32(255, 200, 100, 255)  // Pentagon: orange
-		};
-		ImU32 col_from = colors[shape_from];
-		ImU32 col_to = colors[shape_to];
+		// Glow effect
+		for (int g = 3; g >= 1; --g) {
+			int glow_alpha = (int)(pulse * 30.0f / g);
+			draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 50, 80, glow_alpha),
+				ImDrawFlags_Closed, 2.0f + g * 3.0f);
+		}
 
-		// Blend colors
-		int r = (int)((col_from & 0xFF) * (1 - eased_t) + (col_to & 0xFF) * eased_t);
-		int g = (int)(((col_from >> 8) & 0xFF) * (1 - eased_t) + ((col_to >> 8) & 0xFF) * eased_t);
-		int b = (int)(((col_from >> 16) & 0xFF) * (1 - eased_t) + ((col_to >> 16) & 0xFF) * eased_t);
-		ImU32 blended = IM_COL32(r, g, b, 255);
+		draw_list->AddConvexPolyFilled(heart_points, HEART_SEGMENTS, IM_COL32(180, 30, 60, heart_alpha));
+		draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 80, 100, 255),
+			ImDrawFlags_Closed, 2.0f);
 
-		draw_list->AddConvexPolyFilled(points, num_points, (blended & 0x00FFFFFF) | 0x40000000);
-		draw_list->AddPolyline(points, num_points, blended, ImDrawFlags_Closed, 2.5f);
+		// ECG Line (right side)
+		float ecg_left = canvas_pos.x + 160.0f;
+		float ecg_right = canvas_pos.x + canvas_size.x - 20.0f;
+		float ecg_width = ecg_right - ecg_left;
+		float ecg_center_y = canvas_pos.y + canvas_size.y * 0.5f;
 
-		const char* shape_names[] = {"Circle", "Triangle", "Square", "Pentagon"};
+		// Draw ECG background line
+		draw_list->AddLine(ImVec2(ecg_left, ecg_center_y), ImVec2(ecg_right, ecg_center_y),
+			IM_COL32(40, 60, 40, 255), 1.0f);
+
+		// Draw ECG waveform
+		const int ECG_POINTS = 60;
+		ImVec2 ecg_pts[ECG_POINTS];
+		for (int i = 0; i < ECG_POINTS; ++i) {
+			float x_norm = (float)i / (ECG_POINTS - 1);
+			float phase = ImFmod(x_norm + beat_phase, 1.0f);
+
+			// ECG waveform shape
+			float y = 0.0f;
+			if (phase < 0.05f) {
+				// P wave (small bump)
+				y = 10.0f * ImSin(phase / 0.05f * IM_PI);
+			} else if (phase >= 0.1f && phase < 0.12f) {
+				// Q dip
+				y = -15.0f * (phase - 0.1f) / 0.02f;
+			} else if (phase >= 0.12f && phase < 0.15f) {
+				// R spike (main peak)
+				float t = (phase - 0.12f) / 0.03f;
+				y = -15.0f + 65.0f * (t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f);
+			} else if (phase >= 0.15f && phase < 0.18f) {
+				// S dip
+				y = -20.0f * (1.0f - (phase - 0.15f) / 0.03f);
+			} else if (phase >= 0.25f && phase < 0.4f) {
+				// T wave (recovery bump)
+				y = 15.0f * ImSin((phase - 0.25f) / 0.15f * IM_PI);
+			}
+
+			ecg_pts[i] = ImVec2(ecg_left + x_norm * ecg_width, ecg_center_y - y);
+		}
+
+		draw_list->AddPolyline(ecg_pts, ECG_POINTS, IM_COL32(80, 255, 80, 255), 0, 2.0f);
+
+		// Scanning dot
+		float dot_x = ecg_left + beat_phase * ecg_width;
+		draw_list->AddCircleFilled(ImVec2(dot_x, ecg_center_y), 4.0f, IM_COL32(150, 255, 150, 255));
+
 		ImGui::Dummy(canvas_size);
-		ImGui::Text("%s -> %s (%.0f%%)", shape_names[shape_from], shape_names[shape_to], eased_t * 100);
-
 		ImGui::TreePop();
 	}
 }

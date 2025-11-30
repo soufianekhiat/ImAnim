@@ -1309,10 +1309,23 @@ struct keyframe {
 	iam_spring_params spring;
 	float		value[4];	// f=value[0], v2=(value[0],value[1]), v4=(value[0..3]), i=*(int*)&value[0], color=(value[0..3])
 
-	keyframe() : channel(0), time(0), type(0), ease_type(iam_ease_linear), color_space(iam_col_oklab), has_bezier(false), is_spring(false) {
+	// Variation data for repeat with variation feature
+	bool				has_variation;
+	iam_variation_float	var_float;
+	iam_variation_int	var_int;
+	iam_variation_vec2	var_vec2;
+	iam_variation_vec4	var_vec4;
+	iam_variation_color	var_color;
+
+	keyframe() : channel(0), time(0), type(0), ease_type(iam_ease_linear), color_space(iam_col_oklab), has_bezier(false), is_spring(false), has_variation(false) {
 		bezier[0] = bezier[1] = bezier[2] = bezier[3] = 0;
 		spring = { 1.0f, 120.0f, 20.0f, 0.0f };
 		value[0] = value[1] = value[2] = value[3] = 0;
+		memset(&var_float, 0, sizeof(var_float));
+		memset(&var_int, 0, sizeof(var_int));
+		memset(&var_vec2, 0, sizeof(var_vec2));
+		memset(&var_vec4, 0, sizeof(var_vec4));
+		memset(&var_color, 0, sizeof(var_color));
 	}
 
 	void set_float(float f) { value[0] = f; }
@@ -1385,10 +1398,23 @@ struct iam_clip_data {
 	float					stagger_delay;
 	float					stagger_center_bias;
 
+	// Timing variation per loop iteration
+	bool					has_duration_var;
+	bool					has_delay_var;
+	bool					has_timescale_var;
+	iam_variation_float		duration_var;
+	iam_variation_float		delay_var;
+	iam_variation_float		timescale_var;
+
 	iam_clip_data() : id(0), delay(0), duration(0), loop_count(0), direction(iam_dir_normal),
 		cb_begin(nullptr), cb_update(nullptr), cb_complete(nullptr),
 		cb_begin_user(nullptr), cb_update_user(nullptr), cb_complete_user(nullptr),
-		build_time_offset(0), stagger_count(0), stagger_delay(0), stagger_center_bias(0) {}
+		build_time_offset(0), stagger_count(0), stagger_delay(0), stagger_center_bias(0),
+		has_duration_var(false), has_delay_var(false), has_timescale_var(false) {
+		memset(&duration_var, 0, sizeof(duration_var));
+		memset(&delay_var, 0, sizeof(delay_var));
+		memset(&timescale_var, 0, sizeof(timescale_var));
+	}
 };
 
 // iam_instance_data definition
@@ -1434,9 +1460,14 @@ struct iam_instance_data {
 	ImGuiID		chain_next_inst_id;		// Instance ID for next clip (0 = auto-generate)
 	float		chain_delay;			// Delay before starting chained clip
 
+	// Loop variation tracking
+	int			current_loop;			// Current loop iteration (0-based), used for variation calculations
+	unsigned int var_rng_state;			// RNG state for deterministic variation random
+
 	iam_instance_data() : inst_id(0), clip_id(0), time(0), time_scale(1.0f), weight(1.0f),
 		delay_left(0), playing(false), paused(false), begin_called(false), dir_sign(1), loops_left(0), last_seen_frame(0),
-		has_blended(false), prev_time(0), chain_next_clip_id(0), chain_next_inst_id(0), chain_delay(0) {}
+		has_blended(false), prev_time(0), chain_next_clip_id(0), chain_next_inst_id(0), chain_delay(0),
+		current_loop(0), var_rng_state(12345) {}
 };
 
 namespace iam_clip_detail {
@@ -1477,6 +1508,371 @@ static float eval_clip_ease(int ease_type, float t, float const* bezier, bool ha
 // Evaluate spring
 static float eval_clip_spring(float u, iam_spring_params const& sp) {
 	return iam_detail::ease_lut_pool_singleton().spring_unit(u, sp.mass, sp.stiffness, sp.damping, sp.initial_velocity);
+}
+
+// ----------------------------------------------------
+// Variation evaluation helpers
+// ----------------------------------------------------
+
+// Simple xorshift random for deterministic variation
+static unsigned int var_xorshift(unsigned int* state) {
+	unsigned int x = *state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*state = x;
+	return x;
+}
+
+// Get random float in [0, 1]
+static float var_rand_unit(unsigned int* state) {
+	return (float)(var_xorshift(state) & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+}
+
+// Get random float in [-1, 1]
+static float var_rand_signed(unsigned int* state) {
+	return var_rand_unit(state) * 2.0f - 1.0f;
+}
+
+// Clamp helper
+static float var_clampf(float v, float mn, float mx) {
+	return v < mn ? mn : (v > mx ? mx : v);
+}
+static int var_clampi(int v, int mn, int mx) {
+	return v < mn ? mn : (v > mx ? mx : v);
+}
+
+// Compute float variation delta for given loop index
+static float compute_var_float(iam_variation_float const& var, int loop_index, unsigned int* rng_state) {
+	if (var.mode == iam_var_none) return 0.0f;
+
+	// Use seed for deterministic random if provided
+	unsigned int rng = var.seed != 0 ? (var.seed + (unsigned int)loop_index * 1664525u) : *rng_state;
+
+	float delta = 0.0f;
+	switch (var.mode) {
+		case iam_var_callback:
+			if (var.callback) return var.callback(loop_index, var.user);
+			return 0.0f;
+		case iam_var_increment:
+			delta = var.amount * (float)loop_index;
+			break;
+		case iam_var_decrement:
+			delta = -var.amount * (float)loop_index;
+			break;
+		case iam_var_multiply:
+			// For multiply, return the multiplier (to be applied differently)
+			return powf(var.amount, (float)loop_index);
+		case iam_var_random:
+			delta = var_rand_signed(&rng) * var.amount;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_random_abs:
+			delta = var_rand_unit(&rng) * var.amount;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_pingpong:
+			delta = (loop_index % 2 == 0) ? 0.0f : var.amount;
+			if (loop_index % 4 >= 2) delta = -delta;
+			break;
+		default:
+			return 0.0f;
+	}
+	return delta;
+}
+
+// Apply float variation to a base value
+static float apply_var_float(float base, iam_variation_float const& var, int loop_index, unsigned int* rng_state) {
+	if (var.mode == iam_var_none) return base;
+	if (var.mode == iam_var_callback && var.callback) {
+		return var_clampf(var.callback(loop_index, var.user), var.min_clamp, var.max_clamp);
+	}
+	if (var.mode == iam_var_multiply) {
+		float mult = compute_var_float(var, loop_index, rng_state);
+		return var_clampf(base * mult, var.min_clamp, var.max_clamp);
+	}
+	float delta = compute_var_float(var, loop_index, rng_state);
+	return var_clampf(base + delta, var.min_clamp, var.max_clamp);
+}
+
+// Apply int variation to a base value
+static int apply_var_int(int base, iam_variation_int const& var, int loop_index, unsigned int* rng_state) {
+	if (var.mode == iam_var_none) return base;
+	if (var.mode == iam_var_callback && var.callback) {
+		return var_clampi(var.callback(loop_index, var.user), var.min_clamp, var.max_clamp);
+	}
+
+	unsigned int rng = var.seed != 0 ? (var.seed + (unsigned int)loop_index * 1664525u) : *rng_state;
+	int delta = 0;
+	switch (var.mode) {
+		case iam_var_increment:
+			delta = var.amount * loop_index;
+			break;
+		case iam_var_decrement:
+			delta = -var.amount * loop_index;
+			break;
+		case iam_var_multiply:
+			return var_clampi((int)(base * powf((float)var.amount, (float)loop_index)), var.min_clamp, var.max_clamp);
+		case iam_var_random:
+			delta = (int)(var_rand_signed(&rng) * (float)var.amount);
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_random_abs:
+			delta = (int)(var_rand_unit(&rng) * (float)var.amount);
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_pingpong:
+			delta = (loop_index % 2 == 0) ? 0 : var.amount;
+			if (loop_index % 4 >= 2) delta = -delta;
+			break;
+		default:
+			return base;
+	}
+	return var_clampi(base + delta, var.min_clamp, var.max_clamp);
+}
+
+// Apply vec2 variation (global or per-axis)
+static ImVec2 apply_var_vec2(ImVec2 base, iam_variation_vec2 const& var, int loop_index, unsigned int* rng_state) {
+	// Per-axis variation (when global mode is none but per-axis has modes)
+	if (var.mode == iam_var_none) {
+		if (var.x.mode != iam_var_none || var.y.mode != iam_var_none) {
+			return ImVec2(
+				apply_var_float(base.x, var.x, loop_index, rng_state),
+				apply_var_float(base.y, var.y, loop_index, rng_state)
+			);
+		}
+		return base;
+	}
+
+	// Callback
+	if (var.mode == iam_var_callback && var.callback) {
+		ImVec2 result = var.callback(loop_index, var.user);
+		return ImVec2(
+			var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+			var_clampf(result.y, var.min_clamp.y, var.max_clamp.y)
+		);
+	}
+
+	// Global variation
+	unsigned int rng = var.seed != 0 ? (var.seed + (unsigned int)loop_index * 1664525u) : *rng_state;
+	ImVec2 result = base;
+
+	switch (var.mode) {
+		case iam_var_increment:
+			result.x += var.amount.x * (float)loop_index;
+			result.y += var.amount.y * (float)loop_index;
+			break;
+		case iam_var_decrement:
+			result.x -= var.amount.x * (float)loop_index;
+			result.y -= var.amount.y * (float)loop_index;
+			break;
+		case iam_var_multiply: {
+			float mult = powf(var.amount.x, (float)loop_index);
+			result.x *= mult;
+			result.y *= powf(var.amount.y, (float)loop_index);
+			break;
+		}
+		case iam_var_random:
+			result.x += var_rand_signed(&rng) * var.amount.x;
+			result.y += var_rand_signed(&rng) * var.amount.y;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_random_abs:
+			result.x += var_rand_unit(&rng) * var.amount.x;
+			result.y += var_rand_unit(&rng) * var.amount.y;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_pingpong: {
+			float sign = (loop_index % 4 >= 2) ? -1.0f : 1.0f;
+			float mult = (loop_index % 2 == 0) ? 0.0f : 1.0f;
+			result.x += var.amount.x * mult * sign;
+			result.y += var.amount.y * mult * sign;
+			break;
+		}
+	}
+
+	return ImVec2(
+		var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+		var_clampf(result.y, var.min_clamp.y, var.max_clamp.y)
+	);
+}
+
+// Apply vec4 variation (global or per-axis)
+static ImVec4 apply_var_vec4(ImVec4 base, iam_variation_vec4 const& var, int loop_index, unsigned int* rng_state) {
+	// Per-axis variation
+	if (var.mode == iam_var_none) {
+		if (var.x.mode != iam_var_none || var.y.mode != iam_var_none ||
+		    var.z.mode != iam_var_none || var.w.mode != iam_var_none) {
+			return ImVec4(
+				apply_var_float(base.x, var.x, loop_index, rng_state),
+				apply_var_float(base.y, var.y, loop_index, rng_state),
+				apply_var_float(base.z, var.z, loop_index, rng_state),
+				apply_var_float(base.w, var.w, loop_index, rng_state)
+			);
+		}
+		return base;
+	}
+
+	// Callback
+	if (var.mode == iam_var_callback && var.callback) {
+		ImVec4 result = var.callback(loop_index, var.user);
+		return ImVec4(
+			var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+			var_clampf(result.y, var.min_clamp.y, var.max_clamp.y),
+			var_clampf(result.z, var.min_clamp.z, var.max_clamp.z),
+			var_clampf(result.w, var.min_clamp.w, var.max_clamp.w)
+		);
+	}
+
+	// Global variation
+	unsigned int rng = var.seed != 0 ? (var.seed + (unsigned int)loop_index * 1664525u) : *rng_state;
+	ImVec4 result = base;
+
+	switch (var.mode) {
+		case iam_var_increment:
+			result.x += var.amount.x * (float)loop_index;
+			result.y += var.amount.y * (float)loop_index;
+			result.z += var.amount.z * (float)loop_index;
+			result.w += var.amount.w * (float)loop_index;
+			break;
+		case iam_var_decrement:
+			result.x -= var.amount.x * (float)loop_index;
+			result.y -= var.amount.y * (float)loop_index;
+			result.z -= var.amount.z * (float)loop_index;
+			result.w -= var.amount.w * (float)loop_index;
+			break;
+		case iam_var_multiply:
+			result.x *= powf(var.amount.x, (float)loop_index);
+			result.y *= powf(var.amount.y, (float)loop_index);
+			result.z *= powf(var.amount.z, (float)loop_index);
+			result.w *= powf(var.amount.w, (float)loop_index);
+			break;
+		case iam_var_random:
+			result.x += var_rand_signed(&rng) * var.amount.x;
+			result.y += var_rand_signed(&rng) * var.amount.y;
+			result.z += var_rand_signed(&rng) * var.amount.z;
+			result.w += var_rand_signed(&rng) * var.amount.w;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_random_abs:
+			result.x += var_rand_unit(&rng) * var.amount.x;
+			result.y += var_rand_unit(&rng) * var.amount.y;
+			result.z += var_rand_unit(&rng) * var.amount.z;
+			result.w += var_rand_unit(&rng) * var.amount.w;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_pingpong: {
+			float sign = (loop_index % 4 >= 2) ? -1.0f : 1.0f;
+			float mult = (loop_index % 2 == 0) ? 0.0f : 1.0f;
+			result.x += var.amount.x * mult * sign;
+			result.y += var.amount.y * mult * sign;
+			result.z += var.amount.z * mult * sign;
+			result.w += var.amount.w * mult * sign;
+			break;
+		}
+	}
+
+	return ImVec4(
+		var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+		var_clampf(result.y, var.min_clamp.y, var.max_clamp.y),
+		var_clampf(result.z, var.min_clamp.z, var.max_clamp.z),
+		var_clampf(result.w, var.min_clamp.w, var.max_clamp.w)
+	);
+}
+
+// Apply color variation (global or per-channel) in the specified color space
+// Input and output are in sRGB, variation is applied in the target color space
+static ImVec4 apply_var_color(ImVec4 base_srgb, iam_variation_color const& var, int loop_index, unsigned int* rng_state) {
+	int color_space = var.color_space;
+
+	// Convert sRGB to working color space
+	ImVec4 base = iam_detail::color::to_space(base_srgb, color_space);
+
+	// Per-channel variation (in working color space)
+	if (var.mode == iam_var_none) {
+		if (var.r.mode != iam_var_none || var.g.mode != iam_var_none ||
+		    var.b.mode != iam_var_none || var.a.mode != iam_var_none) {
+			ImVec4 result(
+				apply_var_float(base.x, var.r, loop_index, rng_state),
+				apply_var_float(base.y, var.g, loop_index, rng_state),
+				apply_var_float(base.z, var.b, loop_index, rng_state),
+				apply_var_float(base.w, var.a, loop_index, rng_state)
+			);
+			// Convert back to sRGB
+			return iam_detail::color::from_space(result, color_space);
+		}
+		return base_srgb;
+	}
+
+	// Callback (assumed to return sRGB directly)
+	if (var.mode == iam_var_callback && var.callback) {
+		ImVec4 result = var.callback(loop_index, var.user);
+		return ImVec4(
+			var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+			var_clampf(result.y, var.min_clamp.y, var.max_clamp.y),
+			var_clampf(result.z, var.min_clamp.z, var.max_clamp.z),
+			var_clampf(result.w, var.min_clamp.w, var.max_clamp.w)
+		);
+	}
+
+	// Global variation in working color space
+	unsigned int rng = var.seed != 0 ? (var.seed + (unsigned int)loop_index * 1664525u) : *rng_state;
+	ImVec4 result = base;
+
+	switch (var.mode) {
+		case iam_var_increment:
+			result.x += var.amount.x * (float)loop_index;
+			result.y += var.amount.y * (float)loop_index;
+			result.z += var.amount.z * (float)loop_index;
+			result.w += var.amount.w * (float)loop_index;
+			break;
+		case iam_var_decrement:
+			result.x -= var.amount.x * (float)loop_index;
+			result.y -= var.amount.y * (float)loop_index;
+			result.z -= var.amount.z * (float)loop_index;
+			result.w -= var.amount.w * (float)loop_index;
+			break;
+		case iam_var_multiply:
+			result.x *= powf(var.amount.x, (float)loop_index);
+			result.y *= powf(var.amount.y, (float)loop_index);
+			result.z *= powf(var.amount.z, (float)loop_index);
+			result.w *= powf(var.amount.w, (float)loop_index);
+			break;
+		case iam_var_random:
+			result.x += var_rand_signed(&rng) * var.amount.x;
+			result.y += var_rand_signed(&rng) * var.amount.y;
+			result.z += var_rand_signed(&rng) * var.amount.z;
+			result.w += var_rand_signed(&rng) * var.amount.w;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_random_abs:
+			result.x += var_rand_unit(&rng) * var.amount.x;
+			result.y += var_rand_unit(&rng) * var.amount.y;
+			result.z += var_rand_unit(&rng) * var.amount.z;
+			result.w += var_rand_unit(&rng) * var.amount.w;
+			if (var.seed == 0) *rng_state = rng;
+			break;
+		case iam_var_pingpong: {
+			float sign = (loop_index % 4 >= 2) ? -1.0f : 1.0f;
+			float mult = (loop_index % 2 == 0) ? 0.0f : 1.0f;
+			result.x += var.amount.x * mult * sign;
+			result.y += var.amount.y * mult * sign;
+			result.z += var.amount.z * mult * sign;
+			result.w += var.amount.w * mult * sign;
+			break;
+		}
+	}
+
+	// Clamp in working space
+	result = ImVec4(
+		var_clampf(result.x, var.min_clamp.x, var.max_clamp.x),
+		var_clampf(result.y, var.min_clamp.y, var.max_clamp.y),
+		var_clampf(result.z, var.min_clamp.z, var.max_clamp.z),
+		var_clampf(result.w, var.min_clamp.w, var.max_clamp.w)
+	);
+
+	// Convert back to sRGB
+	return iam_detail::color::from_space(result, color_space);
 }
 
 // Find keyframes bracketing time t for a iam_track
@@ -1530,15 +1926,32 @@ static void eval_iam_track(iam_track const& trk, float t, iam_instance_data* ins
 		w = eval_clip_ease(k0->ease_type, u, k0->bezier, k0->has_bezier);
 	}
 
+	// Get current loop index for variation
+	int loop_index = inst->current_loop;
+
 	switch (trk.type) {
 		case iam_chan_float: {
 			float a = k0->get_float(), b = k1->get_float();
+			// Apply variation if present
+			if (k0->has_variation) {
+				a = apply_var_float(a, k0->var_float, loop_index, &inst->var_rng_state);
+			}
+			if (k1->has_variation) {
+				b = apply_var_float(b, k1->var_float, loop_index, &inst->var_rng_state);
+			}
 			float v = a + (b - a) * w;
 			inst->values_float.SetFloat(trk.channel, v);
 			break;
 		}
 		case iam_chan_vec2: {
 			ImVec2 a = k0->get_vec2(), b = k1->get_vec2();
+			// Apply variation if present
+			if (k0->has_variation) {
+				a = apply_var_vec2(a, k0->var_vec2, loop_index, &inst->var_rng_state);
+			}
+			if (k1->has_variation) {
+				b = apply_var_vec2(b, k1->var_vec2, loop_index, &inst->var_rng_state);
+			}
 			ImVec2 v(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w);
 			// Store in vec2 array
 			bool found = false;
@@ -1557,6 +1970,13 @@ static void eval_iam_track(iam_track const& trk, float t, iam_instance_data* ins
 		}
 		case iam_chan_vec4: {
 			ImVec4 a = k0->get_vec4(), b = k1->get_vec4();
+			// Apply variation if present
+			if (k0->has_variation) {
+				a = apply_var_vec4(a, k0->var_vec4, loop_index, &inst->var_rng_state);
+			}
+			if (k1->has_variation) {
+				b = apply_var_vec4(b, k1->var_vec4, loop_index, &inst->var_rng_state);
+			}
 			ImVec4 v(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w, a.z + (b.z - a.z) * w, a.w + (b.w - a.w) * w);
 			bool found = false;
 			for (int i = 0; i < inst->values_vec4.Size; ++i) {
@@ -1574,12 +1994,26 @@ static void eval_iam_track(iam_track const& trk, float t, iam_instance_data* ins
 		}
 		case iam_chan_int: {
 			int a = k0->get_int(), b = k1->get_int();
+			// Apply variation if present
+			if (k0->has_variation) {
+				a = apply_var_int(a, k0->var_int, loop_index, &inst->var_rng_state);
+			}
+			if (k1->has_variation) {
+				b = apply_var_int(b, k1->var_int, loop_index, &inst->var_rng_state);
+			}
 			int v = (int)(a + (int)((float)(b - a) * w + 0.5f));
 			inst->values_int.SetInt(trk.channel, v);
 			break;
 		}
 		case iam_chan_color: {
 			ImVec4 a = k0->get_color(), b = k1->get_color();
+			// Apply variation if present
+			if (k0->has_variation) {
+				a = apply_var_color(a, k0->var_color, loop_index, &inst->var_rng_state);
+			}
+			if (k1->has_variation) {
+				b = apply_var_color(b, k1->var_color, loop_index, &inst->var_rng_state);
+			}
 			// Blend in the specified color space
 			ImVec4 v = iam_detail::color::lerp_color(a, b, w, trk.color_space);
 			bool found = false;
@@ -1651,6 +2085,14 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	clip->stagger_count = 0;
 	clip->stagger_delay = 0;
 	clip->stagger_center_bias = 0;
+
+	// Reset timing variation
+	clip->has_duration_var = false;
+	clip->has_delay_var = false;
+	clip->has_timescale_var = false;
+	memset(&clip->duration_var, 0, sizeof(clip->duration_var));
+	memset(&clip->delay_var, 0, sizeof(clip->delay_var));
+	memset(&clip->timescale_var, 0, sizeof(clip->timescale_var));
 
 	return iam_clip(clip_id);
 }
@@ -1779,6 +2221,113 @@ iam_clip& iam_clip::key_float_spring(ImGuiID channel, float time, float target, 
 	return *this;
 }
 
+// Keyframes with repeat variation
+iam_clip& iam_clip::key_float_var(ImGuiID channel, float time, float value, iam_variation_float const& var, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_float;
+	k.ease_type = ease_type;
+	k.set_float(value);
+	k.has_variation = true;
+	k.var_float = var;
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_vec2_var(ImGuiID channel, float time, ImVec2 value, iam_variation_vec2 const& var, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_vec2;
+	k.ease_type = ease_type;
+	k.set_vec2(value);
+	k.has_variation = true;
+	k.var_vec2 = var;
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_vec4_var(ImGuiID channel, float time, ImVec4 value, iam_variation_vec4 const& var, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_vec4;
+	k.ease_type = ease_type;
+	k.set_vec4(value);
+	k.has_variation = true;
+	k.var_vec4 = var;
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_int_var(ImGuiID channel, float time, int value, iam_variation_int const& var, int ease_type) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_int;
+	k.ease_type = ease_type;
+	k.set_int(value);
+	k.has_variation = true;
+	k.var_int = var;
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
+iam_clip& iam_clip::key_color_var(ImGuiID channel, float time, ImVec4 value, iam_variation_color const& var, int color_space, int ease_type, float const* bezier4) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float actual_time = compute_key_time(clip, time);
+	iam_clip_detail::keyframe k;
+	k.channel = channel;
+	k.time = actual_time;
+	k.type = iam_chan_color;
+	k.ease_type = ease_type;
+	k.color_space = color_space;
+	k.set_color(value);
+	k.has_variation = true;
+	k.var_color = var;
+	if (bezier4) {
+		k.has_bezier = true;
+		k.bezier[0] = bezier4[0]; k.bezier[1] = bezier4[1];
+		k.bezier[2] = bezier4[2]; k.bezier[3] = bezier4[3];
+	}
+	clip->build_keys.push_back(k);
+	if (actual_time > clip->duration) clip->duration = actual_time;
+	return *this;
+}
+
 iam_clip& iam_clip::seq_begin() {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
@@ -1844,6 +2393,30 @@ iam_clip& iam_clip::set_stagger(int count, float each_delay, float from_center_b
 	clip->stagger_count = count > 0 ? count : 1;
 	clip->stagger_delay = each_delay;
 	clip->stagger_center_bias = ImClamp(from_center_bias, 0.0f, 1.0f);
+	return *this;
+}
+
+iam_clip& iam_clip::set_duration_var(iam_variation_float const& var) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->has_duration_var = true;
+	clip->duration_var = var;
+	return *this;
+}
+
+iam_clip& iam_clip::set_delay_var(iam_variation_float const& var) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->has_delay_var = true;
+	clip->delay_var = var;
+	return *this;
+}
+
+iam_clip& iam_clip::set_timescale_var(iam_variation_float const& var) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->has_timescale_var = true;
+	clip->timescale_var = var;
 	return *this;
 }
 
@@ -2206,7 +2779,12 @@ void iam_clip_update(float dt) {
 		float dts = inst_dt * (inst->time_scale <= 0.0f ? 1.0f : inst->time_scale);
 		t += dts * (float)inst->dir_sign;
 
+		// Apply duration variation if present
 		float dur = clip->duration;
+		if (clip->has_duration_var) {
+			dur = apply_var_float(clip->duration, clip->duration_var, inst->current_loop, &inst->var_rng_state);
+			if (dur < 0.001f) dur = 0.001f;  // Minimum duration
+		}
 		bool done = false;
 
 		if (dur <= 0.0f) { inst->time = 0.0f; continue; }
@@ -2244,13 +2822,26 @@ void iam_clip_update(float dt) {
 		if (t < 0.0f) t = 0.0f;
 		if (t > dur) t = dur;
 
-		// Reset markers on loop
+		// Reset markers on loop and increment loop counter for variation
 		if (loop_iters > 0) {
+			inst->current_loop += loop_iters;
 			for (int m = 0; m < inst->markers_triggered.Size; m++) {
 				inst->markers_triggered[m] = false;
 			}
 			// Reset prev_time to avoid triggering all markers at once after loop
 			inst->prev_time = (inst->dir_sign > 0) ? 0.0f : dur;
+
+			// Apply timing variations for new loop iteration
+			if (clip->has_timescale_var) {
+				float new_scale = apply_var_float(1.0f, clip->timescale_var, inst->current_loop, &inst->var_rng_state);
+				inst->time_scale = new_scale > 0.0f ? new_scale : 1.0f;
+			}
+			if (clip->has_delay_var) {
+				float loop_delay = apply_var_float(0.0f, clip->delay_var, inst->current_loop, &inst->var_rng_state);
+				if (loop_delay > 0.0f) {
+					inst->delay_left = loop_delay;
+				}
+			}
 		}
 
 		if (done) {
@@ -2387,6 +2978,10 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id) {
 	inst->chain_next_clip_id = 0;
 	inst->chain_next_inst_id = 0;
 	inst->chain_delay = 0;
+
+	// Reset variation state
+	inst->current_loop = 0;
+	inst->var_rng_state = 12345 + instance_id;  // Deterministic but unique per instance
 
 	// Evaluate initial frame immediately so values are available right away
 	float initial_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
