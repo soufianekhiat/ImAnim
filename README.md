@@ -105,7 +105,7 @@ The `demo/` folder contains a comprehensive demo showcasing all features:
 <td><img src="imgs/ImAnim_Gradient.gif" alt="Gradient"/><br><strong>Gradient</strong></td>
 </tr>
 </table>
-<img src="imgs/ImAnim_ImGuiIntegration.gif" alt="ImGui Integration"/><br><strong>ImGui Integration</strong>
+<img src="imgs/ImAnim_ImGuiIntegration.gif" width="512px" alt="ImGui Integration"/><br><strong>ImGui Integration</strong>
 
 ## Contributing
 
