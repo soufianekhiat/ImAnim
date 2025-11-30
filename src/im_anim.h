@@ -11,6 +11,8 @@
 #include "imgui.h"
 #include <stdint.h>
 #include <math.h>
+#include <limits.h>
+#include <float.h>
 
 // ----------------------------------------------------
 // Public enums & descriptors (C-style)
@@ -624,6 +626,273 @@ struct iam_spring_params {
 	float initial_velocity;
 };
 
+// ----------------------------------------------------
+// Repeat with Variation - per-loop parameter changes
+// ----------------------------------------------------
+
+// Variation modes for repeat animations
+enum iam_variation_mode {
+	iam_var_none = 0,       // No variation
+	iam_var_increment,      // Add amount each iteration
+	iam_var_decrement,      // Subtract amount each iteration
+	iam_var_multiply,       // Multiply by factor each iteration
+	iam_var_random,         // Random in range [-amount, +amount]
+	iam_var_random_abs,     // Random in range [0, amount]
+	iam_var_pingpong,       // Alternate +/- each iteration
+	iam_var_callback        // Use custom callback
+};
+
+// Callback types for custom variation logic
+typedef float  (*iam_variation_float_fn)(int index, void* user);
+typedef int    (*iam_variation_int_fn)(int index, void* user);
+typedef ImVec2 (*iam_variation_vec2_fn)(int index, void* user);
+typedef ImVec4 (*iam_variation_vec4_fn)(int index, void* user);
+
+// Float variation
+struct iam_variation_float {
+	int                     mode;
+	float                   amount;
+	float                   min_clamp;
+	float                   max_clamp;
+	unsigned int            seed;       // 0 = global random, non-zero = deterministic
+	iam_variation_float_fn  callback;
+	void*                   user;
+};
+
+// Int variation
+struct iam_variation_int {
+	int                   mode;
+	int                   amount;
+	int                   min_clamp;
+	int                   max_clamp;
+	unsigned int          seed;
+	iam_variation_int_fn  callback;
+	void*                 user;
+};
+
+// Vec2 variation (global mode or per-axis)
+struct iam_variation_vec2 {
+	int                    mode;        // Global mode (iam_var_none = use per-axis)
+	ImVec2                 amount;
+	ImVec2                 min_clamp;
+	ImVec2                 max_clamp;
+	unsigned int           seed;
+	iam_variation_vec2_fn  callback;
+	void*                  user;
+	iam_variation_float    x, y;        // Per-axis (used when mode == iam_var_none)
+};
+
+// Vec4 variation (global mode or per-axis)
+struct iam_variation_vec4 {
+	int                    mode;
+	ImVec4                 amount;
+	ImVec4                 min_clamp;
+	ImVec4                 max_clamp;
+	unsigned int           seed;
+	iam_variation_vec4_fn  callback;
+	void*                  user;
+	iam_variation_float    x, y, z, w;  // Per-axis
+};
+
+// Color variation (global mode or per-channel)
+struct iam_variation_color {
+	int                    mode;
+	ImVec4                 amount;
+	ImVec4                 min_clamp;
+	ImVec4                 max_clamp;
+	int                    color_space; // iam_col_oklab, etc.
+	unsigned int           seed;
+	iam_variation_vec4_fn  callback;    // Returns ImVec4 color delta
+	void*                  user;
+	iam_variation_float    r, g, b, a;  // Per-channel
+};
+
+// ----------------------------------------------------
+// Variation helper functions (C11-style inline)
+// ----------------------------------------------------
+
+// Float variation helpers
+static inline iam_variation_float iam_varf_none(void) {
+	iam_variation_float v = {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_inc(float amt) {
+	iam_variation_float v = {iam_var_increment, amt, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_dec(float amt) {
+	iam_variation_float v = {iam_var_decrement, amt, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_mul(float f) {
+	iam_variation_float v = {iam_var_multiply, f, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_rand(float r) {
+	iam_variation_float v = {iam_var_random, r, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_rand_abs(float r) {
+	iam_variation_float v = {iam_var_random_abs, r, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_pingpong(float amt) {
+	iam_variation_float v = {iam_var_pingpong, amt, -FLT_MAX, FLT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_float iam_varf_fn(iam_variation_float_fn fn, void* user) {
+	iam_variation_float v = {iam_var_callback, 0, -FLT_MAX, FLT_MAX, 0, fn, user};
+	return v;
+}
+static inline iam_variation_float iam_varf_clamp(iam_variation_float v, float mn, float mx) {
+	v.min_clamp = mn; v.max_clamp = mx; return v;
+}
+static inline iam_variation_float iam_varf_seed(iam_variation_float v, unsigned int s) {
+	v.seed = s; return v;
+}
+
+// Int variation helpers
+static inline iam_variation_int iam_vari_none(void) {
+	iam_variation_int v = {iam_var_none, 0, INT_MIN, INT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_int iam_vari_inc(int amt) {
+	iam_variation_int v = {iam_var_increment, amt, INT_MIN, INT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_int iam_vari_dec(int amt) {
+	iam_variation_int v = {iam_var_decrement, amt, INT_MIN, INT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_int iam_vari_rand(int r) {
+	iam_variation_int v = {iam_var_random, r, INT_MIN, INT_MAX, 0, 0, 0};
+	return v;
+}
+static inline iam_variation_int iam_vari_fn(iam_variation_int_fn fn, void* user) {
+	iam_variation_int v = {iam_var_callback, 0, INT_MIN, INT_MAX, 0, fn, user};
+	return v;
+}
+static inline iam_variation_int iam_vari_clamp(iam_variation_int v, int mn, int mx) {
+	v.min_clamp = mn; v.max_clamp = mx; return v;
+}
+static inline iam_variation_int iam_vari_seed(iam_variation_int v, unsigned int s) {
+	v.seed = s; return v;
+}
+
+// Vec2 variation helpers (global)
+static inline iam_variation_vec2 iam_varv2_none(void) {
+	iam_variation_vec2 v = {iam_var_none, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_inc(float x, float y) {
+	iam_variation_vec2 v = {iam_var_increment, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_dec(float x, float y) {
+	iam_variation_vec2 v = {iam_var_decrement, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_mul(float f) {
+	iam_variation_vec2 v = {iam_var_multiply, {f,f}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_rand(float x, float y) {
+	iam_variation_vec2 v = {iam_var_random, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_fn(iam_variation_vec2_fn fn, void* user) {
+	iam_variation_vec2 v = {iam_var_callback, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, fn, user, {0}, {0}};
+	return v;
+}
+// Vec2 per-axis helper
+static inline iam_variation_vec2 iam_varv2_axis(iam_variation_float vx, iam_variation_float vy) {
+	iam_variation_vec2 v = {iam_var_none, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, vx, vy};
+	return v;
+}
+static inline iam_variation_vec2 iam_varv2_clamp(iam_variation_vec2 v, ImVec2 mn, ImVec2 mx) {
+	v.min_clamp = mn; v.max_clamp = mx; return v;
+}
+static inline iam_variation_vec2 iam_varv2_seed(iam_variation_vec2 v, unsigned int s) {
+	v.seed = s; return v;
+}
+
+// Vec4 variation helpers (global)
+static inline iam_variation_vec4 iam_varv4_none(void) {
+	iam_variation_vec4 v = {iam_var_none, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_inc(float x, float y, float z, float w) {
+	iam_variation_vec4 v = {iam_var_increment, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_dec(float x, float y, float z, float w) {
+	iam_variation_vec4 v = {iam_var_decrement, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_mul(float f) {
+	iam_variation_vec4 v = {iam_var_multiply, {f,f,f,f}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_rand(float x, float y, float z, float w) {
+	iam_variation_vec4 v = {iam_var_random, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_fn(iam_variation_vec4_fn fn, void* user) {
+	iam_variation_vec4 v = {iam_var_callback, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, fn, user, {0}, {0}, {0}, {0}};
+	return v;
+}
+// Vec4 per-axis helper
+static inline iam_variation_vec4 iam_varv4_axis(iam_variation_float vx, iam_variation_float vy, iam_variation_float vz, iam_variation_float vw) {
+	iam_variation_vec4 v = {iam_var_none, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, vx, vy, vz, vw};
+	return v;
+}
+static inline iam_variation_vec4 iam_varv4_clamp(iam_variation_vec4 v, ImVec4 mn, ImVec4 mx) {
+	v.min_clamp = mn; v.max_clamp = mx; return v;
+}
+static inline iam_variation_vec4 iam_varv4_seed(iam_variation_vec4 v, unsigned int s) {
+	v.seed = s; return v;
+}
+
+// Color variation helpers (global)
+static inline iam_variation_color iam_varc_none(void) {
+	iam_variation_color v = {iam_var_none, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_color iam_varc_inc(float r, float g, float b, float a) {
+	iam_variation_color v = {iam_var_increment, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_color iam_varc_dec(float r, float g, float b, float a) {
+	iam_variation_color v = {iam_var_decrement, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_color iam_varc_mul(float f) {
+	iam_variation_color v = {iam_var_multiply, {f,f,f,1}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_color iam_varc_rand(float r, float g, float b, float a) {
+	iam_variation_color v = {iam_var_random, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	return v;
+}
+static inline iam_variation_color iam_varc_fn(iam_variation_vec4_fn fn, void* user) {
+	iam_variation_color v = {iam_var_callback, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, fn, user, {0}, {0}, {0}, {0}};
+	return v;
+}
+// Color per-channel helper
+static inline iam_variation_color iam_varc_channel(iam_variation_float vr, iam_variation_float vg, iam_variation_float vb, iam_variation_float va) {
+	iam_variation_color v = {iam_var_none, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, vr, vg, vb, va};
+	return v;
+}
+static inline iam_variation_color iam_varc_space(iam_variation_color v, int space) {
+	v.color_space = space; return v;
+}
+static inline iam_variation_color iam_varc_clamp(iam_variation_color v, ImVec4 mn, ImVec4 mx) {
+	v.min_clamp = mn; v.max_clamp = mx; return v;
+}
+static inline iam_variation_color iam_varc_seed(iam_variation_color v, unsigned int s) {
+	v.seed = s; return v;
+}
+
 // Forward declarations
 struct iam_clip_data;
 struct iam_instance_data;
@@ -649,6 +918,13 @@ public:
 	iam_clip& key_int(ImGuiID channel, float time, int value, int ease_type = iam_ease_linear);
 	iam_clip& key_color(ImGuiID channel, float time, ImVec4 value, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
+	// Keyframes with repeat variation (value changes per loop iteration)
+	iam_clip& key_float_var(ImGuiID channel, float time, float value, iam_variation_float const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec2_var(ImGuiID channel, float time, ImVec2 value, iam_variation_vec2 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec4_var(ImGuiID channel, float time, ImVec4 value, iam_variation_vec4 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_int_var(ImGuiID channel, float time, int value, iam_variation_int const& var, int ease_type = iam_ease_linear);
+	iam_clip& key_color_var(ImGuiID channel, float time, ImVec4 value, iam_variation_color const& var, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+
 	// Spring-based keyframe (float only)
 	iam_clip& key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring);
 
@@ -666,6 +942,11 @@ public:
 	iam_clip& set_loop(bool loop, int direction = iam_dir_normal, int loop_count = -1);
 	iam_clip& set_delay(float delay_seconds);
 	iam_clip& set_stagger(int count, float each_delay, float from_center_bias = 0.0f);
+
+	// Timing variation per loop iteration
+	iam_clip& set_duration_var(iam_variation_float const& var);   // Vary clip duration per loop
+	iam_clip& set_delay_var(iam_variation_float const& var);      // Vary delay between loops
+	iam_clip& set_timescale_var(iam_variation_float const& var);  // Vary playback speed per loop
 
 	// Callbacks
 	iam_clip& on_begin(iam_clip_callback cb, void* user = nullptr);
