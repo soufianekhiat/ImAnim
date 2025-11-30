@@ -583,13 +583,6 @@ iam_transform iam_transform_from_matrix(float m00, float m01, float m10, float m
 // Convert transform to 3x2 matrix (row-major: [m00 m01 tx; m10 m11 ty])
 void iam_transform_to_matrix(iam_transform const& t, float* out_matrix);
 
-// ----------------------------------------------------
-// Animation Inspector - debug visualization
-// ----------------------------------------------------
-
-// Show the animation inspector window
-void iam_show_animation_inspector(bool* p_open = nullptr);
-
 // ============================================================
 // CLIP-BASED ANIMATION SYSTEM
 // ============================================================
