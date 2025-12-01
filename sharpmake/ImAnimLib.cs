@@ -13,7 +13,7 @@ namespace ImAnim
             SourceRootPath = Path.Combine("[project.SharpmakeCsPath]", "..", "src");
         }
 
-        public override void ConfigureAll(Configuration conf, Target target)
+        public override void ConfigureAll(Configuration conf, ImAnimTarget target)
         {
             base.ConfigureAll(conf, target);
 
