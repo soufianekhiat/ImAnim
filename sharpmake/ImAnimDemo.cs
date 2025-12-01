@@ -103,9 +103,9 @@ namespace ImAnim
             switch (target.ImPlatform)
             {
                 case ImPlatform.GLFW:
-                    // GLFW include and library paths (adjust as needed for your setup)
-                    conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "extern", "glfw", "include"));
-                    conf.LibraryPaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "extern", "glfw", "lib"));
+                    // GLFW include and library paths (from imgui examples)
+                    conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "extern", "imgui", "examples", "libs", "glfw", "include"));
+                    conf.LibraryPaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "extern", "imgui", "examples", "libs", "glfw", "lib-vc2010-64"));
                     conf.LibraryFiles.Add("glfw3.lib");
                     break;
 
