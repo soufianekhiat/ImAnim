@@ -42,10 +42,8 @@
 .vs
 tmp
 *.json
-*.vcxproj
 *.filters
 *.user
 *.exp
 *.map
-*.sln
 *.ini
