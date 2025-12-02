@@ -51,21 +51,44 @@ float scale = iam_tween_float(
 );
 ```
 
-## Installation
+## Quick Integration
 
-Add two files to your project:
+**Step 1:** Copy `src/im_anim.h` and `src/im_anim.cpp` to your project.
 
+**Step 2:** Add two lines after `ImGui::NewFrame()`:
+
+```cpp
+ImGui::NewFrame();
+
+// Add these two lines
+iam_update_begin_frame();
+iam_clip_update(ImGui::GetIO().DeltaTime);
+
+// Your UI code...
 ```
-src/im_anim.h
-src/im_anim.cpp
+
+**Step 3:** Animate! Here's a hover effect:
+
+```cpp
+bool hovered = ImGui::IsItemHovered();
+float scale = iam_tween_float(
+    ImGui::GetID("btn"), ImHashStr("scale"),
+    hovered ? 1.1f : 1.0f, 0.2f,
+    iam_ease_preset(iam_ease_out_back),
+    iam_policy_crossfade,
+    ImGui::GetIO().DeltaTime
+);
 ```
 
 That's it. No build system changes, no external dependencies.
+
+See [simple_examples/](simple_examples/) for complete, buildable examples using GLFW, SDL2, or Win32.
 
 ## Documentation
 
 Full documentation in the [`docs/`](docs/) folder:
 
+- [Integration Guide](docs/integration.md) - Add ImAnim to your project
 - [Quick Start](docs/quickstart.md) - Get running in 5 minutes
 - [Tweens](docs/tweens.md) - Immediate-mode animation
 - [Clips](docs/clips.md) - Timeline-based keyframe animation
