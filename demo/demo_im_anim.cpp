@@ -7067,6 +7067,396 @@ static void ShowAnimationInspectorDemo()
 }
 
 // ============================================================
+// SECTION: Stress Test
+// ============================================================
+static void ShowStressTestDemo()
+{
+	float dt = GetSafeDeltaTime();
+
+	// Test configuration
+	static int anim_count = 1000;
+	static int test_mode = 0;  // 0=float, 1=vec2, 2=vec4, 3=color, 4=mixed
+	static bool running = false;
+	static float test_time = 0.0f;
+
+	// Performance tracking
+	static float fps_history[120] = {0};
+	static int fps_idx = 0;
+	static float min_fps = 999.0f;
+	static float max_fps = 0.0f;
+	static float avg_fps = 0.0f;
+
+	const char* mode_names[] = { "Float Tweens", "Vec2 Tweens", "Vec4 Tweens", "Color Tweens", "Mixed" };
+
+	ImGui::TextWrapped("Stress test the animation system with thousands of concurrent animations. "
+		"Monitor FPS to measure performance impact.");
+
+	ImGui::Separator();
+
+	// Configuration
+	ImGui::Text("Configuration:");
+	ImGui::SliderInt("Animation Count", &anim_count, 100, 100000, "%d", ImGuiSliderFlags_Logarithmic);
+	ImGui::Combo("Test Mode", &test_mode, mode_names, IM_ARRAYSIZE(mode_names));
+
+	ImGui::Separator();
+
+	// Controls
+	if (!running) {
+		if (ImGui::Button("Start Test", ImVec2(120, 0))) {
+			running = true;
+			test_time = 0.0f;
+			min_fps = 999.0f;
+			max_fps = 0.0f;
+			avg_fps = 0.0f;
+			for (int i = 0; i < 120; i++) fps_history[i] = 0.0f;
+			fps_idx = 0;
+		}
+	} else {
+		if (ImGui::Button("Stop Test", ImVec2(120, 0))) {
+			running = false;
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Reset Stats", ImVec2(120, 0))) {
+		min_fps = 999.0f;
+		max_fps = 0.0f;
+		avg_fps = 0.0f;
+		for (int i = 0; i < 120; i++) fps_history[i] = 0.0f;
+		fps_idx = 0;
+	}
+
+	ImGui::Separator();
+
+	// Performance display
+	float current_fps = ImGui::GetIO().Framerate;
+	float frame_ms = dt * 1000.0f;
+
+	if (running) {
+		test_time += dt;
+		fps_history[fps_idx] = current_fps;
+		fps_idx = (fps_idx + 1) % 120;
+
+		if (current_fps < min_fps && current_fps > 1.0f) min_fps = current_fps;
+		if (current_fps > max_fps) max_fps = current_fps;
+
+		// Calculate average
+		float sum = 0.0f;
+		int count = 0;
+		for (int i = 0; i < 120; i++) {
+			if (fps_history[i] > 0.0f) {
+				sum += fps_history[i];
+				count++;
+			}
+		}
+		if (count > 0) avg_fps = sum / count;
+	}
+
+	// Stats display
+	ImGui::Text("Performance:");
+	ImGui::Columns(4, "perf_cols", false);
+	ImGui::Text("Current FPS"); ImGui::NextColumn();
+	ImGui::Text("Min FPS"); ImGui::NextColumn();
+	ImGui::Text("Max FPS"); ImGui::NextColumn();
+	ImGui::Text("Avg FPS"); ImGui::NextColumn();
+
+	// Color code based on FPS
+	ImVec4 fps_color = current_fps >= 60.0f ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) :
+	                   current_fps >= 30.0f ? ImVec4(1.0f, 1.0f, 0.2f, 1.0f) :
+	                                          ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
+
+	ImGui::TextColored(fps_color, "%.1f", current_fps); ImGui::NextColumn();
+	ImGui::Text("%.1f", min_fps < 999.0f ? min_fps : 0.0f); ImGui::NextColumn();
+	ImGui::Text("%.1f", max_fps); ImGui::NextColumn();
+	ImGui::Text("%.1f", avg_fps); ImGui::NextColumn();
+	ImGui::Columns(1);
+
+	ImGui::Text("Test time: %.1f s", test_time);
+	if (running) {
+		ImGui::Text("Total time: %.3f ms | Animations/ms: %.0f", frame_ms, (float)anim_count / (frame_ms > 0.0f ? frame_ms : 1.0f));
+	}
+
+	// FPS Graph
+	ImGui::PlotLines("##fps_graph", fps_history, 120, fps_idx, "FPS History",
+		0.0f, 120.0f, ImVec2(ImGui::GetContentRegionAvail().x, 60));
+
+	ImGui::Separator();
+
+	// Stagger and animation parameters (outside running block so they persist)
+	static float stagger_amount = 0.02f;
+	static float anim_duration = 0.8f;
+	static int ease_idx = 1;
+	const char* ease_names[] = { "Out Cubic", "Out Elastic", "Out Bounce", "Out Back", "In Out Quad" };
+	int ease_values[] = { iam_ease_out_cubic, iam_ease_out_elastic, iam_ease_out_bounce, iam_ease_out_back, iam_ease_in_out_quad };
+
+	// Storage for animated values (static to persist between frames)
+	static ImVector<float> float_values;
+	static ImVector<ImVec2> vec2_values;
+	static ImVector<ImVec4> vec4_values;
+
+	// Run the stress test
+	if (running) {
+		ImGui::Text("Running %d %s...", anim_count, mode_names[test_mode]);
+
+		ImGui::SliderFloat("Stagger Delay", &stagger_amount, 0.001f, 0.1f, "%.3f s");
+		ImGui::SliderFloat("Anim Duration", &anim_duration, 0.1f, 2.0f, "%.2f s");
+		ImGui::Combo("Easing", &ease_idx, ease_names, IM_ARRAYSIZE(ease_names));
+		int ease_type = ease_values[ease_idx];
+
+		// Resize value storage if needed
+		if (float_values.Size < anim_count) float_values.resize(anim_count);
+		if (vec2_values.Size < anim_count) vec2_values.resize(anim_count);
+		if (vec4_values.Size < anim_count) vec4_values.resize(anim_count);
+
+		// Base ID for stress test animations
+		ImGuiID base_id = ImHashStr("stress_test");
+
+		// Profile the tween updates
+		iam_profiler_begin("Stress: Tweens");
+
+		// Each animation has its own phase based on stagger
+		// They ping-pong between two states independently
+		for (int i = 0; i < anim_count; i++) {
+			ImGuiID id = base_id + (ImGuiID)i;
+
+			// Staggered phase - each animation starts at a different time
+			float stagger_offset = (float)i * stagger_amount;
+			float local_time = test_time - stagger_offset;
+			if (local_time < 0.0f) local_time = 0.0f;
+
+			// Ping-pong cycle for this animation
+			float cycle_duration = anim_duration * 2.0f;
+			float cycle_pos = fmodf(local_time, cycle_duration);
+			bool going_up = cycle_pos < anim_duration;
+
+			// Determine target based on cycle phase and CAPTURE the animated value
+			switch (test_mode) {
+				case 0: // Float tweens - bounce between 0 and 1
+				{
+					float target = going_up ? 1.0f : 0.0f;
+					float_values[i] = iam_tween_float(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+					break;
+				}
+				case 1: // Vec2 tweens - move in unique circular patterns
+				{
+					float angle_offset = (float)i * 0.1f;  // Each has different angle
+					float radius = going_up ? 1.0f : 0.0f;
+					float angle = angle_offset + (going_up ? 0.0f : 3.14159f);
+					ImVec2 target(cosf(angle) * radius, sinf(angle) * radius);
+					vec2_values[i] = iam_tween_vec2(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+					break;
+				}
+				case 2: // Vec4 tweens - animate all components
+				{
+					float base_hue = (float)(i % 360) / 360.0f;
+					ImVec4 target;
+					if (going_up) {
+						target = ImVec4(base_hue, 0.9f, 1.0f, 1.0f);
+					} else {
+						target = ImVec4(fmodf(base_hue + 0.5f, 1.0f), 0.3f, 0.4f, 1.0f);
+					}
+					vec4_values[i] = iam_tween_vec4(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+					break;
+				}
+				case 3: // Color tweens - cycle through hues
+				{
+					float base_hue = (float)(i % anim_count) / (float)anim_count;
+					float target_hue = going_up ? base_hue : fmodf(base_hue + 0.33f, 1.0f);
+					// Convert hue to RGB
+					float h = target_hue * 6.0f;
+					int hi = (int)h % 6;
+					float f = h - (float)hi;
+					float r, g, b;
+					switch (hi) {
+						case 0: r = 1.0f; g = f; b = 0.0f; break;
+						case 1: r = 1.0f - f; g = 1.0f; b = 0.0f; break;
+						case 2: r = 0.0f; g = 1.0f; b = f; break;
+						case 3: r = 0.0f; g = 1.0f - f; b = 1.0f; break;
+						case 4: r = f; g = 0.0f; b = 1.0f; break;
+						default: r = 1.0f; g = 0.0f; b = 1.0f - f; break;
+					}
+					float brightness = going_up ? 1.0f : 0.5f;
+					ImVec4 target(r * brightness, g * brightness, b * brightness, 1.0f);
+					vec4_values[i] = iam_tween_color(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, iam_col_oklab, dt);
+					break;
+				}
+				case 4: // Mixed - different animation per cell (store appropriately)
+				{
+					int type = i % 4;
+					switch (type) {
+						case 0: {
+							float target = going_up ? 1.0f : 0.0f;
+							float_values[i] = iam_tween_float(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+							break;
+						}
+						case 1: {
+							float angle_offset = (float)i * 0.15f;
+							ImVec2 target(going_up ? cosf(angle_offset) : -cosf(angle_offset),
+							              going_up ? sinf(angle_offset) : -sinf(angle_offset));
+							vec2_values[i] = iam_tween_vec2(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+							break;
+						}
+						case 2: {
+							float hue = (float)(i % 100) / 100.0f;
+							ImVec4 target = going_up ? ImVec4(hue, 1.0f, 0.8f, 1.0f) : ImVec4(1.0f - hue, 0.3f, 0.2f, 1.0f);
+							vec4_values[i] = iam_tween_vec4(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
+							break;
+						}
+						case 3: {
+							ImVec4 target = going_up ? ImVec4(0.2f, 0.8f, 1.0f, 1.0f) : ImVec4(1.0f, 0.3f, 0.2f, 1.0f);
+							vec4_values[i] = iam_tween_color(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, iam_col_oklab, dt);
+							break;
+						}
+					}
+					break;
+				}
+			}
+		}
+
+		iam_profiler_end(); // End "Stress: Tweens"
+
+		// Visualization - render ALL animations
+		ImGui::Separator();
+		ImGui::Text("Visualization (%d animations):", anim_count);
+
+		// Configuration for visualization
+		static float item_size = 24.0f;
+		static int items_per_row = 40;
+		ImGui::SliderFloat("Item Size", &item_size, 8.0f, 60.0f);
+		ImGui::SliderInt("Items Per Row", &items_per_row, 5, 100);
+
+		// Profile the rendering
+		iam_profiler_begin("Stress: Render");
+
+		// Calculate grid dimensions
+		int rows = (anim_count + items_per_row - 1) / items_per_row;
+		float content_width = (float)items_per_row * item_size;
+		float content_height = (float)rows * item_size;
+
+		// Scrollable child region
+		float child_height = 300.0f;
+		ImGui::BeginChild("stress_viz", ImVec2(0, child_height), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+
+		// Reserve space for the content
+		ImGui::Dummy(ImVec2(content_width, content_height));
+
+		// Background
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + content_width, canvas_pos.y + content_height),
+			IM_COL32(20, 20, 30, 255));
+
+		// Draw grid lines (subtle)
+		for (int r = 0; r <= rows; r++) {
+			float y = canvas_pos.y + (float)r * item_size;
+			dl->AddLine(ImVec2(canvas_pos.x, y), ImVec2(canvas_pos.x + content_width, y), IM_COL32(40, 40, 50, 255));
+		}
+		for (int c = 0; c <= items_per_row; c++) {
+			float x = canvas_pos.x + (float)c * item_size;
+			dl->AddLine(ImVec2(x, canvas_pos.y), ImVec2(x, canvas_pos.y + content_height), IM_COL32(40, 40, 50, 255));
+		}
+
+		// Draw each animation as a cell using STORED values (not re-querying the tween)
+		float padding = 2.0f;
+		for (int i = 0; i < anim_count; i++) {
+				int grid_col = i % items_per_row;
+				int grid_row = i / items_per_row;
+				float cx = canvas_pos.x + (float)grid_col * item_size + item_size * 0.5f;
+				float cy = canvas_pos.y + (float)grid_row * item_size + item_size * 0.5f;
+				float cell_left = canvas_pos.x + (float)grid_col * item_size + padding;
+				float cell_top = canvas_pos.y + (float)grid_row * item_size + padding;
+				float cell_right = cell_left + item_size - padding * 2.0f;
+				float cell_bottom = cell_top + item_size - padding * 2.0f;
+
+				switch (test_mode) {
+					case 0: // Float - filled squares based on value
+					{
+						float val = float_values[i];
+						float norm = ImClamp(val, 0.0f, 1.0f);
+						float fill_height = (item_size - padding * 2.0f) * norm;
+						float fill_top = cell_bottom - fill_height;
+						ImU32 col_fill = IM_COL32(80 + (int)(norm * 175), 120 + (int)(norm * 80), 255, 255);
+						dl->AddRectFilled(ImVec2(cell_left, fill_top), ImVec2(cell_right, cell_bottom), col_fill);
+						break;
+					}
+					case 1: // Vec2 - moving dot within cell
+					{
+						ImVec2 val = vec2_values[i];
+						float nx = ImClamp(val.x, -1.0f, 1.0f);
+						float ny = ImClamp(val.y, -1.0f, 1.0f);
+						float px = cx + nx * (item_size * 0.35f);
+						float py = cy + ny * (item_size * 0.35f);
+						float radius = item_size * 0.25f;
+						dl->AddCircleFilled(ImVec2(px, py), radius, IM_COL32(100, 255, 150, 255));
+						dl->AddCircle(ImVec2(px, py), radius, IM_COL32(150, 255, 200, 255), 0, 1.5f);
+						break;
+					}
+					case 2: // Vec4 - colored square
+					{
+						ImVec4 val = vec4_values[i];
+						int r = (int)(ImClamp(val.x, 0.0f, 1.0f) * 255);
+						int g = (int)(ImClamp(val.y, 0.0f, 1.0f) * 255);
+						int b = (int)(ImClamp(val.z, 0.0f, 1.0f) * 255);
+						int a = (int)(ImClamp(val.w, 0.0f, 1.0f) * 255);
+						dl->AddRectFilled(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(r, g, b, a > 50 ? a : 255));
+						break;
+					}
+					case 3: // Color - colored square with border
+					{
+						ImVec4 val = vec4_values[i];
+						int r = (int)(ImClamp(val.x, 0.0f, 1.0f) * 255);
+						int g = (int)(ImClamp(val.y, 0.0f, 1.0f) * 255);
+						int b = (int)(ImClamp(val.z, 0.0f, 1.0f) * 255);
+						dl->AddRectFilled(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(r, g, b, 255));
+						dl->AddRect(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(255, 255, 255, 100), 0.0f, 0, 1.0f);
+						break;
+					}
+					case 4: // Mixed - different visualization per cell type
+					{
+						int type = i % 4;
+						switch (type) {
+							case 0: {
+								float val = float_values[i];
+								float norm = ImClamp(val, 0.0f, 1.0f);
+								float fill_height = (item_size - padding * 2.0f) * norm;
+								float fill_top = cell_bottom - fill_height;
+								dl->AddRectFilled(ImVec2(cell_left, fill_top), ImVec2(cell_right, cell_bottom), IM_COL32(80 + (int)(norm * 175), 120, 255, 255));
+								break;
+							}
+							case 1: {
+								ImVec2 val = vec2_values[i];
+								float px = cx + ImClamp(val.x, -1.0f, 1.0f) * (item_size * 0.35f);
+								float py = cy + ImClamp(val.y, -1.0f, 1.0f) * (item_size * 0.35f);
+								dl->AddCircleFilled(ImVec2(px, py), item_size * 0.25f, IM_COL32(100, 255, 150, 255));
+								break;
+							}
+							case 2:
+							case 3: {
+								ImVec4 val = vec4_values[i];
+								int r = (int)(ImClamp(val.x, 0.0f, 1.0f) * 255);
+								int g = (int)(ImClamp(val.y, 0.0f, 1.0f) * 255);
+								int b = (int)(ImClamp(val.z, 0.0f, 1.0f) * 255);
+								dl->AddRectFilled(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(r, g, b, 255));
+								break;
+							}
+						}
+						break;
+					}
+				}
+		}
+
+		ImGui::EndChild();
+
+		iam_profiler_end(); // End "Stress: Render"
+	} else {
+		ImGui::TextDisabled("Press 'Start Test' to begin the stress test.");
+	}
+
+	ImGui::Separator();
+	ImGui::TextDisabled("Note: High animation counts will impact both computation and rendering performance.");
+}
+
+// ============================================================
 // MAIN DEMO WINDOW
 // ============================================================
 void ImAnimDemoWindow()
@@ -7350,6 +7740,16 @@ void ImAnimDemoWindow()
 	if (ImGui::CollapsingHeader("Debug Tools")) {
 		iam_profiler_begin("Debug Tools");
 		ShowAnimationInspectorDemo();
+		iam_profiler_end();
+	}
+
+	// ========================================
+	// 9. STRESS TEST
+	// ========================================
+	ApplyOpenAll();
+	if (ImGui::CollapsingHeader("Stress Test")) {
+		iam_profiler_begin("Stress Test");
+		ShowStressTestDemo();
 		iam_profiler_end();
 	}
 

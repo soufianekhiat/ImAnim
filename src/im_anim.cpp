@@ -16,6 +16,31 @@
 // ----------------------------------------------------
 namespace iam_detail {
 
+// ----------------------------------------------------
+// Easing constants - named values for clarity
+// ----------------------------------------------------
+
+// Bounce easing constants (derived from Robert Penner's equations)
+static const float BOUNCE_N1 = 7.5625f;       // Bounce amplitude multiplier
+static const float BOUNCE_D1 = 2.75f;         // Bounce timing divisor
+
+// Back easing constants
+static const float BACK_OVERSHOOT = 1.70158f;           // Default overshoot amount (~10% overshoot)
+static const float BACK_OVERSHOOT_INOUT = 1.70158f * 1.525f;  // Scaled overshoot for in-out
+
+// Elastic easing defaults
+static const float ELASTIC_AMPLITUDE = 1.0f;  // Default amplitude
+static const float ELASTIC_PERIOD = 0.3f;     // Default period for in/out
+static const float ELASTIC_PERIOD_INOUT = 0.45f;  // Period for in-out variant
+
+// Spring physics defaults
+static const float SPRING_MASS = 1.0f;        // Default mass
+static const float SPRING_STIFFNESS = 120.0f; // Default stiffness (k)
+static const float SPRING_DAMPING = 20.0f;    // Default damping (c)
+
+// Floating point comparison epsilon
+static const float EASE_EPSILON = 1e-6f;
+
 struct ease_lut {
 	iam_ease_desc		desc;
 	ImVector<float>		samples;
@@ -32,18 +57,19 @@ struct ease_lut_pool {
 	static ImGuiID hash_desc(iam_ease_desc const& d) { return ImHashData(&d, sizeof(d)); }
 
 	static float bounce_out(float t) {
-		if (t < 1/2.75f) return 7.5625f*t*t;
-		else if (t < 2/2.75f) { t -= 1.5f/2.75f; return 7.5625f*t*t + 0.75f; }
-		else if (t < 2.5f/2.75f){ t -= 2.25f/2.75f; return 7.5625f*t*t + 0.9375f; }
-		else { t -= 2.625f/2.75f; return 7.5625f*t*t + 0.984375f; }
+		if (t < 1.0f / BOUNCE_D1) return BOUNCE_N1 * t * t;
+		else if (t < 2.0f / BOUNCE_D1) { t -= 1.5f / BOUNCE_D1; return BOUNCE_N1 * t * t + 0.75f; }
+		else if (t < 2.5f / BOUNCE_D1) { t -= 2.25f / BOUNCE_D1; return BOUNCE_N1 * t * t + 0.9375f; }
+		else { t -= 2.625f / BOUNCE_D1; return BOUNCE_N1 * t * t + 0.984375f; }
 	}
 
 	static float elastic_core(float t, float a, float p) {
 		if (t == 0.f || t == 1.f) return t;
-		float A = (a <= 0.f ? 1.f : a);
-		float P = (p <= 0.f ? 0.3f : p);
-		float s = (P / (2 * 3.1415926535f)) * asinf(1.0f / A);
-		return -(A * ImPow(2.f, 10.f * (t - 1.f)) * ImSin((t - 1.f - s) * (2 * 3.1415926535f) / P));
+		float A = (a <= 0.f ? ELASTIC_AMPLITUDE : a);
+		float P = (p <= 0.f ? ELASTIC_PERIOD : p);
+		static const float TWO_PI = 2.0f * 3.1415926535f;
+		float s = (P / TWO_PI) * asinf(1.0f / A);
+		return -(A * ImPow(2.f, 10.f * (t - 1.f)) * ImSin((t - 1.f - s) * TWO_PI / P));
 	}
 
 	static float back_core(float t, float s) { return t * t * ((s + 1.f) * t - s); }
@@ -97,39 +123,39 @@ struct ease_lut_pool {
 				case iam_ease_steps: {
 					int n = (int)(d.p0 < 1.f ? 1.f : d.p0);
 					int mode = (int)d.p1;
-					if (mode == 1)		y = ImFloor(x * n + 1e-6f) / (float)n;
-					else if (mode == 2)	{ y = (ImFloor(x * n - 0.5f + 1e-6f) + 0.5f) / (float)n; if (y<0) y=0; if (y>1) y=1; }
-					else				y = ImFloor(x * n + 1e-6f) / (float)n;
+					if (mode == 1)		y = ImFloor(x * n + EASE_EPSILON) / (float)n;
+					else if (mode == 2)	{ y = (ImFloor(x * n - 0.5f + EASE_EPSILON) + 0.5f) / (float)n; if (y<0) y=0; if (y>1) y=1; }
+					else				y = ImFloor(x * n + EASE_EPSILON) / (float)n;
 					break;
 				}
 				case iam_ease_in_elastic: {
-					float a = (d.p0 <= 0.f ? 1.f : d.p0), p = (d.p1 <= 0.f ? 0.3f : d.p1);
+					float a = (d.p0 <= 0.f ? ELASTIC_AMPLITUDE : d.p0), p = (d.p1 <= 0.f ? ELASTIC_PERIOD : d.p1);
 					y = 1.f + elastic_core(1.f - x, a, p);
 					break;
 				}
 				case iam_ease_out_elastic: {
-					float a = (d.p0 <= 0.f ? 1.f : d.p0), p = (d.p1 <= 0.f ? 0.3f : d.p1);
+					float a = (d.p0 <= 0.f ? ELASTIC_AMPLITUDE : d.p0), p = (d.p1 <= 0.f ? ELASTIC_PERIOD : d.p1);
 					y = 1.f - elastic_core(x, a, p);
 					break;
 				}
 				case iam_ease_in_out_elastic: {
-					float a = (d.p0 <= 0.f ? 1.f : d.p0), p = (d.p1 <= 0.f ? 0.45f : d.p1);
+					float a = (d.p0 <= 0.f ? ELASTIC_AMPLITUDE : d.p0), p = (d.p1 <= 0.f ? ELASTIC_PERIOD_INOUT : d.p1);
 					if (x < 0.5f) y = 0.5f * (1.f + elastic_core(1.f - 2.f*x, a, p));
 					else y = 0.5f * (1.f - elastic_core(2.f*x - 1.f, a, p)) + 0.5f;
 					break;
 				}
 				case iam_ease_in_back: {
-					float s = (d.p0 == 0.f ? 1.70158f : d.p0);
+					float s = (d.p0 == 0.f ? BACK_OVERSHOOT : d.p0);
 					y = back_core(x, s);
 					break;
 				}
 				case iam_ease_out_back: {
-					float s = (d.p0 == 0.f ? 1.70158f : d.p0);
+					float s = (d.p0 == 0.f ? BACK_OVERSHOOT : d.p0);
 					y = 1.f - back_core(1.f - x, s);
 					break;
 				}
 				case iam_ease_in_out_back: {
-					float s = (d.p0 == 0.f ? 1.70158f * 1.525f : d.p0);
+					float s = (d.p0 == 0.f ? BACK_OVERSHOOT_INOUT : d.p0);
 					if (x < 0.5f) y = 0.5f * back_core(2.f*x, s);
 					else y = 1.f - 0.5f * back_core(2.f*(1.f - x), s);
 					break;
@@ -144,7 +170,7 @@ struct ease_lut_pool {
 					y = (x < 0.5f) ? (0.5f * (1.f - bounce_out(1.f - 2.f*x))) : (0.5f * bounce_out(2.f*x - 1.f) + 0.5f);
 					break;
 				case iam_ease_spring:
-					y = spring_unit(x, (d.p0<=0.f?1.f:d.p0), (d.p1<=0.f?120.f:d.p1), (d.p2<=0.f?20.f:d.p2), d.p3);
+					y = spring_unit(x, (d.p0<=0.f ? SPRING_MASS : d.p0), (d.p1<=0.f ? SPRING_STIFFNESS : d.p1), (d.p2<=0.f ? SPRING_DAMPING : d.p2), d.p3);
 					break;
 				default: y = x; break;
 			}
@@ -188,11 +214,11 @@ static iam_ease_fn g_custom_ease[16];
 enum ease_family { ease_quad, ease_cubic, ease_quart, ease_quint, ease_sine, ease_expo, ease_circ, ease_back, ease_elastic, ease_bounce };
 enum ease_variant { ease_in, ease_out, ease_in_out };
 
-// Constants
+// Derived constants for standalone easing functions
 static const float EASE_PI = 3.1415926535f;
-static const float BACK_C1 = 1.70158f;
-static const float BACK_C3 = BACK_C1 + 1.f;
-static const float ELASTIC_C4 = (2.f * EASE_PI) / 3.f;
+static const float BACK_C1 = BACK_OVERSHOOT;  // Alias for back easing formula
+static const float BACK_C3 = BACK_C1 + 1.f;   // Back easing cubic coefficient
+static const float ELASTIC_C4 = (2.f * EASE_PI) / 3.f;  // Elastic angular frequency
 
 // Base "in" easing functions - all others derived via transforms
 static float ease_in_quad(float t)    { return t * t; }
@@ -207,11 +233,10 @@ static float ease_in_elastic(float t) { return (t == 0.f || t == 1.f) ? t : -ImP
 
 // Bounce is naturally defined as "out" - special case
 static float ease_out_bounce(float t) {
-	const float n1 = 7.5625f, d1 = 2.75f;
-	if (t < 1.f / d1)     return n1 * t * t;
-	if (t < 2.f / d1)     { t -= 1.5f / d1;   return n1 * t * t + 0.75f; }
-	if (t < 2.5f / d1)    { t -= 2.25f / d1;  return n1 * t * t + 0.9375f; }
-	t -= 2.625f / d1; return n1 * t * t + 0.984375f;
+	if (t < 1.f / BOUNCE_D1)     return BOUNCE_N1 * t * t;
+	if (t < 2.f / BOUNCE_D1)     { t -= 1.5f / BOUNCE_D1;   return BOUNCE_N1 * t * t + 0.75f; }
+	if (t < 2.5f / BOUNCE_D1)    { t -= 2.25f / BOUNCE_D1;  return BOUNCE_N1 * t * t + 0.9375f; }
+	t -= 2.625f / BOUNCE_D1; return BOUNCE_N1 * t * t + 0.984375f;
 }
 
 // Evaluate base "in" function by family
@@ -454,8 +479,48 @@ static ImGuiID make_key(ImGuiID id, ImGuiID ch) {
 // Forward declare global time for channels to use
 static double g_global_time = 0.0;
 
-struct float_chan {
-	float	current, start, target;
+// Minimum duration to avoid division by zero
+static const float MIN_DURATION = 1e-6f;
+
+// ----------------------------------------------------
+// Channel interpolation traits - define how each type lerps
+// ----------------------------------------------------
+template<typename T> struct chan_traits;
+
+template<> struct chan_traits<float> {
+	static float default_value() { return 0.0f; }
+	static float lerp(float a, float b, float k) { return a + (b - a) * k; }
+};
+
+template<> struct chan_traits<ImVec2> {
+	static ImVec2 default_value() { return ImVec2(0, 0); }
+	static ImVec2 lerp(ImVec2 a, ImVec2 b, float k) {
+		return ImVec2(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+	}
+};
+
+template<> struct chan_traits<ImVec4> {
+	static ImVec4 default_value() { return ImVec4(1, 1, 1, 1); }
+	static ImVec4 lerp(ImVec4 a, ImVec4 b, float k) {
+		return ImVec4(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k,
+		              a.z + (b.z - a.z) * k, a.w + (b.w - a.w) * k);
+	}
+};
+
+template<> struct chan_traits<int> {
+	static int default_value() { return 0; }
+	static int lerp(int a, int b, float k) {
+		float v = (float)a + ((float)b - (float)a) * k;
+		return (int)ImFloor(v + 0.5f);
+	}
+};
+
+// ----------------------------------------------------
+// Base channel template - shared logic for all channel types
+// ----------------------------------------------------
+template<typename T>
+struct base_chan {
+	T		current, start, target;
 	float	dur, t;  // t is cached progress for backward compatibility
 	double	start_time;
 	iam_ease_desc ez;
@@ -463,171 +528,105 @@ struct float_chan {
 	unsigned last_seen_frame;
 	unsigned has_pending;
 	unsigned sleeping;
-	float	pending_target;
-	float_chan() {
-		current=0; start=0; target=0; dur=1e-6f; t=1.0f; start_time=0;
-		ez = { iam_ease_out_cubic, 0,0,0,0 };
+	T		pending_target;
+
+	base_chan() {
+		current = chan_traits<T>::default_value();
+		start = current;
+		target = current;
+		pending_target = chan_traits<T>::default_value();
+		dur = MIN_DURATION;
+		t = 1.0f;
+		start_time = 0;
+		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
 		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
+		last_seen_frame = 0;
+		has_pending = 0;
+		sleeping = 1;
 	}
-	void set(float trg, float d, iam_ease_desc const& e, int pol) {
-		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
+
+	void set(T trg, float d, iam_ease_desc const& e, int pol) {
+		start = current;
+		target = trg;
+		dur = (d <= MIN_DURATION ? MIN_DURATION : d);
+		start_time = g_global_time;
+		t = 0;
+		ez = e;
+		policy = pol;
+		sleeping = 0;
 	}
+
 	float progress() {
 		if (sleeping) { t = 1.0f; return 1.0f; }
 		t = (float)((g_global_time - start_time) / dur);
-		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		if (t < 0.f) t = 0.f;
+		else if (t > 1.f) t = 1.f;
 		return t;
 	}
-	float evaluate() {
+
+	T evaluate() {
 		if (sleeping) return current;
 		progress();
 		if (t >= 1.f) { current = target; sleeping = 1; return current; }
 		float k = eval(ez, t);
-		current = start + (target - start) * k;
+		current = chan_traits<T>::lerp(start, target, k);
 		return current;
 	}
+
 	void tick(float) { evaluate(); }
 };
 
-struct vec2_chan {
-	ImVec2	current, start, target;
-	float	dur, t;  // t is cached progress for backward compatibility
-	double	start_time;
-	iam_ease_desc ez;
-	int		policy;
-	unsigned last_seen_frame;
-	unsigned has_pending;
-	unsigned sleeping;
-	ImVec2	pending_target;
-	vec2_chan() {
-		current=ImVec2(0,0); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
-		ez = { iam_ease_out_cubic, 0,0,0,0 };
-		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec2(0,0);
-	}
-	void set(ImVec2 trg, float d, iam_ease_desc const& e, int pol) {
-		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
-	}
-	float progress() {
-		if (sleeping) { t = 1.0f; return 1.0f; }
-		t = (float)((g_global_time - start_time) / dur);
-		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
-		return t;
-	}
-	ImVec2 evaluate() {
-		if (sleeping) return current;
-		progress();
-		if (t >= 1.f) { current = target; sleeping = 1; return current; }
-		float k = eval(ez, t);
-		current.x = start.x + (target.x - start.x) * k;
-		current.y = start.y + (target.y - start.y) * k;
-		return current;
-	}
-	void tick(float) { evaluate(); }
-};
+// Concrete channel types using the base template
+using float_chan = base_chan<float>;
+using vec2_chan = base_chan<ImVec2>;
+using vec4_chan = base_chan<ImVec4>;
+using int_chan = base_chan<int>;
 
-struct vec4_chan {
-	ImVec4	current, start, target;
-	float	dur, t;  // t is cached progress for backward compatibility
-	double	start_time;
-	iam_ease_desc ez;
-	int		policy;
-	unsigned last_seen_frame;
-	unsigned has_pending;
-	unsigned sleeping;
-	ImVec4	pending_target;
-	vec4_chan() {
-		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
-		ez = { iam_ease_out_cubic, 0,0,0,0 };
-		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = ImVec4(0,0,0,0);
-	}
-	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol) {
-		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
-	}
-	float progress() {
-		if (sleeping) { t = 1.0f; return 1.0f; }
-		t = (float)((g_global_time - start_time) / dur);
-		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
-		return t;
-	}
-	ImVec4 evaluate() {
-		if (sleeping) return current;
-		progress();
-		if (t >= 1.f) { current = target; sleeping = 1; return current; }
-		float k = eval(ez, t);
-		current.x = start.x + (target.x - start.x) * k;
-		current.y = start.y + (target.y - start.y) * k;
-		current.z = start.z + (target.z - start.z) * k;
-		current.w = start.w + (target.w - start.w) * k;
-		return current;
-	}
-	void tick(float) { evaluate(); }
-};
-
-struct int_chan {
-	int		current, start, target;
-	float	dur, t;  // t is cached progress for backward compatibility
-	double	start_time;
-	iam_ease_desc ez;
-	int		policy;
-	unsigned last_seen_frame;
-	unsigned has_pending;
-	unsigned sleeping;
-	int		pending_target;
-	int_chan() {
-		current=0; start=0; target=0; dur=1e-6f; t=1.0f; start_time=0;
-		ez = { iam_ease_out_cubic, 0,0,0,0 };
-		policy = iam_policy_crossfade;
-		last_seen_frame = 0; has_pending = 0; sleeping = 1; pending_target = 0;
-	}
-	void set(int trg, float d, iam_ease_desc const& e, int pol) {
-		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; sleeping=0;
-	}
-	float progress() {
-		if (sleeping) { t = 1.0f; return 1.0f; }
-		t = (float)((g_global_time - start_time) / dur);
-		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
-		return t;
-	}
-	int evaluate() {
-		if (sleeping) return current;
-		progress();
-		if (t >= 1.f) { current = target; sleeping = 1; return current; }
-		float k = eval(ez, t);
-		float v = (float)start + ((float)target - (float)start) * k;
-		current = (int)ImFloor(v + 0.5f);
-		return current;
-	}
-	void tick(float) { evaluate(); }
-};
-
+// Color channel needs special handling for color space blending
 struct color_chan {
 	ImVec4	current, start, target;
-	float	dur, t;  // t is cached progress for backward compatibility
+	float	dur, t;
 	double	start_time;
 	iam_ease_desc ez;
 	int		policy;
 	int		space;
 	unsigned last_seen_frame;
 	unsigned sleeping;
+
 	color_chan() {
-		current=ImVec4(1,1,1,1); start=current; target=current; dur=1e-6f; t=1.0f; start_time=0;
-		ez = { iam_ease_out_cubic, 0,0,0,0 };
+		current = ImVec4(1, 1, 1, 1);
+		start = current;
+		target = current;
+		dur = MIN_DURATION;
+		t = 1.0f;
+		start_time = 0;
+		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
 		policy = iam_policy_crossfade;
 		space = iam_col_srgb_linear;
-		last_seen_frame = 0; sleeping = 1;
+		last_seen_frame = 0;
+		sleeping = 1;
 	}
+
 	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) {
-		start=current; target=trg; dur=(d<=1e-6f?1e-6f:d); start_time=g_global_time; t=0; ez=e; policy=pol; space=sp; sleeping=0;
+		start = current;
+		target = trg;
+		dur = (d <= MIN_DURATION ? MIN_DURATION : d);
+		start_time = g_global_time;
+		t = 0;
+		ez = e;
+		policy = pol;
+		space = sp;
+		sleeping = 0;
 	}
+
 	float progress() {
 		if (sleeping) { t = 1.0f; return 1.0f; }
 		t = (float)((g_global_time - start_time) / dur);
-		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+		if (t < 0.f) t = 0.f;
+		else if (t > 1.f) t = 1.f;
 		return t;
 	}
+
 	ImVec4 evaluate() {
 		if (sleeping) return current;
 		progress();
@@ -636,6 +635,7 @@ struct color_chan {
 		current = color::lerp_color(start, target, k, space);
 		return current;
 	}
+
 	void tick(float) { evaluate(); }
 };
 
@@ -1336,8 +1336,8 @@ struct keyframe {
 	ImVec2 get_vec2() const { return ImVec2(value[0], value[1]); }
 	void set_vec4(ImVec4 v) { value[0] = v.x; value[1] = v.y; value[2] = v.z; value[3] = v.w; }
 	ImVec4 get_vec4() const { return ImVec4(value[0], value[1], value[2], value[3]); }
-	void set_int(int i) { *(int*)&value[0] = i; }
-	int get_int() const { return *(int*)&value[0]; }
+	void set_int(int i) { memcpy(&value[0], &i, sizeof(int)); }
+	int get_int() const { int i; memcpy(&i, &value[0], sizeof(int)); return i; }
 	void set_color(ImVec4 c) { value[0] = c.x; value[1] = c.y; value[2] = c.z; value[3] = c.w; }
 	ImVec4 get_color() const { return ImVec4(value[0], value[1], value[2], value[3]); }
 
@@ -5715,8 +5715,7 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 				// Overshoot effect using back easing
 				float bounce_t = char_progress;
 				if (bounce_t < 1.0f) {
-					float overshoot = 1.70158f;
-					bounce_t = bounce_t * bounce_t * ((overshoot + 1) * bounce_t - overshoot);
+					bounce_t = bounce_t * bounce_t * ((iam_detail::BACK_OVERSHOOT + 1) * bounce_t - iam_detail::BACK_OVERSHOOT);
 				}
 				scale = bounce_t;
 				break;
