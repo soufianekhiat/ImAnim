@@ -1,7 +1,6 @@
 using Sharpmake;
 
 [module: Sharpmake.Include("common.cs")]
-[module: Sharpmake.Include("ImAnimLib.cs")]
 [module: Sharpmake.Include("ImAnimDemo.cs")]
 
 namespace ImAnim
@@ -28,8 +27,7 @@ namespace ImAnim
             string configName = target.GetConfigName();
             conf.Name = $"[target.Optimization]_{configName}";
 
-            // Add projects
-            conf.AddProject<ImAnimLibProject>(target);
+            // Add project
             conf.AddProject<ImAnimDemoProject>(target);
         }
 

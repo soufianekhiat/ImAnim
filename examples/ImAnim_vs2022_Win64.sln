@@ -2,8 +2,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImAnimDemo", "sharpmake\projects\imanimdemo\ImAnimDemo_vs2022_Win64.vcxproj", "{4C2E83F5-6820-FE94-CEDD-DC6B0851BE05}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImAnimLib", "sharpmake\projects\imanimlib\ImAnimLib_vs2022_Win64.vcxproj", "{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug_GLFW_OpenGL3|x64 = Debug_GLFW_OpenGL3|x64
@@ -32,22 +30,6 @@ Global
 		{4C2E83F5-6820-FE94-CEDD-DC6B0851BE05}.Release_SDL2_OpenGL3|x64.Build.0 = Release_SDL2_OpenGL3|x64
 		{4C2E83F5-6820-FE94-CEDD-DC6B0851BE05}.Release_Win32_DX11|x64.ActiveCfg = Release_Win32_DX11|x64
 		{4C2E83F5-6820-FE94-CEDD-DC6B0851BE05}.Release_Win32_DX11|x64.Build.0 = Release_Win32_DX11|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_GLFW_OpenGL3|x64.ActiveCfg = Debug_GLFW_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_GLFW_OpenGL3|x64.Build.0 = Debug_GLFW_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_ImPlatform|x64.ActiveCfg = Debug_ImPlatform|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_ImPlatform|x64.Build.0 = Debug_ImPlatform|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_SDL2_OpenGL3|x64.ActiveCfg = Debug_SDL2_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_SDL2_OpenGL3|x64.Build.0 = Debug_SDL2_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_Win32_DX11|x64.ActiveCfg = Debug_Win32_DX11|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Debug_Win32_DX11|x64.Build.0 = Debug_Win32_DX11|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_GLFW_OpenGL3|x64.ActiveCfg = Release_GLFW_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_GLFW_OpenGL3|x64.Build.0 = Release_GLFW_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_ImPlatform|x64.ActiveCfg = Release_ImPlatform|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_ImPlatform|x64.Build.0 = Release_ImPlatform|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_SDL2_OpenGL3|x64.ActiveCfg = Release_SDL2_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_SDL2_OpenGL3|x64.Build.0 = Release_SDL2_OpenGL3|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_Win32_DX11|x64.ActiveCfg = Release_Win32_DX11|x64
-		{672BD25C-2B6A-B618-CAAF-CD5BEB3CA244}.Release_Win32_DX11|x64.Build.0 = Release_Win32_DX11|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

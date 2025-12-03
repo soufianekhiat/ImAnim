@@ -17,6 +17,8 @@ extern void ImAnimDemoWindow();
 static ID3D11Device*            g_pd3dDevice = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
 static IDXGISwapChain*          g_pSwapChain = nullptr;
+static bool                     g_SwapChainOccluded = false;
+static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
 
 // Forward declarations
@@ -28,10 +30,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int main(int, char**)
 {
+    // Make process DPI aware and obtain main monitor scale
+    ImGui_ImplWin32_EnableDpiAwareness();
+    float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImAnim Demo", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"ImAnim Demo (Win32+DirectX11)", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 720, nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"ImAnim Demo (Win32+DirectX11)", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(720 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -52,6 +58,11 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+
+    // Setup scaling
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(main_scale);
+    style.FontScaleDpi = main_scale;
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
@@ -74,6 +85,23 @@ int main(int, char**)
         if (done)
             break;
 
+        // Handle window being minimized or screen locked
+        if (g_SwapChainOccluded && g_pSwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
+        {
+            ::Sleep(10);
+            continue;
+        }
+        g_SwapChainOccluded = false;
+
+        // Handle window resize (we don't resize directly in the WM_SIZE handler)
+        if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
+        {
+            CleanupRenderTarget();
+            g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
+            g_ResizeWidth = g_ResizeHeight = 0;
+            CreateRenderTarget();
+        }
+
         // Start the Dear ImGui frame
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -93,7 +121,8 @@ int main(int, char**)
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        g_pSwapChain->Present(1, 0); // Present with vsync
+        HRESULT hr = g_pSwapChain->Present(1, 0); // Present with vsync
+        g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
     }
 
     // Cleanup
@@ -173,12 +202,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg)
     {
     case WM_SIZE:
-        if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED)
-        {
-            CleanupRenderTarget();
-            g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
-            CreateRenderTarget();
-        }
+        if (wParam == SIZE_MINIMIZED)
+            return 0;
+        g_ResizeWidth = (UINT)LOWORD(lParam);
+        g_ResizeHeight = (UINT)HIWORD(lParam);
         return 0;
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU)

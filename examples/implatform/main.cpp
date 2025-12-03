@@ -35,7 +35,13 @@ int main()
 {
 	bool bGood;
 
-	bGood = ImPlatform_CreateWindow("ImAnim Demo", ImVec2(100, 100), 1024, 768);
+	// Get DPI scale before creating window (Win32 specific)
+	float dpi_scale = 1.0f;
+#if defined(IM_CURRENT_PLATFORM) && (IM_CURRENT_PLATFORM == IM_PLATFORM_WIN32)
+	dpi_scale = ImPlatform_App_GetDpiScale_Win32();
+#endif
+
+	bGood = ImPlatform_CreateWindow("ImAnim Demo", ImVec2(100, 100), (int)(1280 * dpi_scale), (int)(720 * dpi_scale));
 	if (!bGood)
 	{
 		fprintf(stderr, "ImPlatform: Cannot create window.\n");
@@ -77,11 +83,8 @@ int main()
 	ImGui::StyleColorsDark();
 
 	ImGuiStyle& style = ImGui::GetStyle();
-#if defined(IM_CURRENT_PLATFORM) && (IM_CURRENT_PLATFORM == IM_PLATFORM_WIN32)
-	float dpi_scale = ImPlatform_App_GetDpiScale_Win32();
 	style.ScaleAllSizes(dpi_scale);
 	style.FontScaleDpi = dpi_scale;
-#endif
 
 #ifdef IMGUI_HAS_VIEWPORT
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)

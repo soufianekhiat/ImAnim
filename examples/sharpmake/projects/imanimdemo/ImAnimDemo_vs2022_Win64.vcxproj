@@ -1,0 +1,952 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug_GLFW_OpenGL3|x64">
+      <Configuration>Debug_GLFW_OpenGL3</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug_ImPlatform|x64">
+      <Configuration>Debug_ImPlatform</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug_SDL2_OpenGL3|x64">
+      <Configuration>Debug_SDL2_OpenGL3</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug_Win32_DX11|x64">
+      <Configuration>Debug_Win32_DX11</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release_GLFW_OpenGL3|x64">
+      <Configuration>Release_GLFW_OpenGL3</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release_ImPlatform|x64">
+      <Configuration>Release_ImPlatform</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release_SDL2_OpenGL3|x64">
+      <Configuration>Release_SDL2_OpenGL3</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release_Win32_DX11|x64">
+      <Configuration>Release_Win32_DX11</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4C2E83F5-6820-FE94-CEDD-DC6B0851BE05}</ProjectGuid>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <RootNamespace>ImAnimDemo</RootNamespace>
+    <ProjectName>ImAnimDemo</ProjectName>
+  </PropertyGroup>
+  <PropertyGroup Label="Globals">
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\glfw_opengl3\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\glfw_opengl3\debug\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\glfw_opengl3\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\implatform\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\implatform\debug\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\implatform\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\sdl2_opengl3\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\sdl2_opengl3\debug\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\sdl2_opengl3\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\win32_dx11\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\win32_dx11\debug\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\win32_dx11\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\glfw_opengl3\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\glfw_opengl3\release\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\glfw_opengl3\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\implatform\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\implatform\release\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\implatform\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\sdl2_opengl3\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\sdl2_opengl3\release\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\sdl2_opengl3\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">
+    <TargetName>ImAnimDemo</TargetName>
+    <OutDir>..\..\bin\win32_dx11\</OutDir>
+    <IntDir>..\..\tmp\imanimdemo\win32_dx11\release\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <GenerateManifest>true</GenerateManifest>
+    <LinkIncremental>false</LinkIncremental>
+    <OutputFile>..\..\bin\win32_dx11\ImAnimDemo.exe</OutputFile>
+    <IgnoreImportLibrary>false</IgnoreImportLibrary>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\imgui\examples\libs\glfw\include</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\glfw_opengl3\debug\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\glfw_opengl3\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <AdditionalLibraryDirectories>..\..\..\extern\imgui\examples\libs\glfw\lib-vc2010-64</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>..\..\bin\glfw_opengl3\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\glfw_opengl3\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>IM_CONFIG_GFX=IM_GFX_DIRECTX11;IM_CONFIG_PLATFORM=IM_PLATFORM_WIN32;NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\implatform\implatform</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\implatform\debug\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\implatform\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <ProgramDatabaseFile>..\..\bin\implatform\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dwmapi.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\implatform\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\sdl2\include</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\sdl2_opengl3\debug\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\sdl2_opengl3\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <AdditionalLibraryDirectories>..\..\..\extern\sdl2\lib</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>..\..\bin\sdl2_opengl3\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>opengl32.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\sdl2_opengl3\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\win32_dx11\debug\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\win32_dx11\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <ProgramDatabaseFile>..\..\bin\win32_dx11\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\win32_dx11\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>NDEBUG;NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\imgui\examples\libs\glfw\include</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\glfw_opengl3\release\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\glfw_opengl3\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <AdditionalLibraryDirectories>..\..\..\extern\imgui\examples\libs\glfw\lib-vc2010-64</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>..\..\bin\glfw_opengl3\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\glfw_opengl3\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>IM_CONFIG_GFX=IM_GFX_DIRECTX11;IM_CONFIG_PLATFORM=IM_PLATFORM_WIN32;NDEBUG;NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\implatform\implatform</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\implatform\release\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\implatform\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <ProgramDatabaseFile>..\..\bin\implatform\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dwmapi.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\implatform\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>NDEBUG;NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends;..\..\..\extern\sdl2\include</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\sdl2_opengl3\release\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\sdl2_opengl3\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <AdditionalLibraryDirectories>..\..\..\extern\sdl2\lib</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>..\..\bin\sdl2_opengl3\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>opengl32.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\sdl2_opengl3\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>NDEBUG;NOMINMAX;WIN32;WIN64;_CRT_SECURE_NO_WARNINGS;_WINDOWS;%(PreprocessorDefinitions);$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\..;..\..\..\extern\imgui;..\..\..\extern\imgui\backends</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UseUnicodeForAssemblerListing>false</UseUnicodeForAssemblerListing>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>false</OmitFramePointers>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UndefineAllPreprocessorDefinitions>false</UndefineAllPreprocessorDefinitions>
+      <IgnoreStandardIncludePath>false</IgnoreStandardIncludePath>
+      <PreprocessToFile>false</PreprocessToFile>
+      <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
+      <PreprocessKeepComments>false</PreprocessKeepComments>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <StructMemberAlignment>Default</StructMemberAlignment>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <OpenMPSupport>false</OpenMPSupport>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <GenerateXMLDocumentationFiles>false</GenerateXMLDocumentationFiles>
+      <BrowseInformation>false</BrowseInformation>
+      <CallingConvention>Cdecl</CallingConvention>
+      <CompileAs>Default</CompileAs>
+      <AdditionalOptions>/W4 /Zc:__cplusplus</AdditionalOptions>
+      <ProgramDatabaseFileName>..\..\tmp\imanimdemo\win32_dx11\release\imanimdemo_compiler.pdb</ProgramDatabaseFileName>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>..\..\bin\win32_dx11\ImAnimDemo.exe</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <ProgramDatabaseFile>..\..\bin\win32_dx11\imanimdemo.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>false</MapExports>
+      <SwapRunFromCD>false</SwapRunFromCD>
+      <SwapRunFromNET>false</SwapRunFromNET>
+      <Driver>NotSet</Driver>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <ProfileGuidedDatabase>
+      </ProfileGuidedDatabase>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <IgnoreEmbeddedIDL>false</IgnoreEmbeddedIDL>
+      <TypeLibraryResourceID>1</TypeLibraryResourceID>
+      <NoEntryPoint>false</NoEntryPoint>
+      <SetChecksum>false</SetChecksum>
+      <TurnOffAssemblyGeneration>false</TurnOffAssemblyGeneration>
+      <TargetMachine>MachineX64</TargetMachine>
+      <Profile>false</Profile>
+      <CLRImageType>Default</CLRImageType>
+      <LinkErrorReporting>PromptImmediately</LinkErrorReporting>
+      <AdditionalOptions>/ENTRY:mainCRTStartup</AdditionalOptions>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MapFileName>..\..\bin\win32_dx11\ImAnimDemo.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\..\im_anim.h" />
+    <ClInclude Include="..\..\..\extern\ImPlatform\ImPlatform\ImPlatform.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\extern\imgui\misc\debuggers\imgui.natvis" />
+    <Natvis Include="..\..\..\extern\ImPlatform\imgui\misc\debuggers\imgui.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\..\demo_im_anim.cpp" />
+    <ClCompile Include="..\..\..\..\im_anim.cpp" />
+    <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_dx11.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_glfw.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_opengl3.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_sdl2.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_win32.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\extern\imgui\imgui.cpp" />
+    <ClCompile Include="..\..\..\extern\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\..\..\extern\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\..\..\extern\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\..\..\extern\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\..\..\glfw_opengl3\main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\implatform\main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\sdl2_opengl3\main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_Win32_DX11|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_Win32_DX11|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\win32_directx11\main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_ImPlatform|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

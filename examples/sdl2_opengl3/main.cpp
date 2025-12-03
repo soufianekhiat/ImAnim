@@ -38,8 +38,15 @@ int main(int, char**)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
+    // Get DPI scale for primary display
+    float main_scale = 1.0f;
+    float ddpi, hdpi, vdpi;
+    if (SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi) == 0)
+        main_scale = ddpi / 96.0f;  // 96 DPI is the standard baseline
+
+    // Create window with scaled size
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("ImAnim Demo (SDL2+OpenGL3)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    SDL_Window* window = SDL_CreateWindow("ImAnim Demo (SDL2+OpenGL3)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, (int)(1280 * main_scale), (int)(720 * main_scale), window_flags);
     if (window == nullptr)
     {
         printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
@@ -57,6 +64,11 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+
+    // Setup scaling
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(main_scale);
+    style.FontScaleDpi = main_scale;
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
