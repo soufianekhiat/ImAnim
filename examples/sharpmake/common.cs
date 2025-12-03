@@ -101,13 +101,13 @@ namespace ImAnim
             {
                 conf.Defines.Add("_DEBUG");
                 conf.Options.Add(Options.Vc.Compiler.Optimization.Disable);
-                conf.Options.Add(Options.Vc.Compiler.RuntimeLibrary.MultiThreadedDebug);
+                conf.Options.Add(Options.Vc.Compiler.RuntimeLibrary.MultiThreadedDebugDLL);
             }
             else
             {
                 conf.Defines.Add("NDEBUG");
                 conf.Options.Add(Options.Vc.Compiler.Optimization.MaximizeSpeed);
-                conf.Options.Add(Options.Vc.Compiler.RuntimeLibrary.MultiThreaded);
+                conf.Options.Add(Options.Vc.Compiler.RuntimeLibrary.MultiThreadedDLL);
                 conf.Options.Add(Options.Vc.Compiler.Inline.AnySuitable);
             }
 
