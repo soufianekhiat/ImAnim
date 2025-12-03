@@ -1,8 +1,8 @@
 # ImAnim Examples
 
-Standalone examples demonstrating ImAnim integration with Dear ImGui.
+Buildable examples demonstrating ImAnim integration with Dear ImGui.
 
-These examples are modeled after [imgui/examples](https://github.com/ocornut/imgui/tree/master/examples) - each is a complete, buildable application that shows the full ImAnim demo (`ImAnimDemoWindow()` from `demo_im_anim.cpp`).
+Each example is a complete application that runs the ImAnim demo (`ImAnimDemoWindow()` from `demo_im_anim.cpp`).
 
 ## Available Examples
 
@@ -11,69 +11,71 @@ These examples are modeled after [imgui/examples](https://github.com/ocornut/img
 | `glfw_opengl3/` | GLFW | OpenGL 3 | Cross-platform (Windows, macOS, Linux) |
 | `sdl2_opengl3/` | SDL2 | OpenGL 3 | Cross-platform (Windows, macOS, Linux) |
 | `win32_directx11/` | Win32 | DirectX 11 | Windows native |
-| `implatform/` | ImPlatform | Multiple | Uses ImPlatform abstraction (Win32/GLFW/SDL + DX/GL/Vulkan) |
+| `implatform/` | ImPlatform | DX11 | Uses [ImPlatform](https://github.com/soufianekhiat/ImPlatform) abstraction |
 
-## Building
-
-Each example includes:
-- `main.cpp` - Minimal main loop with ImAnim setup
-- `Makefile` - For Linux/macOS (GLFW/SDL2 examples)
-- `build_win32.bat` - For Windows (requires Visual Studio)
-
-The build links against `demo_im_anim.cpp` (in repository root) which provides `ImAnimDemoWindow()`.
+## Building (Windows)
 
 ### Prerequisites
 
-1. **ImGui source files** - Included via `examples/extern/imgui/`
+- [.NET 6.0 SDK](https://dotnet.microsoft.com/download) or later
+- Visual Studio 2022
 
-2. **ImAnim source files** - In repository root (`im_anim.h`, `im_anim.cpp`)
+### Quick Start
 
-3. **Platform library** - GLFW, SDL2, ImPlatform, or Windows SDK
-
-### Quick Start (GLFW + OpenGL3)
-
-```bash
-# Linux/macOS
-cd glfw_opengl3
-make
-
-# Windows (from Visual Studio Developer Command Prompt)
-cd glfw_opengl3
-build_win32.bat
-```
-
-### Quick Start (SDL2 + OpenGL3)
-
-```bash
-# Linux/macOS
-cd sdl2_opengl3
-make
-
-# Windows
-cd sdl2_opengl3
-build_win32.bat
-```
-
-### Quick Start (ImPlatform / Sharpmake)
-
-The Sharpmake-based build system generates a Visual Studio solution with all 4 configurations:
-
-```bash
-# From examples folder
-cd examples
+```batch
 bootstrap.bat
-# Open ImAnim_vs2022_win64.sln
 ```
 
-The solution includes configurations for GLFW+OpenGL3, SDL2+OpenGL3, Win32+DX11, and ImPlatform.
+This will:
+1. Initialize git submodules (imgui, ImPlatform, Sharpmake)
+2. Build Sharpmake
+3. Generate Visual Studio solution
 
-## What Each Example Shows
+Open `ImAnim_vs2022_Win64.sln` and select a configuration:
+- `Debug_GLFW_OpenGL3` / `Release_GLFW_OpenGL3`
+- `Debug_SDL2_OpenGL3` / `Release_SDL2_OpenGL3`
+- `Debug_Win32_DX11` / `Release_Win32_DX11`
+- `Debug_ImPlatform` / `Release_ImPlatform`
 
-Each example runs `ImAnimDemoWindow()` from `demo_im_anim.cpp`, showcasing all ImAnim features in one window.
+### Regenerating Projects
+
+After modifying Sharpmake files in `sharpmake/`:
+
+```batch
+generate_projects.bat
+```
+
+## Building (Linux / macOS)
+
+```bash
+chmod +x bootstrap.sh generate_projects.sh
+./bootstrap.sh
+```
+
+## Folder Structure
+
+```
+examples/
+├── glfw_opengl3/          # GLFW + OpenGL3 main.cpp
+├── sdl2_opengl3/          # SDL2 + OpenGL3 main.cpp
+├── win32_directx11/       # Win32 + DirectX11 main.cpp
+├── implatform/            # ImPlatform main.cpp
+├── extern/                # Git submodules
+│   ├── imgui/             # Dear ImGui
+│   ├── ImPlatform/        # ImPlatform abstraction
+│   └── Sharpmake/         # Sharpmake build generator
+├── sharpmake/             # Build configurationconfiguration
+├── tools/                 # Sharpmake binaries (after bootstrap)
+├── bootstrap.bat          # Windows bootstrap script
+├── bootstrap.sh           # Linux/macOS bootstrap script
+├── generate_projects.bat  # Windows project regeneration
+├── generate_projects.sh   # Linux/macOS project regeneration
+└── ImAnim_vs2022_Win64.sln  # Generated VS solution
+```
 
 ## Code Structure
 
-The `main.cpp` in each example is minimal - it just sets up the platform/graphics and calls the demo:
+Each `main.cpp` is minimal - it sets up the platform/graphics and calls the demo:
 
 ```cpp
 #include "im_anim.h"
@@ -89,6 +91,13 @@ iam_clip_update(io.DeltaTime);
 ImAnimDemoWindow();
 ```
 
+## High DPI Support
+
+All examples include proper high DPI support:
+- Scaled window size based on monitor DPI
+- `style.ScaleAllSizes()` for UI element scaling
+- `style.FontScaleDpi` for font scaling
+
 ## Integrating Into Your Project
 
 To add ImAnim to your existing project:
@@ -97,4 +106,4 @@ To add ImAnim to your existing project:
 2. Add the two frame setup calls after `ImGui::NewFrame()`
 3. Start animating!
 
-See [docs/integration.md](../docs/integration.md) for detailed integration instructions.
+See [docs/integration.md](../docs/integration.md) for detailed instructions.
