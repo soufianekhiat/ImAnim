@@ -15,7 +15,7 @@
 #include <GLFW/glfw3.h>
 
 
-// From demo_im_anim.cpp
+// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
 
 static void glfw_error_callback(int error, const char* description)

@@ -17,7 +17,7 @@ cl /nologo /Zi /MD ^
     %IMGUI_DIR%\backends\imgui_impl_win32.cpp ^
     %IMGUI_DIR%\backends\imgui_impl_dx11.cpp ^
     %IMANIM_DIR%\im_anim.cpp ^
-    %IMANIM_DIR%\demo_im_anim.cpp ^
+    %IMANIM_DIR%\im_anim_demo.cpp ^
     /Fe:im_anim_example.exe ^
     /link d3d11.lib d3dcompiler.lib
 

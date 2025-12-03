@@ -8,7 +8,7 @@ SOURCES = main.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui_impl_opengl3.cpp
 SOURCES += $(IMANIM_DIR)/im_anim.cpp
-SOURCES += $(IMANIM_DIR)/demo_im_anim.cpp
+SOURCES += $(IMANIM_DIR)/im_anim_demo.cpp
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 
 CXXFLAGS = -std=c++11 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I$(IMANIM_DIR)

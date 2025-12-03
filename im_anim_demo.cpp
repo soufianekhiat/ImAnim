@@ -1,4 +1,4 @@
-// demo_im_anim.cpp — Demo window showcasing im_anim.h features.
+// im_anim_demo.cpp — Demo window showcasing im_anim.h features.
 // Author: Soufiane KHIAT
 // License: MIT
 //

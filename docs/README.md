@@ -65,7 +65,7 @@ That's it. No build system changes, no external dependencies.
 ImAnim/
 ├── im_anim.h                  # Main header (include this)
 ├── im_anim.cpp                # Implementation
-├── demo_im_anim.cpp           # Interactive demo (optional)
+├── im_anim_demo.cpp           # Interactive demo (optional)
 ├── LICENSE                    # MIT License
 ├── docs/                      # Documentation
 │   ├── README.md              # This file
@@ -152,7 +152,7 @@ generate_projects.bat
 
 ## Demo
 
-The `demo_im_anim.cpp` file (optional) provides a comprehensive demo showcasing all features:
+The `im_anim_demo.cpp` file (optional) provides a comprehensive demo showcasing all features:
 
 - Interactive easing curve visualizer
 - Cubic bezier editor

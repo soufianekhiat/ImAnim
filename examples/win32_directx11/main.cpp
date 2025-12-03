@@ -10,7 +10,7 @@
 #include <d3d11.h>
 #include <tchar.h>
 
-// From demo_im_anim.cpp
+// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
 
 // Data

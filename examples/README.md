@@ -2,7 +2,7 @@
 
 Buildable examples demonstrating ImAnim integration with Dear ImGui.
 
-Each example is a complete application that runs the ImAnim demo (`ImAnimDemoWindow()` from `demo_im_anim.cpp`).
+Each example is a complete application that runs the ImAnim demo (`ImAnimDemoWindow()` from `im_anim_demo.cpp`).
 
 ## Available Examples
 
@@ -80,7 +80,7 @@ Each `main.cpp` is minimal - it sets up the platform/graphics and calls the demo
 ```cpp
 #include "im_anim.h"
 
-// From demo_im_anim.cpp
+// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
 
 // In main loop, after ImGui::NewFrame():

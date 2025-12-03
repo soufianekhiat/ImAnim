@@ -15,7 +15,7 @@
 #include <SDL_opengl.h>
 #endif
 
-// From demo_im_anim.cpp
+// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
 
 int main(int, char**)
