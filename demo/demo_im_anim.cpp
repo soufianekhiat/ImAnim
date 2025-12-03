@@ -7079,17 +7079,17 @@ static void ShowStressTestDemo()
 	static bool running = false;
 	static float test_time = 0.0f;
 
-	// Performance tracking
-	static float fps_history[120] = {0};
-	static int fps_idx = 0;
-	static float min_fps = 999.0f;
-	static float max_fps = 0.0f;
-	static float avg_fps = 0.0f;
+	// Performance tracking (in milliseconds)
+	static float ms_history[120] = {0};
+	static int ms_idx = 0;
+	static float min_ms = 0.0f;
+	static float max_ms = 0.0f;
+	static float avg_ms = 0.0f;
 
 	const char* mode_names[] = { "Float Tweens", "Vec2 Tweens", "Vec4 Tweens", "Color Tweens", "Mixed" };
 
 	ImGui::TextWrapped("Stress test the animation system with thousands of concurrent animations. "
-		"Monitor FPS to measure performance impact.");
+		"Monitor ms/frame to measure performance impact.");
 
 	ImGui::Separator();
 
@@ -7105,11 +7105,11 @@ static void ShowStressTestDemo()
 		if (ImGui::Button("Start Test", ImVec2(120, 0))) {
 			running = true;
 			test_time = 0.0f;
-			min_fps = 999.0f;
-			max_fps = 0.0f;
-			avg_fps = 0.0f;
-			for (int i = 0; i < 120; i++) fps_history[i] = 0.0f;
-			fps_idx = 0;
+			min_ms = 999.0f;
+			max_ms = 0.0f;
+			avg_ms = 0.0f;
+			for (int i = 0; i < 120; i++) ms_history[i] = 0.0f;
+			ms_idx = 0;
 		}
 	} else {
 		if (ImGui::Button("Stop Test", ImVec2(120, 0))) {
@@ -7118,66 +7118,65 @@ static void ShowStressTestDemo()
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Reset Stats", ImVec2(120, 0))) {
-		min_fps = 999.0f;
-		max_fps = 0.0f;
-		avg_fps = 0.0f;
-		for (int i = 0; i < 120; i++) fps_history[i] = 0.0f;
-		fps_idx = 0;
+		min_ms = 999.0f;
+		max_ms = 0.0f;
+		avg_ms = 0.0f;
+		for (int i = 0; i < 120; i++) ms_history[i] = 0.0f;
+		ms_idx = 0;
 	}
 
 	ImGui::Separator();
 
 	// Performance display
-	float current_fps = ImGui::GetIO().Framerate;
 	float frame_ms = dt * 1000.0f;
 
 	if (running) {
 		test_time += dt;
-		fps_history[fps_idx] = current_fps;
-		fps_idx = (fps_idx + 1) % 120;
+		ms_history[ms_idx] = frame_ms;
+		ms_idx = (ms_idx + 1) % 120;
 
-		if (current_fps < min_fps && current_fps > 1.0f) min_fps = current_fps;
-		if (current_fps > max_fps) max_fps = current_fps;
+		if (frame_ms < min_ms && frame_ms > 0.0f) min_ms = frame_ms;
+		if (frame_ms > max_ms) max_ms = frame_ms;
 
 		// Calculate average
 		float sum = 0.0f;
 		int count = 0;
 		for (int i = 0; i < 120; i++) {
-			if (fps_history[i] > 0.0f) {
-				sum += fps_history[i];
+			if (ms_history[i] > 0.0f) {
+				sum += ms_history[i];
 				count++;
 			}
 		}
-		if (count > 0) avg_fps = sum / count;
+		if (count > 0) avg_ms = sum / count;
 	}
 
 	// Stats display
-	ImGui::Text("Performance:");
+	ImGui::Text("Performance (ms/frame - lower is better):");
 	ImGui::Columns(4, "perf_cols", false);
-	ImGui::Text("Current FPS"); ImGui::NextColumn();
-	ImGui::Text("Min FPS"); ImGui::NextColumn();
-	ImGui::Text("Max FPS"); ImGui::NextColumn();
-	ImGui::Text("Avg FPS"); ImGui::NextColumn();
+	ImGui::Text("Current"); ImGui::NextColumn();
+	ImGui::Text("Min"); ImGui::NextColumn();
+	ImGui::Text("Max"); ImGui::NextColumn();
+	ImGui::Text("Avg"); ImGui::NextColumn();
 
-	// Color code based on FPS
-	ImVec4 fps_color = current_fps >= 60.0f ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) :
-	                   current_fps >= 30.0f ? ImVec4(1.0f, 1.0f, 0.2f, 1.0f) :
-	                                          ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
+	// Color code based on ms (lower is better: <16.67ms = 60fps, <33.33ms = 30fps)
+	ImVec4 ms_color = frame_ms <= 16.67f ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) :
+	                  frame_ms <= 33.33f ? ImVec4(1.0f, 1.0f, 0.2f, 1.0f) :
+	                                       ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
 
-	ImGui::TextColored(fps_color, "%.1f", current_fps); ImGui::NextColumn();
-	ImGui::Text("%.1f", min_fps < 999.0f ? min_fps : 0.0f); ImGui::NextColumn();
-	ImGui::Text("%.1f", max_fps); ImGui::NextColumn();
-	ImGui::Text("%.1f", avg_fps); ImGui::NextColumn();
+	ImGui::TextColored(ms_color, "%.2f ms", frame_ms); ImGui::NextColumn();
+	ImGui::Text("%.2f ms", min_ms < 999.0f ? min_ms : 0.0f); ImGui::NextColumn();
+	ImGui::Text("%.2f ms", max_ms); ImGui::NextColumn();
+	ImGui::Text("%.2f ms", avg_ms); ImGui::NextColumn();
 	ImGui::Columns(1);
 
 	ImGui::Text("Test time: %.1f s", test_time);
 	if (running) {
-		ImGui::Text("Total time: %.3f ms | Animations/ms: %.0f", frame_ms, (float)anim_count / (frame_ms > 0.0f ? frame_ms : 1.0f));
+		ImGui::Text("Animations: %d | us/anim: %.2f", anim_count, (frame_ms * 1000.0f) / (float)anim_count);
 	}
 
-	// FPS Graph
-	ImGui::PlotLines("##fps_graph", fps_history, 120, fps_idx, "FPS History",
-		0.0f, 120.0f, ImVec2(ImGui::GetContentRegionAvail().x, 60));
+	// ms/frame Graph
+	ImGui::PlotLines("##ms_graph", ms_history, 120, ms_idx, "ms/frame History",
+		0.0f, 50.0f, ImVec2(ImGui::GetContentRegionAvail().x, 60));
 
 	ImGui::Separator();
 
@@ -7758,7 +7757,7 @@ void ImAnimDemoWindow()
 
 	// Footer (inside child)
 	ImGui::Separator();
-	ImGui::TextDisabled("FPS: %.1f (dt: %.3f ms)", ImGui::GetIO().Framerate, ImGui::GetIO().DeltaTime * 1000.0f);
+	ImGui::TextDisabled("%.2f ms/frame (%.1f FPS)", ImGui::GetIO().DeltaTime * 1000.0f, ImGui::GetIO().Framerate);
 
 	ImGui::EndChild();  // End scrollable content
 
