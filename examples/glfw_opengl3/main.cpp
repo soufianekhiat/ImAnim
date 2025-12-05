@@ -14,9 +14,8 @@
 #endif
 #include <GLFW/glfw3.h>
 
-
-// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
+extern void ImAnimDocWindow();
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -82,7 +81,10 @@ int main(int, char**)
         iam_clip_update(io.DeltaTime);
 
         // Show demo
-        ImAnimDemoWindow();
+		ImAnimDemoWindow();
+
+		// Show Doc
+		ImAnimDocWindow();
 
         // Render
         ImGui::Render();

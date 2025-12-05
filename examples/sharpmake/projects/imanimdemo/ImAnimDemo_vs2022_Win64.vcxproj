@@ -874,6 +874,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\..\im_anim.cpp" />
     <ClCompile Include="..\..\..\..\im_anim_demo.cpp" />
+    <ClCompile Include="..\..\..\..\im_anim_doc.cpp" />
     <ClCompile Include="..\..\..\extern\imgui\backends\imgui_impl_dx11.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GLFW_OpenGL3|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_SDL2_OpenGL3|x64'">true</ExcludedFromBuild>
