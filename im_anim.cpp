@@ -7145,3 +7145,335 @@ void iam_drag_cancel(ImGuiID id) {
 		state->is_snapping = false;
 	}
 }
+
+// ============================================================
+// DEBUG TIMELINE VISUALIZATION
+// ============================================================
+
+void iam_show_debug_timeline(ImGuiID instance_id) {
+	using namespace iam_clip_detail;
+
+	// Brand colors
+	ImU32 const C1 = IM_COL32(91, 194, 231, 255);   // Main cyan
+	ImU32 const C2 = IM_COL32(204, 120, 88, 255);   // Accent coral
+	ImU32 const C1_dim = IM_COL32(91, 194, 231, 80);
+	ImU32 const C2_dim = IM_COL32(204, 120, 88, 80);
+	ImU32 const C1_highlight = IM_COL32(120, 210, 240, 255);
+	ImU32 const C2_highlight = IM_COL32(230, 140, 110, 255);
+	ImU32 const BG_color = IM_COL32(30, 32, 40, 255);
+	ImU32 const BG_track = IM_COL32(40, 44, 55, 255);
+	ImU32 const grid_color = IM_COL32(60, 65, 80, 255);
+	ImU32 const text_color = IM_COL32(180, 185, 195, 255);
+	ImU32 const playhead_color = IM_COL32(255, 255, 255, 220);
+
+	// Find instance
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst) {
+		ImGui::TextDisabled("Instance 0x%08X not found", instance_id);
+		return;
+	}
+
+	// Find clip
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (!clip) {
+		ImGui::TextDisabled("Clip 0x%08X not found", inst->clip_id);
+		return;
+	}
+
+	// Layout constants
+	float const track_height = 20.0f;
+	float const track_spacing = 2.0f;
+	float const header_height = 22.0f;
+	float const time_ruler_height = 36.0f;
+	float const margin = 4.0f;
+	float const label_width = ImGui::CalcTextSize("float").x + 8.0f;
+
+	// Calculate widget dimensions
+	ImVec2 avail = ImGui::GetContentRegionAvail();
+	int num_tracks = clip->iam_tracks.Size;
+	if (num_tracks == 0) num_tracks = 1;  // At least show something
+	float const progress_bar_height = 24.0f;  // Space for progress bar at bottom
+	float total_height = header_height + time_ruler_height + (track_height + track_spacing) * num_tracks + progress_bar_height + margin * 2;
+	float timeline_width = avail.x - label_width - margin * 2;
+	if (timeline_width < 100.0f) timeline_width = 100.0f;
+
+	// Duration and current time
+	float duration = clip->duration;
+	if (duration <= 0.0f) duration = 1.0f;
+	float current_time = inst->time;
+
+	// Get draw list and cursor position
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 cp = ImGui::GetCursorScreenPos();
+
+	// Reserve space
+	ImGui::Dummy(ImVec2(avail.x, total_height));
+
+	// Background
+	dl->AddRectFilled(cp, ImVec2(cp.x + avail.x, cp.y + total_height), BG_color, 4.0f);
+
+	// Header - instance info
+	{
+		char header_text[128];
+		snprintf(header_text, sizeof(header_text), "Clip 0x%08X | %.2fs / %.2fs | %s",
+			inst->clip_id, current_time, duration,
+			inst->paused ? "PAUSED" : (inst->playing ? "PLAYING" : "STOPPED"));
+
+		ImVec2 text_pos = ImVec2(cp.x + margin, cp.y + margin);
+		dl->AddText(text_pos, inst->playing ? C1 : text_color, header_text);
+	}
+
+	// Timeline area origin (after header, tracks start immediately)
+	float timeline_y = cp.y + header_height * 2.0f;
+	float timeline_x = cp.x + label_width + margin;
+
+	// Draw tracks
+	for (int i = 0; i < clip->iam_tracks.Size; i++) {
+		iam_track& track = clip->iam_tracks[i];
+		float track_y = timeline_y + (track_height + track_spacing) * i;
+
+		// Track background
+		dl->AddRectFilled(
+			ImVec2(timeline_x, track_y),
+			ImVec2(timeline_x + timeline_width, track_y + track_height),
+			BG_track, 2.0f
+		);
+
+		// Track label
+		{
+			char const* type_names[] = { "float", "vec2", "vec4", "int", "color", "float_rel", "vec2_rel", "vec4_rel", "color_rel" };
+			char const* type_name = (track.type >= 0 && track.type < 9) ? type_names[track.type] : "?";
+			char label[64];
+			snprintf(label, sizeof(label), "%s", type_name);
+			ImVec2 label_pos = ImVec2(cp.x + margin, track_y + (track_height - ImGui::GetTextLineHeight()) / 2);
+			dl->AddText(label_pos, text_color, label);
+		}
+
+		// Draw keyframe segments
+		bool use_coral = (i % 2 == 1);  // Alternate colors
+		ImU32 segment_color = use_coral ? C2_dim : C1_dim;
+		ImU32 segment_active = use_coral ? C2 : C1;
+		ImU32 segment_highlight = use_coral ? C2_highlight : C1_highlight;
+
+		for (int k = 0; k < track.keys.Size; k++) {
+			keyframe& key = track.keys[k];
+			float key_time = key.time;
+
+			// Find next keyframe time (or end of clip)
+			float next_time = duration;
+			if (k + 1 < track.keys.Size) {
+				next_time = track.keys[k + 1].time;
+			}
+
+			// Segment positions
+			float x1 = timeline_x + (key_time / duration) * timeline_width;
+			float x2 = timeline_x + (next_time / duration) * timeline_width;
+			float seg_y1 = track_y + 2;
+			float seg_y2 = track_y + track_height - 2;
+
+			// Check if current time is within this segment
+			bool is_active = (current_time >= key_time && current_time < next_time);
+
+			// Draw segment
+			ImU32 seg_col = is_active ? segment_active : segment_color;
+			if (is_active) {
+				// Glow effect for active segment
+				dl->AddRectFilled(
+					ImVec2(x1 - 1, seg_y1 - 1),
+					ImVec2(x2 + 1, seg_y2 + 1),
+					segment_highlight, 3.0f
+				);
+			}
+			dl->AddRectFilled(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), seg_col, 2.0f);
+
+			// Draw keyframe marker (diamond/dot at start)
+			float marker_size = 8.0f;
+			ImVec2 marker_center = ImVec2(x1, track_y + track_height / 2);
+			dl->AddCircleFilled(marker_center, marker_size, is_active ? playhead_color : segment_active);
+
+			// Hover detection - keyframe has priority over segment
+			ImVec2 mouse = ImGui::GetMousePos();
+			float hover_radius = 8.0f;  // Larger hover region for keyframe
+			float dx = mouse.x - marker_center.x;
+			float dy = mouse.y - marker_center.y;
+			bool keyframe_hovered = (dx * dx + dy * dy <= hover_radius * hover_radius);
+
+			if (keyframe_hovered) {
+				// Highlight hovered keyframe
+				dl->AddCircle(marker_center, marker_size + 3.0f, playhead_color, 0, 2.0f);
+
+				ImGui::BeginTooltip();
+				ImGui::Text("Time: %.3fs", key.time);
+
+				// Display value based on type with color preview
+				switch (key.type) {
+					case iam_chan_float:
+						ImGui::Text("Value: %.4f", key.value[0]);
+						// Show as grayscale color
+						{
+							float v = ImClamp(key.value[0], 0.0f, 1.0f);
+							ImVec4 col(v, v, v, 1.0f);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_vec2:
+						ImGui::Text("Value: (%.3f, %.3f)", key.value[0], key.value[1]);
+						// Show XY as RG color
+						{
+							float r = ImClamp(key.value[0], 0.0f, 1.0f);
+							float g = ImClamp(key.value[1], 0.0f, 1.0f);
+							ImVec4 col(r, g, 0.5f, 1.0f);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_vec4:
+						ImGui::Text("Value: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
+						{
+							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_int:
+						ImGui::Text("Value: %d", *(int*)&key.value[0]);
+						break;
+					case iam_chan_color:
+						ImGui::Text("Color: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
+						{
+							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							char const* space_names[] = { "sRGB", "Linear", "HSV", "OKLAB", "OKLCH" };
+							if (key.color_space >= 0 && key.color_space < 5) {
+								ImGui::SameLine();
+								ImGui::Text("(%s)", space_names[key.color_space]);
+							}
+						}
+						break;
+					default:
+						ImGui::Text("Value: %.4f", key.value[0]);
+						break;
+				}
+
+				// Easing info
+				char const* ease_names[] = {
+					"linear", "in_quad", "out_quad", "in_out_quad",
+					"in_cubic", "out_cubic", "in_out_cubic",
+					"in_quart", "out_quart", "in_out_quart",
+					"in_quint", "out_quint", "in_out_quint",
+					"in_sine", "out_sine", "in_out_sine",
+					"in_expo", "out_expo", "in_out_expo",
+					"in_circ", "out_circ", "in_out_circ",
+					"in_back", "out_back", "in_out_back",
+					"in_elastic", "out_elastic", "in_out_elastic",
+					"in_bounce", "out_bounce", "in_out_bounce",
+					"steps", "cubic_bezier", "spring", "custom"
+				};
+				if (key.ease_type >= 0 && key.ease_type < IM_ARRAYSIZE(ease_names))
+					ImGui::Text("Ease: %s", ease_names[key.ease_type]);
+
+				ImGui::EndTooltip();
+			}
+			else if (mouse.x >= x1 && mouse.x <= x2 && mouse.y >= seg_y1 && mouse.y <= seg_y2) {
+				// Segment hover tooltip (for easing between keyframes)
+				// Highlight hovered segment
+				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 0, 2.0f);
+
+				ImGui::BeginTooltip();
+				ImGui::Text("Segment: %.2fs - %.2fs", key_time, next_time);
+
+				// Show easing applied from this keyframe to next
+				char const* ease_names[] = {
+					"linear", "in_quad", "out_quad", "in_out_quad",
+					"in_cubic", "out_cubic", "in_out_cubic",
+					"in_quart", "out_quart", "in_out_quart",
+					"in_quint", "out_quint", "in_out_quint",
+					"in_sine", "out_sine", "in_out_sine",
+					"in_expo", "out_expo", "in_out_expo",
+					"in_circ", "out_circ", "in_out_circ",
+					"in_back", "out_back", "in_out_back",
+					"in_elastic", "out_elastic", "in_out_elastic",
+					"in_bounce", "out_bounce", "in_out_bounce",
+					"steps", "cubic_bezier", "spring", "custom"
+				};
+				if (key.ease_type >= 0 && key.ease_type < IM_ARRAYSIZE(ease_names))
+					ImGui::Text("Easing: %s", ease_names[key.ease_type]);
+				else
+					ImGui::Text("Easing: linear");
+
+				if (key.has_bezier)
+					ImGui::Text("Bezier: (%.2f, %.2f, %.2f, %.2f)", key.bezier[0], key.bezier[1], key.bezier[2], key.bezier[3]);
+
+				if (key.is_spring)
+					ImGui::Text("Spring: m=%.1f k=%.1f c=%.1f", key.spring.mass, key.spring.stiffness, key.spring.damping);
+
+				ImGui::EndTooltip();
+			}
+		}
+
+		// Grid lines (every 0.5s or so)
+		float grid_step = 0.5f;
+		if (duration > 10.0f) grid_step = 2.0f;
+		else if (duration > 5.0f) grid_step = 1.0f;
+		for (float t = grid_step; t < duration; t += grid_step) {
+			float x = timeline_x + (t / duration) * timeline_width;
+			dl->AddLine(ImVec2(x, track_y), ImVec2(x, track_y + track_height), grid_color, 0.5f);
+		}
+	}
+
+	// If no tracks, show placeholder
+	if (clip->iam_tracks.Size == 0) {
+		float track_y = timeline_y;
+		dl->AddRectFilled(
+			ImVec2(timeline_x, track_y),
+			ImVec2(timeline_x + timeline_width, track_y + track_height),
+			BG_track, 2.0f
+		);
+		ImVec2 text_pos = ImVec2(timeline_x + 10, track_y + (track_height - ImGui::GetTextLineHeight()) / 2);
+		dl->AddText(text_pos, text_color, "No tracks");
+	}
+
+	// Calculate tracks bottom position
+	float tracks_bottom = timeline_y + (track_height + track_spacing) * ImMax(1, clip->iam_tracks.Size);
+
+	// Time ruler (below tracks)
+	float ruler_y = tracks_bottom + 2;
+	{
+		// Ruler background
+		dl->AddRectFilled(
+			ImVec2(timeline_x, ruler_y),
+			ImVec2(timeline_x + timeline_width, ruler_y + time_ruler_height),
+			BG_track
+		);
+
+		// Time markers
+		float time_step = 0.5f;  // Default step
+		if (duration > 10.0f) time_step = 2.0f;
+		else if (duration > 5.0f) time_step = 1.0f;
+		else if (duration < 1.0f) time_step = 0.1f;
+
+		for (float t = 0.0f; t <= duration + 0.001f; t += time_step) {
+			float x = timeline_x + (t / duration) * timeline_width;
+			dl->AddLine(ImVec2(x, ruler_y), ImVec2(x, ruler_y + 6), grid_color, 1.0f);
+
+			char time_str[16];
+			snprintf(time_str, sizeof(time_str), "%.1fs", t);
+			ImVec2 text_size = ImGui::CalcTextSize(time_str);
+			if (x + text_size.x / 2 < timeline_x + timeline_width) {
+				dl->AddText(ImVec2(x - text_size.x / 2, ruler_y + 6), text_color, time_str);
+			}
+		}
+	}
+
+	// Draw playhead
+	if (current_time >= 0.0f && current_time <= duration) {
+		float playhead_x = timeline_x + (current_time / duration) * timeline_width;
+		dl->AddLine(ImVec2(playhead_x, timeline_y), ImVec2(playhead_x, ruler_y + time_ruler_height), playhead_color, 2.0f);
+
+		// Playhead triangle at top
+		ImVec2 tri[3] = {
+			ImVec2(playhead_x, timeline_y),
+			ImVec2(playhead_x - 5, timeline_y - 8),
+			ImVec2(playhead_x + 5, timeline_y - 8)
+		};
+		dl->AddTriangleFilled(tri[0], tri[1], tri[2], playhead_color);
+	}
+}

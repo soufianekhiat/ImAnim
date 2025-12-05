@@ -89,6 +89,7 @@ iam_ease_fn iam_get_custom_ease(int slot);                                      
 
 // Debug UI
 void iam_show_unified_inspector(bool* p_open = nullptr);                            // Show unified inspector (merges debug window + animation inspector).
+void iam_show_debug_timeline(ImGuiID instance_id);                                  // Show debug timeline for a clip instance.
 
 // Performance Profiler
 void iam_profiler_enable(bool enable);                                              // Enable/disable the performance profiler.
