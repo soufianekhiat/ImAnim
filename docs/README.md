@@ -2,6 +2,8 @@
 
 **Animation Engine for [Dear ImGui](https://github.com/ocornut/imgui)**
 
+![Image](https://github.com/user-attachments/assets/51fde8b3-6d55-4e71-b012-819cd97d728b)
+
 ImAnim brings modern animation capabilities to ImGui applications. Write smooth UI animations with minimal code.
 
 ```cpp
@@ -161,6 +163,72 @@ The `im_anim_demo.cpp` file (optional) provides a comprehensive demo showcasing 
 - Performance benchmarks
 
 Call `ImAnimDemoWindow()` in your ImGui frame to display the demo window.
+
+## Showcase:
+
+List Stagger:
+
+![Image](https://github.com/user-attachments/assets/a59968c6-5cbf-405f-8e67-f12e15205512)
+
+Grid Stagger:
+
+![Image](https://github.com/user-attachments/assets/6618002b-8326-45ec-aa16-11feed26b75f)
+
+Card Stagger:
+
+![Image](https://github.com/user-attachments/assets/ef29a857-c64c-45e0-bad2-3b67952da36d)
+
+Color Blending:
+
+![Image](https://github.com/user-attachments/assets/364e9fff-cc0f-46ab-97fd-e56a1e1618a9)
+
+Waves:
+
+![Image](https://github.com/user-attachments/assets/19c3fd48-10b7-4350-9eea-4cffc4ef4984)
+
+![Image](https://github.com/user-attachments/assets/2a9aa767-6886-4737-8b90-9bee2792a225)
+
+ImGui Integration:
+
+![Image](https://github.com/user-attachments/assets/f6cdb73f-2712-4b7e-8f27-5cbfb884b7ce)
+
+Transforms:
+
+![Image](https://github.com/user-attachments/assets/d93dd1f6-9204-4687-9e90-ee8d11312a8b)
+
+![Image](https://github.com/user-attachments/assets/62f67980-94d5-48b4-ba01-483e960ada89)
+
+Gradient:
+
+![Image](https://github.com/user-attachments/assets/04d10e9f-1303-4fdc-acda-83dd18fbaf85)
+
+Custom Ease Functions:
+
+![Image](https://github.com/user-attachments/assets/c9f35054-cd26-475e-bb49-7875922fa273)
+
+Path:
+
+![Image](https://github.com/user-attachments/assets/aa2fc751-36fb-4c7b-aae7-e2bac04b5f45)
+
+Variations:
+
+![Image](https://github.com/user-attachments/assets/d660b2a8-78a1-4d94-8bb8-8a9632127e64)
+
+Text:
+
+![Image](https://github.com/user-attachments/assets/b389a9f3-89a6-4e5f-b632-74acc8dea3b6)
+
+Noise:
+
+![Image](https://github.com/user-attachments/assets/8a644f6a-4516-4246-9d80-41a2ee036ea5)
+
+Easing Functions:
+
+![Image](https://github.com/user-attachments/assets/d918c4d9-6e22-4fa8-b591-68d6b3afec7e)
+
+ImDrawList:
+
+![Image](https://github.com/user-attachments/assets/c22f0855-4853-474d-b0d7-e1191e9d4789)
 
 ## Contributing
 

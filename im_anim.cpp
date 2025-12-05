@@ -7477,3 +7477,5 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 		dl->AddTriangleFilled(tri[0], tri[1], tri[2], playhead_color);
 	}
 }
+
+#undef IMGUI_STORAGE_PAIR
