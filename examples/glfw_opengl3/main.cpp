@@ -16,6 +16,7 @@
 
 extern void ImAnimDemoWindow();
 extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -85,6 +86,9 @@ int main(int, char**)
 
 		// Show Doc
 		ImAnimDocWindow();
+
+		// Show Usecases
+		ImAnimUsecaseWindow();
 
         // Render
         ImGui::Render();

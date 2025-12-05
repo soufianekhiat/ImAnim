@@ -17,6 +17,7 @@
 
 extern void ImAnimDemoWindow();
 extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 int main(int, char**)
 {
@@ -108,6 +109,9 @@ int main(int, char**)
 
 		// Show Doc
 		ImAnimDocWindow();
+
+		// Show Usecases
+		ImAnimUsecaseWindow();
 
         // Render
         ImGui::Render();

@@ -22,9 +22,10 @@ namespace ImAnim
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim.h"));
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim.cpp"));
 
-            // Add im_anim_demo.cpp and im_anim_doc.cpp from repository root (shared by all configs)
+            // Add im_anim_demo.cpp, im_anim_doc.cpp, and im_anim_usecase.cpp from repository root (shared by all configs)
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_demo.cpp"));
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_doc.cpp"));
+            SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_usecase.cpp"));
 
             // Add all 4 main.cpp files (will be excluded per config)
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "glfw_opengl3", "main.cpp"));

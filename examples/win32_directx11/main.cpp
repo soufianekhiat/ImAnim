@@ -12,6 +12,7 @@
 
 extern void ImAnimDemoWindow();
 extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -116,6 +117,9 @@ int main(int, char**)
 
         // Show Doc
         ImAnimDocWindow();
+
+        // Show Usecases
+        ImAnimUsecaseWindow();
 
         // Rendering
         ImGui::Render();

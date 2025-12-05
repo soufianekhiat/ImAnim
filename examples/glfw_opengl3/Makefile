@@ -10,6 +10,7 @@ SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui
 SOURCES += $(IMANIM_DIR)/im_anim.cpp
 SOURCES += $(IMANIM_DIR)/im_anim_demo.cpp
 SOURCES += $(IMANIM_DIR)/im_anim_doc.cpp
+SOURCES += $(IMANIM_DIR)/im_anim_usecase.cpp
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 
 CXXFLAGS = -std=c++11 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I$(IMANIM_DIR)

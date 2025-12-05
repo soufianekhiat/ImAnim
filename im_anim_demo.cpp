@@ -47,7 +47,7 @@ static void ApplyOpenAll()
 
 // Helper: Draw a rotated rectangle
 static void DrawRotatedRect(ImDrawList* dl, ImVec2 ctr, ImVec2 size, float angle, ImU32 fill, ImU32 border) {
-	float c = cosf(angle), s = sinf(angle);
+	float c = ImCos(angle), s = ImSin(angle);
 	ImVec2 corners[4] = {
 		ImVec2(-size.x * 0.5f, -size.y * 0.5f),
 		ImVec2( size.x * 0.5f, -size.y * 0.5f),
@@ -73,7 +73,7 @@ static void ShowHeroAnimation()
 
 	// === 8-second cycle with sequences ===
 	const float CYCLE = 8.0f;
-	float t = fmodf(T, CYCLE);
+	float t = ImFmod(T, CYCLE);
 
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	ImVec2 cp = ImGui::GetCursorScreenPos();  // Canvas position
@@ -88,8 +88,8 @@ static void ShowHeroAnimation()
 	// LAYER 0: ANIMATED GRADIENT BACKGROUND
 	// ========================================================
 	{
-		float grad_shift = sinf(T * 0.8f) * 0.5f + 0.5f;
-		float grad_shift2 = sinf(T * 0.5f + 1.0f) * 0.5f + 0.5f;
+		float grad_shift = ImSin(T * 0.8f) * 0.5f + 0.5f;
+		float grad_shift2 = ImSin(T * 0.5f + 1.0f) * 0.5f + 0.5f;
 
 		// Four corners with animated colors
 		ImU32 tl = IM_COL32((int)(12 + 20 * grad_shift), (int)(14 + 15 * grad_shift), (int)(28 + 25 * grad_shift), 255);
@@ -144,14 +144,14 @@ static void ShowHeroAnimation()
 		// Rectangle arrives at right side at t=3.0s, holds until t=10s
 		// Particles start when rectangle arrives, with fade-in during settle
 		float cycle = 10.0f;
-		float master_t = fmodf(T, cycle);
+		float master_t = ImFmod(T, cycle);
 
 		// Particles only active when rectangle has arrived (t >= 3.0s)
 		// Particle animation starts at t=3.0s, giving 7s for the full particle cycle
 		float particle_start = 3.0f;
 		float particle_cycle = 7.0f;  // Particles have 7s to complete their animation
 		float global_t = (master_t >= particle_start)
-			? fmodf(master_t - particle_start, particle_cycle)
+			? ImFmod(master_t - particle_start, particle_cycle)
 			: particle_cycle - (particle_start - master_t);  // Seamless wrap
 
 		// Master alpha: fade in when rectangle arrives and settles
@@ -204,7 +204,7 @@ static void ShowHeroAnimation()
 			Particle& p = particles[i];
 
 			// Individual timing with stagger (use particle_cycle, not master cycle)
-			float pt = fmodf(global_t + particle_cycle - p.phase_offset, particle_cycle);
+			float pt = ImFmod(global_t + particle_cycle - p.phase_offset, particle_cycle);
 
 			// === CALCULATE RADIUS (distance from center) ===
 			float radius_norm = p.orbit_radius;  // Default: at orbit position
@@ -212,7 +212,7 @@ static void ShowHeroAnimation()
 			// Breathing: gentle pulsing at rest (0-1.5s and 5.8-7.0s)
 			if (pt < 1.5f || pt > 5.8f) {
 				float breathe_t = (pt < 1.5f) ? pt / 1.5f : (pt - 5.8f) / 1.2f;
-				radius_norm = p.orbit_radius * (1.0f + 0.08f * sinf(breathe_t * PI * 2.0f + p.base_angle));
+				radius_norm = p.orbit_radius * (1.0f + 0.08f * ImSin(breathe_t * PI * 2.0f + p.base_angle));
 			}
 			// Gather: spiral inward (1.5-3.0s)
 			else if (pt < 3.0f) {
@@ -235,7 +235,7 @@ static void ShowHeroAnimation()
 			// Tension: compressed cluster, vibrating (3.6-4.0s)
 			else if (pt < 4.0f) {
 				float tt = (pt - 3.6f) / 0.4f;
-				float vibrate = sinf(T * 60.0f + i * 1.7f) * 0.02f * (1.0f + tt * 2.0f);
+				float vibrate = ImSin(T * 60.0f + i * 1.7f) * 0.02f * (1.0f + tt * 2.0f);
 				radius_norm = 0.1f + vibrate;
 			}
 			// Burst: explosive outward (4.0-4.2s)
@@ -283,8 +283,8 @@ static void ShowHeroAnimation()
 			}
 
 			// === POSITION ===
-			float px = focus.x + cosf(angle) * radius_norm * max_radius;
-			float py = focus.y + sinf(angle) * radius_norm * max_radius;
+			float px = focus.x + ImCos(angle) * radius_norm * max_radius;
+			float py = focus.y + ImSin(angle) * radius_norm * max_radius;
 
 			// === SIZE (squash/stretch based on velocity) ===
 			float size = p.size;
@@ -293,7 +293,7 @@ static void ShowHeroAnimation()
 			// Squash during anticipation (3.0-3.4s)
 			if (pt >= 3.0f && pt < 3.4f) {
 				float at = (pt - 3.0f) / 0.4f;
-				size_mult = 1.0f + 0.3f * sinf(at * PI);  // Bulge
+				size_mult = 1.0f + 0.3f * ImSin(at * PI);  // Bulge
 			}
 			// Compress during tension (3.6-4.0s)
 			else if (pt >= 3.6f && pt < 4.0f) {
@@ -349,8 +349,8 @@ static void ShowHeroAnimation()
 					float trail_len = size * 3.0f * trail_strength;
 					float trail_angle = atan2f(py - focus.y, px - focus.x);
 					ImVec2 trail_end = ImVec2(
-						px - cosf(trail_angle) * trail_len,
-						py - sinf(trail_angle) * trail_len
+						px - ImCos(trail_angle) * trail_len,
+						py - ImSin(trail_angle) * trail_len
 					);
 					int trail_alpha = (int)(alpha * 0.4f * trail_strength);
 					dl->AddLine(ImVec2(px, py), trail_end,
@@ -380,14 +380,14 @@ static void ShowHeroAnimation()
 
 			for (int i = 0; i < PARTICLE_COUNT; i += 4) {
 				Particle& p = particles[i];
-				float pt = fmodf(global_t + particle_cycle - p.phase_offset, particle_cycle);
+				float pt = ImFmod(global_t + particle_cycle - p.phase_offset, particle_cycle);
 				float gt = ImClamp((pt - 1.5f) / 1.5f, 0.0f, 1.0f);
 				float gather_ease = iam_eval_preset(iam_ease_in_out_quad, gt);
 				float radius_norm = p.orbit_radius * (1.0f - gather_ease * 0.6f);
 				float angle = p.base_angle + T * 0.15f * p.speed_mult + gt * PI * 1.5f * p.speed_mult;
 
-				float px = focus.x + cosf(angle) * radius_norm * max_radius;
-				float py = focus.y + sinf(angle) * radius_norm * max_radius;
+				float px = focus.x + ImCos(angle) * radius_norm * max_radius;
+				float py = focus.y + ImSin(angle) * radius_norm * max_radius;
 
 				dl->AddLine(ImVec2(px, py), focus, IM_COL32(91, 194, 231, line_alpha), 0.5f);
 			}
@@ -436,7 +436,7 @@ static void ShowHeroAnimation()
 
 		// ===== TIMING: 10s cycle (longer to let particle burst finish) =====
 		float cycle_duration = 10.0f;
-		float local_t = fmodf(T, cycle_duration);
+		float local_t = ImFmod(T, cycle_duration);
 
 		// Rectangle motion: 3s travel, then hold for rest of cycle
 		float motion_duration = 3.0f;
@@ -574,7 +574,7 @@ static void ShowHeroAnimation()
 		for (int pi = 0; pi < 2; pi++) {
 			RectPath& rp = paths[pi];
 
-			float local_t = fmodf(T - rp.delay, rp.duration + 1.2f);
+			float local_t = ImFmod(T - rp.delay, rp.duration + 1.2f);
 			float progress = ImClamp(local_t / rp.duration, 0.0f, 1.0f);
 			float eased = iam_eval_preset(rp.ease_type, progress);
 
@@ -635,18 +635,18 @@ static void ShowHeroAnimation()
 		}
 		else if (t < 3.0f) {
 			// Hold with breathing
-			logo_scale = 3.5f + sinf(T * 2.5f) * 0.08f;
-			logo_rotation = sinf(T * 1.5f) * 0.015f;
+			logo_scale = 3.5f + ImSin(T * 2.5f) * 0.08f;
+			logo_rotation = ImSin(T * 1.5f) * 0.015f;
 		}
 		else if (t < 3.5f) {
 			// Glitch cut
 			show_glitch = true;
 			logo_scale = 3.5f;
-			logo_y_offset = sinf((t - 3.0f) * 60.0f) * 8.0f * (1.0f - (t - 3.0f) * 2.0f);
+			logo_y_offset = ImSin((t - 3.0f) * 60.0f) * 8.0f * (1.0f - (t - 3.0f) * 2.0f);
 		}
 		else if (t < 7.0f) {
 			// Hold
-			logo_scale = 3.5f + sinf(T * 2.0f) * 0.05f;
+			logo_scale = 3.5f + ImSin(T * 2.0f) * 0.05f;
 		}
 		else {
 			// Exit
@@ -666,7 +666,7 @@ static void ShowHeroAnimation()
 			if (show_glitch) {
 				float gt = (t - 3.0f) * 4.0f;
 				for (int slice = 0; slice < 3; slice++) {
-					float slice_offset = sinf(gt * 20.0f + slice * 2.0f) * 15.0f * (1.0f - gt);
+					float slice_offset = ImSin(gt * 20.0f + slice * 2.0f) * 15.0f * (1.0f - gt);
 					float slice_y = base_y + (slice - 1) * font_size * 0.3f;
 					ImU32 slice_col = (slice % 2 == 0) ? IM_COL32(91, 194, 231, (int)(80 * (1.0f - gt)))
 					                                   : IM_COL32(204, 120, 88, (int)(80 * (1.0f - gt)));
@@ -679,8 +679,8 @@ static void ShowHeroAnimation()
 				char ch[2] = { logo[i], '\0' };
 
 				// Per-character wave motion
-				float char_wave = sinf(T * 3.0f + i * 0.5f) * 3.0f;
-				float char_scale = 1.0f + sinf(T * 2.0f + i * 0.8f) * 0.05f;
+				float char_wave = ImSin(T * 3.0f + i * 0.5f) * 3.0f;
+				float char_scale = 1.0f + ImSin(T * 2.0f + i * 0.8f) * 0.05f;
 
 				// Color: gradient across letters
 				float hue_t = (float)i / 5.0f;
@@ -746,11 +746,11 @@ static void ShowHeroAnimation()
 			Particle& p = particles[i];
 
 			// Looping vertical motion
-			float cycle_t = fmodf(T * p.speed + p.seed * 10.0f, 4.0f);
+			float cycle_t = ImFmod(T * p.speed + p.seed * 10.0f, 4.0f);
 			float progress = ImClamp(cycle_t / 3.0f, 0.0f, 1.0f);
 			float eased_y = iam_eval_preset((int)p.ease_type, progress);
 
-			float px = cp.x + fmodf(p.seed * 137.0f, cs.x);
+			float px = cp.x + ImFmod(p.seed * 137.0f, cs.x);
 			float py = cp.y + cs.y - eased_y * (cs.y + 40.0f);
 
 			// Alpha fade at edges
@@ -795,7 +795,7 @@ static void ShowHeroAnimation()
 				ImVec2 ch_size = ImGui::CalcTextSize(ch);
 
 				// Wave motion
-				float wave_y = sinf(T * 2.5f + i * 0.3f) * wave_amp;
+				float wave_y = ImSin(T * 2.5f + i * 0.3f) * wave_amp;
 
 				// Stagger reveal
 				float reveal = ImClamp((sub_alpha * len * 1.5f - i) / 3.0f, 0.0f, 1.0f);
@@ -1411,7 +1411,7 @@ static float CustomEaseBouncy(float t) {
 
 static float CustomEaseWobble(float t) {
 	// Wobble with overshoot
-	return t + sinf(t * 3.14159f * 3.0f) * (1.0f - t) * 0.3f;
+	return t + ImSin(t * 3.14159f * 3.0f) * (1.0f - t) * 0.3f;
 }
 
 static void ShowCustomEasingDemo()
@@ -3566,8 +3566,8 @@ static void ShowClipSystemDemo()
 
 		// Draw a spinning line/arm
 		ImVec2 end_pos(
-			center_x + cosf(rad) * arm_length,
-			center_y + sinf(rad) * arm_length);
+			center_x + ImCos(rad) * arm_length,
+			center_y + ImSin(rad) * arm_length);
 
 		draw_list->AddLine(ImVec2(center_x, center_y), end_pos, IM_COL32(100, 255, 150, 255), 4.0f);
 		draw_list->AddCircleFilled(end_pos, 8.0f, IM_COL32(100, 255, 150, 255));
@@ -3641,8 +3641,8 @@ static void ShowClipSystemDemo()
 				}
 
 				float rad = rotation * 3.14159265f / 180.0f;
-				float cos_r = cosf(rad);
-				float sin_r = sinf(rad);
+				float cos_r = ImCos(rad);
+				float sin_r = ImSin(rad);
 
 				float half = (cell_size * 0.35f) * scale;
 
@@ -5275,7 +5275,7 @@ static void ShowPathMorphingDemo()
 		for (int i = 0; i < 10; i++) {
 			float angle = (float)i * IM_PI * 2.0f / 10.0f - IM_PI / 2.0f;
 			float rad = (i % 2 == 0) ? sr : sir;
-			star_points[i] = ImVec2(cx + rad * cosf(angle), cy + rad * sinf(angle));
+			star_points[i] = ImVec2(cx + rad * ImCos(angle), cy + rad * ImSin(angle));
 		}
 		iam_path::begin(path_star_id, star_points[0])
 			.line_to(star_points[1]).line_to(star_points[2]).line_to(star_points[3])
@@ -5483,9 +5483,9 @@ static void ShowPathMorphingDemo()
 
 		// Draw rotated triangle
 		float size = 12.0f;
-		ImVec2 p1(obj_pos.x + size * cosf(angle), obj_pos.y + size * sinf(angle));
-		ImVec2 p2(obj_pos.x + size * cosf(angle + 2.5f), obj_pos.y + size * sinf(angle + 2.5f));
-		ImVec2 p3(obj_pos.x + size * cosf(angle - 2.5f), obj_pos.y + size * sinf(angle - 2.5f));
+		ImVec2 p1(obj_pos.x + size * ImCos(angle), obj_pos.y + size * ImSin(angle));
+		ImVec2 p2(obj_pos.x + size * ImCos(angle + 2.5f), obj_pos.y + size * ImSin(angle + 2.5f));
+		ImVec2 p3(obj_pos.x + size * ImCos(angle - 2.5f), obj_pos.y + size * ImSin(angle - 2.5f));
 		draw->AddTriangleFilled(p1, p2, p3, IM_COL32(255, 200, 100, 255));
 
 		ImGui::TextDisabled("Object follows the morphed path with proper rotation.");
@@ -6744,15 +6744,8 @@ static void ShowTransformInterpolationDemo()
 		static float blend = 0.5f;
 		ImGui::SliderFloat("Blend##TransformBasic", &blend, 0.0f, 1.0f);
 
-		iam_transform t_a;
-		t_a.position = ImVec2(50.0f, 50.0f);
-		t_a.rotation = 0.0f;
-		t_a.scale = ImVec2(1.0f, 1.0f);
-
-		iam_transform t_b;
-		t_b.position = ImVec2(200.0f, 80.0f);
-		t_b.rotation = 1.57f;  // 90 degrees
-		t_b.scale = ImVec2(1.5f, 0.5f);
+		iam_transform t_a = iam_transform(ImVec2(50.0f, 50.0f), 0.0f, ImVec2(1.0f, 1.0f));
+		iam_transform t_b = iam_transform(ImVec2(200.0f, 80.0f), 1.57f, ImVec2(1.5f, 0.5f));
 
 		iam_transform result = iam_transform_lerp(t_a, t_b, blend);
 
@@ -6768,8 +6761,8 @@ static void ShowTransformInterpolationDemo()
 		// Draw transformed rectangle
 		float hw = 30.0f * result.scale.x;
 		float hh = 20.0f * result.scale.y;
-		float cos_r = cosf(result.rotation);
-		float sin_r = sinf(result.rotation);
+		float cos_r = ImCos(result.rotation);
+		float sin_r = ImSin(result.rotation);
 
 		ImVec2 center(canvas_pos.x + result.position.x, canvas_pos.y + result.position.y);
 		ImVec2 corners[4] = {
@@ -6850,8 +6843,8 @@ static void ShowTransformInterpolationDemo()
 		// Draw animated rectangle
 		float hw = 25.0f * current.scale.x;
 		float hh = 25.0f * current.scale.y;
-		float cos_r = cosf(current.rotation);
-		float sin_r = sinf(current.rotation);
+		float cos_r = ImCos(current.rotation);
+		float sin_r = ImSin(current.rotation);
 
 		ImVec2 center(canvas_pos.x + current.position.x, canvas_pos.y + current.position.y);
 		ImVec2 corners[4] = {
@@ -6934,8 +6927,8 @@ static void ShowTransformInterpolationDemo()
 		// Draw animated rectangle
 		float hw = 40.0f;
 		float hh = 25.0f;
-		float cos_r = cosf(current.rotation);
-		float sin_r = sinf(current.rotation);
+		float cos_r = ImCos(current.rotation);
+		float sin_r = ImSin(current.rotation);
 
 		ImVec2 center(canvas_pos.x + current.position.x, canvas_pos.y + current.position.y);
 		ImVec2 corners[4] = {
@@ -7005,8 +6998,8 @@ static void ShowTransformInterpolationDemo()
 		{
 			float hw = 20.0f;
 			float hh = 20.0f;
-			float cos_r = cosf(parent.rotation);
-			float sin_r = sinf(parent.rotation);
+			float cos_r = ImCos(parent.rotation);
+			float sin_r = ImSin(parent.rotation);
 			ImVec2 center(canvas_pos.x + parent.position.x, canvas_pos.y + parent.position.y);
 			ImVec2 corners[4] = {
 				ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
@@ -7024,8 +7017,8 @@ static void ShowTransformInterpolationDemo()
 		{
 			float hw = 10.0f * composed.scale.x;
 			float hh = 10.0f * composed.scale.y;
-			float cos_r = cosf(composed.rotation);
-			float sin_r = sinf(composed.rotation);
+			float cos_r = ImCos(composed.rotation);
+			float sin_r = ImSin(composed.rotation);
 			ImVec2 center(canvas_pos.x + composed.position.x, canvas_pos.y + composed.position.y);
 			ImVec2 corners[4] = {
 				ImVec2(-hw, -hh), ImVec2(hw, -hh), ImVec2(hw, hh), ImVec2(-hw, hh)
@@ -7229,7 +7222,7 @@ static void ShowStressTestDemo()
 
 			// Ping-pong cycle for this animation
 			float cycle_duration = anim_duration * 2.0f;
-			float cycle_pos = fmodf(local_time, cycle_duration);
+			float cycle_pos = ImFmod(local_time, cycle_duration);
 			bool going_up = cycle_pos < anim_duration;
 
 			// Determine target based on cycle phase and CAPTURE the animated value
@@ -7245,7 +7238,7 @@ static void ShowStressTestDemo()
 					float angle_offset = (float)i * 0.1f;  // Each has different angle
 					float radius = going_up ? 1.0f : 0.0f;
 					float angle = angle_offset + (going_up ? 0.0f : 3.14159f);
-					ImVec2 target(cosf(angle) * radius, sinf(angle) * radius);
+					ImVec2 target(ImCos(angle) * radius, ImSin(angle) * radius);
 					vec2_values[i] = iam_tween_vec2(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
 					break;
 				}
@@ -7256,7 +7249,7 @@ static void ShowStressTestDemo()
 					if (going_up) {
 						target = ImVec4(base_hue, 0.9f, 1.0f, 1.0f);
 					} else {
-						target = ImVec4(fmodf(base_hue + 0.5f, 1.0f), 0.3f, 0.4f, 1.0f);
+						target = ImVec4(ImFmod(base_hue + 0.5f, 1.0f), 0.3f, 0.4f, 1.0f);
 					}
 					vec4_values[i] = iam_tween_vec4(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
 					break;
@@ -7264,7 +7257,7 @@ static void ShowStressTestDemo()
 				case 3: // Color tweens - cycle through hues
 				{
 					float base_hue = (float)(i % anim_count) / (float)anim_count;
-					float target_hue = going_up ? base_hue : fmodf(base_hue + 0.33f, 1.0f);
+					float target_hue = going_up ? base_hue : ImFmod(base_hue + 0.33f, 1.0f);
 					// Convert hue to RGB
 					float h = target_hue * 6.0f;
 					int hi = (int)h % 6;
@@ -7294,8 +7287,8 @@ static void ShowStressTestDemo()
 						}
 						case 1: {
 							float angle_offset = (float)i * 0.15f;
-							ImVec2 target(going_up ? cosf(angle_offset) : -cosf(angle_offset),
-							              going_up ? sinf(angle_offset) : -sinf(angle_offset));
+							ImVec2 target(going_up ? ImCos(angle_offset) : -ImCos(angle_offset),
+							              going_up ? ImSin(angle_offset) : -ImSin(angle_offset));
 							vec2_values[i] = iam_tween_vec2(id, 0, target, anim_duration, iam_ease_preset(ease_type), iam_policy_crossfade, dt);
 							break;
 						}
@@ -7468,14 +7461,11 @@ void ImAnimDemoWindow()
 	// Start profiler frame
 	iam_profiler_begin_frame();
 
-	// Update animation systems
-	iam_profiler_begin("iam_update_begin_frame");
-	iam_update_begin_frame();
-	iam_profiler_end();
-
-	iam_profiler_begin("iam_clip_update");
-	iam_clip_update(GetSafeDeltaTime());
-	iam_profiler_end();
+	// Note: iam_update_begin_frame() and iam_clip_update() should be called once per frame
+	// in the main loop, not here. If called in main.cpp, don't call again here.
+	// Uncomment if this demo is the only ImAnim user:
+	// iam_update_begin_frame();
+	// iam_clip_update(GetSafeDeltaTime());
 
 	ImGui::SetNextWindowSize(ImVec2(650, 750), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("Anim Demo")) {

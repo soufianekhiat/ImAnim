@@ -14,6 +14,14 @@
 #include <limits.h>
 #include <float.h>
 
+// PI constants
+#ifndef IAM_PI
+static float const IAM_PI = 3.1415926535897932384626433832795f;
+#endif // !IAM_PI
+#ifndef IAM_2PI
+static float const IAM_2PI = IAM_PI * 2.0f;
+#endif // !IAM_2PI
+
 // ----------------------------------------------------
 // Public enums & descriptors (C-style)
 // ----------------------------------------------------
@@ -555,9 +563,9 @@ struct iam_transform {
 	ImVec2 scale;                // Scale (1,1 = identity)
 	float rotation;              // Rotation in radians
 
-	iam_transform() : position(0, 0), rotation(0), scale(1, 1) {}
+	iam_transform() : position(0, 0), scale(1, 1), rotation(0) {}
 	iam_transform(ImVec2 pos, float rot = 0, ImVec2 scl = ImVec2(1, 1))
-		: position(pos), rotation(rot), scale(scl) {}
+		: position(pos), scale(scl), rotation(rot) {}
 
 	// Create identity transform
 	static iam_transform identity() { return iam_transform(); }

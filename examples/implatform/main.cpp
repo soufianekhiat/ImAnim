@@ -27,9 +27,11 @@ extern "C" {
 #include <ImPlatform.h>
 
 #include <stdio.h>
+#include "im_anim.h"
 
 extern void ImAnimDemoWindow();
 extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 int main()
 {
@@ -119,11 +121,18 @@ int main()
 		ImPlatform_PlatformNewFrame();
 		ImGui::NewFrame();
 
+		// >>> ImAnim frame setup (required every frame) <<<
+		iam_update_begin_frame();
+		iam_clip_update(ImGui::GetIO().DeltaTime);
+
 		// Show ImAnim demo window
 		ImAnimDemoWindow();
 
 		// Show Doc
 		ImAnimDocWindow();
+
+		// Show Usecases
+		ImAnimUsecaseWindow();
 
 		// Show ImGui demo window for reference
 		static bool show_imgui_demo = true;

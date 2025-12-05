@@ -207,7 +207,7 @@ static void DocSection_TweenTypes()
 		ImGui::Separator();
 		ImGui::Text("Interactive Example:");
 
-		static ImVec2 target_pos(200.0f, 50.0f);
+		static ImVec2 target_pos(50.0f, 50.0f);  // Start at corner 0
 		static int corner = 0;
 		ImVec2 corners[] = {
 			ImVec2(50.0f, 50.0f),
@@ -4625,7 +4625,7 @@ static void DocSection_TransformMatrix()
 		if (auto_animate)
 		{
 			mat_angle += ImGui::GetIO().DeltaTime * 1.5f;
-			mat_scale = 0.7f + 0.3f * sinf(mat_angle * 0.5f);
+			mat_scale = 0.7f + 0.3f * ImSin(mat_angle * 0.5f);
 		}
 		else
 		{
@@ -4679,8 +4679,8 @@ static void DocSection_TransformMatrix()
 		{
 			float sx = corners[i].x * mat_scale;
 			float sy = corners[i].y * mat_scale;
-			float rx = sx * cosf(mat_angle) - sy * sinf(mat_angle);
-			float ry = sx * sinf(mat_angle) + sy * cosf(mat_angle);
+			float rx = sx * ImCos(mat_angle) - sy * ImSin(mat_angle);
+			float ry = sx * ImSin(mat_angle) + sy * ImCos(mat_angle);
 			corners[i] = ImVec2(center.x + rx, center.y + ry);
 		}
 
