@@ -11,23 +11,22 @@
 #include <windows.h>
 #endif
 
-#define IMGUI_VERSION_BAKEDFONT 19200 //The version number where ImFontBaked and global ImGuiStoragePair were introduced
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= IMGUI_VERSION_BAKEDFONT
-	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
-#define IMGUI_STORAGE_PAIR ImGuiStoragePair
-typedef ImFontBaked FontType;
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	// ImGuiStoragePair is nested in ImGuiStorage in Pre-1.92.0 versions
 #define IMGUI_STORAGE_PAIR ImGuiStorage::ImGuiStoragePair
 typedef ImFont FontType;
+#else
+	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
+#define IMGUI_STORAGE_PAIR ImGuiStoragePair
+typedef ImFontBaked FontType;
 #endif
 
 static FontType* GetBakedFont(ImFont* font, float font_size) {
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM > IMGUI_VERSION_BAKEDFONT
-	return font->GetFontBaked(font_size);
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	(void)font_size; // suppress unused warning
 	return font;
+#else
+	return font->GetFontBaked(font_size);
 #endif
 }
 

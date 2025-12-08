@@ -14,6 +14,10 @@
 #include <limits.h>
 #include <float.h>
 
+#define IMGUI_VERSION_BAKEDFONT 19200 //The version number where ImFontBaked and global ImGuiStoragePair were introduced
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM < IMGUI_VERSION_BAKEDFONT
+#define IM_ANIM_PRE_19200_COMPATIBILITY
+#endif
 // ----------------------------------------------------
 // Public enums & descriptors (C-style)
 // ----------------------------------------------------

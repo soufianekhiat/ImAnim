@@ -15,6 +15,10 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+constexpr auto ImGuiChildFlags_Borders = ImGuiChildFlags_Border;
+#endif
+
 // im_anim API is now in global namespace with iam_ prefix
 
 // ============================================================
@@ -112,7 +116,9 @@ static void ShowHeroAnimation()
 	// - Secondary action (breathing, wobble)
 	// - Continuous looping with smooth phase transitions
 	{
+#ifndef PI
 		const float PI = 3.14159265f;
+#endif // !PI
 		const int PARTICLE_COUNT = 32;
 
 		// Particle persistent state
@@ -1486,6 +1492,15 @@ static void ShowCustomEasingDemo()
 	ImGui::TextDisabled("  iam_tween_float(id, ch, target, dur, iam_ease_custom_fn(0), policy, dt);");
 }
 
+
+ImGuiID GetID(int n){
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+	ImGuiID seed = ImGui::GetCurrentWindow()->IDStack.back();
+	return ImHashData(&n, sizeof(n), seed);
+#else
+	return ImGui::GetID(n);
+#endif
+}
 // ============================================================
 // SECTION: Basic Tweens
 // ============================================================
@@ -1648,7 +1663,7 @@ static void ShowBasicTweensDemo()
 
 		const int num_dots = 12;
 		for (int i = 0; i < num_dots; i++) {
-			ImGuiID id = ImGui::GetID(i + 100);
+			ImGuiID id = GetID(i + 100);
 			float stagger_delay = (float)i * 0.08f;
 			float local_time = wave_active ? ImMax(0.0f, wave_time - stagger_delay) : 0.0f;
 			float normalized_t = ImClamp(local_time / 0.6f, 0.0f, 1.0f);
@@ -1715,7 +1730,7 @@ static void ShowBasicTweensDemo()
 		float const vis_width = 300.0f;
 		float const text_width = 100.0f;
 		for (int i = 0; i < 4; i++) {
-			ImGuiID id = ImGui::GetID(i + 200);
+			ImGuiID id = GetID(i + 200);
 			float x_pos = iam_tween_float(id, ImHashStr("spring_x"),
 				spring_triggered ? (vis_width - 20.0f) : 20.0f,
 				1.5f, iam_ease_spring_desc(1.0f, configs[i].stiffness, configs[i].damping, 0.0f),
@@ -5088,7 +5103,11 @@ static void ShowScrollDemo()
 	ImGui::Separator();
 
 	// Scrollable child window
+#ifdef IM_ANIM_COMPAT_1_92_OR_NEWER
 	ImGui::BeginChild("ScrollDemoChild", ImVec2(0, 300), ImGuiChildFlags_Borders);
+#else
+	ImGui::BeginChild("ScrollDemoChild", ImVec2(0, 300), ImGuiChildFlags_Border);
+#endif
 
 	// Apply scroll commands inside the child window
 	if (scroll_top) {
