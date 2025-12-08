@@ -300,7 +300,7 @@ static void ShowUsecase_SidebarNavigation()
 	}
 
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 200);
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 300);  // Taller canvas for wider Y range
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	// Background (main content area)
@@ -906,11 +906,12 @@ static void ShowUsecase_Accordion()
 	static bool sections_open[3] = { true, false, false };
 	const char* section_titles[3] = { "General Settings", "Advanced Options", "About" };
 	const char* section_contents[3] = {
-		"Configure your basic preferences here.",
-		"Expert settings for power users.",
-		"Version 1.0.0 - Created with ImAnim"
+		"Configure your basic preferences here.\nThis section has 2 lines.",
+		"Expert settings for power users.\nWarning: Changes may affect performance.\nUse with caution.\nThis section has 4 lines of content.",
+		"Version 1.0.0\nCreated with ImAnim\nA powerful animation library.\nBuilt for ImGui.\nMIT License.\nThis section has 6 lines."
 	};
-	float content_heights[3] = { 40.0f, 40.0f, 40.0f };
+	// Different heights for different content amounts
+	float content_heights[3] = { 50.0f, 80.0f, 110.0f };
 
 	ImVec2 start_pos = ImGui::GetCursorScreenPos();
 	float section_width = ImGui::GetContentRegionAvail().x - 10.0f;
@@ -1154,8 +1155,6 @@ static void ShowUsecase_FABMenu()
 
 	dl->AddLine(h1, h2, IM_COL32_WHITE, 3.0f);
 	dl->AddLine(v1, v2, IM_COL32_WHITE, 3.0f);
-
-	ImGui::Dummy(canvas_size);
 }
 
 // ============================================================
@@ -2571,7 +2570,9 @@ static void ShowUsecase_Stepper()
 
 		// Animate individual step
 		ImGuiID step_id = id + i + 1;
-		float target_fill = is_complete ? 1.0f : (is_current ? 0.5f : 0.0f);
+		// When at the last step (current), fill completely; otherwise partial fill for current
+		bool is_last_step = (i == step_count - 1);
+		float target_fill = is_complete ? 1.0f : (is_current ? (is_last_step ? 1.0f : 0.5f) : 0.0f);
 		float fill = iam_tween_float(step_id, ImHashStr("fill"), target_fill, 0.3f,
 			iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt);
 
@@ -3010,178 +3011,9 @@ static void ShowUsecase_RatingStars()
 // ============================================================
 // USECASE 28: Countdown Timer
 // ============================================================
-static void ShowUsecase_CountdownTimer()
-{
-	ImGui::TextWrapped(
-		"Animated countdown timer with smooth digit transitions. "
-		"Used for sales, events, or time-limited offers.");
-
-	float dt = GetUsecaseDeltaTime();
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	static float countdown = 125.0f; // 2:05 in seconds
-	static bool running = true;
-
-	if (running)
-		countdown -= dt;
-	if (countdown < 0) countdown = 0;
-
-	if (ImGui::Button(running ? "Pause" : "Resume"))
-		running = !running;
-	ImGui::SameLine();
-	if (ImGui::Button("Reset (5:00)"))
-	{
-		countdown = 300.0f;
-		running = true;
-	}
-
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 100);
-
-	// Background
-	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
-		IM_COL32(25, 27, 35, 255), 4.0f);
-
-	// Parse time
-	int total_seconds = (int)countdown;
-	int minutes = total_seconds / 60;
-	int seconds = total_seconds % 60;
-
-	// Draw time centered in canvas (simple overlapping style)
-	float font_scale = 3.5f;
-
-	// Format time string
-	char time_str[16];
-	snprintf(time_str, sizeof(time_str), "%02d:%02d", minutes, seconds);
-
-	// Calculate size at scaled font
-	ImVec2 text_size = ImGui::CalcTextSize(time_str);
-	text_size.x *= font_scale;
-	text_size.y *= font_scale;
-
-	// Center position
-	ImVec2 text_pos(
-		pos.x + (canvas_size.x - text_size.x) * 0.5f,
-		pos.y + (canvas_size.y - text_size.y) * 0.5f
-	);
-
-	// Animate scale when second changes
-	float anim_scale = font_scale;
-	if (running)
-	{
-		float frac = countdown - floorf(countdown);
-		if (frac > 0.9f)
-		{
-			float t = (frac - 0.9f) / 0.1f;
-			anim_scale = font_scale * (1.0f + t * 0.05f);  // Subtle pulse
-		}
-	}
-
-	// Determine color
-	ImU32 text_color = countdown <= 10 ? IM_COL32(231, 76, 60, 255) : IM_COL32(220, 220, 230, 255);
-
-	// Draw the time (overlapping the background directly)
-	dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * anim_scale, text_pos, text_color, time_str);
-
-	ImGui::Dummy(canvas_size);
-}
-
 // ============================================================
 // USECASE 29: Breadcrumb Navigation
 // ============================================================
-static void ShowUsecase_Breadcrumb()
-{
-	ImGui::TextWrapped(
-		"Animated breadcrumb navigation with hover effects. "
-		"Shows hierarchical path with clickable items.");
-
-	float dt = GetUsecaseDeltaTime();
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	static int current_level = 3;
-	const char* items[] = { "Home", "Products", "Electronics", "Laptops", "Gaming" };
-	const int item_count = 5;
-
-	if (ImGui::Button("Go Back##Breadcrumb") && current_level > 0)
-		current_level--;
-	ImGui::SameLine();
-	if (ImGui::Button("Go Forward##Breadcrumb") && current_level < item_count - 1)
-		current_level++;
-	ImGui::SameLine();
-	if (ImGui::Button("Reset##Breadcrumb"))
-		current_level = 0;
-
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 50);
-
-	// Background
-	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
-		IM_COL32(25, 27, 35, 255), 4.0f);
-
-	float x = pos.x + 16.0f;
-	float center_y = pos.y + canvas_size.y * 0.5f;
-
-	for (int i = 0; i <= current_level && i < item_count; i++)
-	{
-		bool is_current = (i == current_level);
-		ImGuiID id = ImGui::GetID(items[i]);
-
-		// Calculate text size
-		ImVec2 text_size = ImGui::CalcTextSize(items[i]);
-		float padding = 8.0f;
-
-		// Hover detection
-		ImGui::SetCursorScreenPos(ImVec2(x - padding, center_y - text_size.y * 0.5f - padding));
-		char btn_id[32];
-		snprintf(btn_id, sizeof(btn_id), "##bread_%d", i);
-		if (ImGui::InvisibleButton(btn_id, ImVec2(text_size.x + padding * 2, text_size.y + padding * 2)))
-		{
-			if (!is_current)
-				current_level = i;
-		}
-		bool hovered = ImGui::IsItemHovered();
-
-		// Animate hover - slower for more noticeable effect
-		float target_hover = hovered ? 1.0f : 0.0f;
-		float hover_anim = iam_tween_float(id, ImHashStr("hover"), target_hover, 0.35f,
-			iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt);
-
-		// Colors
-		ImU32 text_color;
-		if (is_current)
-			text_color = IM_COL32(91, 194, 231, 255);
-		else
-		{
-			int alpha = (int)(150 + hover_anim * 105);
-			text_color = IM_COL32(180, 180, 190, alpha);
-		}
-
-		// Hover background
-		if (hover_anim > 0.01f && !is_current)
-		{
-			dl->AddRectFilled(
-				ImVec2(x - padding, center_y - text_size.y * 0.5f - 4),
-				ImVec2(x + text_size.x + padding, center_y + text_size.y * 0.5f + 4),
-				IM_COL32(60, 65, 80, (int)(100 * hover_anim)), 4.0f);
-		}
-
-		// Text
-		dl->AddText(ImVec2(x, center_y - text_size.y * 0.5f), text_color, items[i]);
-
-		x += text_size.x + padding * 2;
-
-		// Separator arrow
-		if (i < current_level)
-		{
-			dl->AddText(ImVec2(x, center_y - text_size.y * 0.5f), IM_COL32(100, 100, 110, 255), ">");
-			x += ImGui::CalcTextSize(">").x + padding * 2;
-		}
-	}
-
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + canvas_size.y + 8));
-	ImGui::Dummy(ImVec2(1, 1));
-}
-
 // ============================================================
 // 30. Animated Checkbox
 // Smooth checkmark drawing animation with scale effect
@@ -3450,78 +3282,6 @@ static void ShowUsecase_AnimatedRadio()
 // 33. Typing Text Effect
 // Typewriter-style text reveal animation
 // ============================================================
-static void ShowUsecase_TypingText()
-{
-	ImGui::TextWrapped("Typewriter text animation with cursor:");
-
-	static float char_timer = 0.0f;
-	static int visible_chars = 0;
-	static bool cursor_visible = true;
-	static float cursor_timer = 0.0f;
-
-	float dt = ImGui::GetIO().DeltaTime;
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-	float scale = ImGui::GetFontSize() / 13.0f;
-
-	const char* full_text = "Hello! Welcome to ImAnim demo...";
-	int text_len = (int)strlen(full_text);
-
-	// Typing animation
-	char_timer += dt;
-	float char_delay = 0.06f;
-	if (char_timer >= char_delay && visible_chars < text_len)
-	{
-		visible_chars++;
-		char_timer = 0.0f;
-	}
-
-	// Cursor blink
-	cursor_timer += dt;
-	if (cursor_timer >= 0.5f)
-	{
-		cursor_visible = !cursor_visible;
-		cursor_timer = 0.0f;
-	}
-
-	// Reset button
-	if (ImGui::Button("Restart"))
-	{
-		visible_chars = 0;
-		char_timer = 0.0f;
-	}
-
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 60);
-
-	// Background
-	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
-		IM_COL32(25, 28, 35, 255), 8.0f);
-
-	// Draw visible text
-	char visible_text[256];
-	int copy_len = ImMin(visible_chars, (int)sizeof(visible_text) - 1);
-	strncpy(visible_text, full_text, copy_len);
-	visible_text[copy_len] = '\0';
-
-	ImVec2 text_pos(pos.x + 16 * scale, pos.y + (canvas_size.y - ImGui::GetFontSize()) * 0.5f);
-	dl->AddText(text_pos, IM_COL32(200, 255, 200, 255), visible_text);
-
-	// Cursor
-	if (cursor_visible)
-	{
-		ImVec2 text_size = ImGui::CalcTextSize(visible_text);
-		float cursor_x = text_pos.x + text_size.x + 2;
-		float cursor_h = ImGui::GetFontSize();
-		dl->AddRectFilled(
-			ImVec2(cursor_x, text_pos.y),
-			ImVec2(cursor_x + 2 * scale, text_pos.y + cursor_h),
-			IM_COL32(200, 255, 200, 255));
-	}
-
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + canvas_size.y + 8));
-	ImGui::Dummy(ImVec2(1, 1));
-}
-
 // ============================================================
 // 34. Shake Animation
 // Error feedback shake effect for form validation
@@ -4689,7 +4449,7 @@ static void ShowUsecase_AnimatedPieChart()
 		IM_COL32(156, 39, 176, 255)
 	};
 
-	ImVec2 center(pos.x + 110 * scale, pos.y + canvas_size.y * 0.5f);
+	ImVec2 center(pos.x + 110 * scale, pos.y + canvas_size.y * 0.55f);  // Shifted down slightly
 	float outer_radius = 70 * scale;
 	float inner_radius = 40 * scale;
 
@@ -4763,11 +4523,11 @@ static void ShowUsecase_AnimatedPieChart()
 		start_angle = end_angle;
 	}
 
-	// Legend (positioned higher to avoid overlap)
-	float legend_x = pos.x + 190 * scale;
+	// Legend - positioned at top right, above the chart
+	float legend_x = pos.x + 200 * scale;
 	for (int i = 0; i < 5; i++)
 	{
-		float y = pos.y + 20 * scale + i * 24 * scale;
+		float y = pos.y + 10 * scale + i * 22 * scale;
 
 		// Color box
 		dl->AddRectFilled(ImVec2(legend_x, y), ImVec2(legend_x + 16 * scale, y + 16 * scale), colors[i], 2.0f);
@@ -5028,14 +4788,14 @@ static void ShowUsecase_RadarChart()
 	float scale = ImGui::GetFontSize() / 13.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 300);
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 375);  // 25% taller canvas
 
 	// Background
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
 		IM_COL32(25, 28, 35, 255), 4.0f);
 
 	const char* axis_labels[] = { "Speed", "Power", "Defense", "Magic", "Stamina", "Luck" };
-	ImVec2 center(pos.x + canvas_size.x * 0.35f, pos.y + canvas_size.y * 0.5f);
+	ImVec2 center(pos.x + canvas_size.x * 0.35f, pos.y + canvas_size.y * 0.5f);  // Centered Y
 	float max_radius = 75 * scale;
 
 	// Draw grid circles
@@ -5133,14 +4893,14 @@ static void ShowUsecase_GaugeMeter()
 	float scale = ImGui::GetFontSize() / 13.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 200);
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 250);  // 25% taller canvas
 
 	// Background
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
 		IM_COL32(25, 28, 35, 255), 4.0f);
 
-	// Center positioned at bottom of canvas for upward-facing arc
-	ImVec2 center(pos.x + canvas_size.x * 0.5f, pos.y + canvas_size.y - 15 * scale);
+	// Center positioned lower in the taller canvas for upward-facing arc
+	ImVec2 center(pos.x + canvas_size.x * 0.5f, pos.y + canvas_size.y - 30 * scale);
 	float outer_radius = 65 * scale;
 	float inner_radius = 45 * scale;
 
@@ -5652,7 +5412,7 @@ static void ShowUsecase_ProgressDashboard()
 	float scale = ImGui::GetFontSize() / 13.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 200);
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 250);  // 25% taller canvas
 
 	// Background
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
@@ -5847,133 +5607,6 @@ static void ShowUsecase_AreaChart()
 
 	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + canvas_size.y + 8));
 	ImGui::Dummy(ImVec2(1, 1));
-}
-
-// ============================================================
-// USECASE: Floating Action Button (FAB)
-// ============================================================
-static void ShowUsecase_FloatingActionButton()
-{
-	ImGui::TextWrapped(
-		"Floating Action Button that expands to reveal multiple actions. "
-		"Material Design style with rotation and staggered menu items.");
-
-	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static bool fab_open = false;
-	static float fab_time = 0.0f;
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 180 * scale);
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	// Background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(25, 30, 40, 255), 8 * scale);
-
-	// FAB position (bottom right of canvas)
-	float fab_radius = 28 * scale;
-	ImVec2 fab_center(canvas_pos.x + canvas_size.x - 50 * scale,
-					  canvas_pos.y + canvas_size.y - 50 * scale);
-
-	// Animate FAB rotation
-	float rotation = iam_tween_float(ImGui::GetID("fab_rotation"), 0,
-		fab_open ? 0.785f : 0.0f, 0.25f,  // 45 degrees
-		iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-
-	float expand = iam_tween_float(ImGui::GetID("fab_expand"), 0,
-		fab_open ? 1.0f : 0.0f, 0.3f,
-		iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-
-	// Mini FABs (actions)
-	struct FabAction {
-		const char* icon;
-		ImU32 color;
-		float offset_y;
-	};
-	FabAction actions[] = {
-		{ "C", IM_COL32(76, 175, 80, 255), 70 },   // Camera/Create
-		{ "S", IM_COL32(33, 150, 243, 255), 130 }, // Share
-		{ "E", IM_COL32(255, 152, 0, 255), 190 }   // Edit
-	};
-
-	if (fab_open) fab_time += dt;
-	else fab_time = 0.0f;
-
-	for (int i = 0; i < 3; i++)
-	{
-		float delay = i * 0.05f;
-		float item_expand = fab_time > delay ?
-			iam_tween_float(ImGui::GetID("fab_item") + i, 0, 1.0f, 0.2f,
-				iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt) :
-			iam_tween_float(ImGui::GetID("fab_item") + i, 0, 0.0f, 0.15f,
-				iam_ease_preset(iam_ease_in_quad), iam_policy_crossfade, dt);
-
-		if (item_expand > 0.01f)
-		{
-			float mini_radius = 20 * scale * item_expand;
-			ImVec2 mini_center(fab_center.x, fab_center.y - actions[i].offset_y * scale * expand);
-
-			// Shadow
-			dl->AddCircleFilled(ImVec2(mini_center.x + 2 * scale, mini_center.y + 2 * scale),
-				mini_radius, IM_COL32(0, 0, 0, 60));
-			// Button
-			dl->AddCircleFilled(mini_center, mini_radius, actions[i].color);
-			// Icon
-			ImVec2 icon_size = ImGui::CalcTextSize(actions[i].icon);
-			dl->AddText(ImVec2(mini_center.x - icon_size.x * 0.5f, mini_center.y - icon_size.y * 0.5f),
-				IM_COL32(255, 255, 255, (int)(item_expand * 255)), actions[i].icon);
-		}
-	}
-
-	// Main FAB shadow
-	dl->AddCircleFilled(ImVec2(fab_center.x + 3 * scale, fab_center.y + 3 * scale),
-		fab_radius, IM_COL32(0, 0, 0, 80));
-
-	// Main FAB
-	dl->AddCircleFilled(fab_center, fab_radius, IM_COL32(244, 67, 54, 255));
-
-	// Plus icon that rotates to X
-	float cos_r = ImCos(rotation);
-	float sin_r = ImSin(rotation);
-	float line_len = 10 * scale;
-
-	// Horizontal line
-	ImVec2 h1(fab_center.x - line_len * cos_r, fab_center.y - line_len * sin_r);
-	ImVec2 h2(fab_center.x + line_len * cos_r, fab_center.y + line_len * sin_r);
-	dl->AddLine(h1, h2, IM_COL32(255, 255, 255, 255), 3 * scale);
-
-	// Vertical line
-	ImVec2 v1(fab_center.x + line_len * sin_r, fab_center.y - line_len * cos_r);
-	ImVec2 v2(fab_center.x - line_len * sin_r, fab_center.y + line_len * cos_r);
-	dl->AddLine(v1, v2, IM_COL32(255, 255, 255, 255), 3 * scale);
-
-	// Click detection for main FAB
-	ImVec2 mouse = ImGui::GetMousePos();
-	float dist_sq = (mouse.x - fab_center.x) * (mouse.x - fab_center.x) +
-					(mouse.y - fab_center.y) * (mouse.y - fab_center.y);
-	if (ImGui::IsMouseClicked(0) && dist_sq <= fab_radius * fab_radius)
-	{
-		fab_open = !fab_open;
-	}
-
-	// Close when clicking outside
-	if (fab_open && ImGui::IsMouseClicked(0) && dist_sq > fab_radius * fab_radius)
-	{
-		bool clicked_mini = false;
-		for (int i = 0; i < 3; i++)
-		{
-			ImVec2 mini_center(fab_center.x, fab_center.y - actions[i].offset_y * scale * expand);
-			float mini_dist_sq = (mouse.x - mini_center.x) * (mouse.x - mini_center.x) +
-								 (mouse.y - mini_center.y) * (mouse.y - mini_center.y);
-			if (mini_dist_sq <= 20 * scale * 20 * scale) clicked_mini = true;
-		}
-		if (!clicked_mini) fab_open = false;
-	}
-
-	ImGui::Dummy(canvas_size);
 }
 
 // ============================================================
@@ -6245,7 +5878,7 @@ static void ShowUsecase_ExpandableListItem()
 		char subtitle_with_count[64];
 		snprintf(subtitle_with_count, sizeof(subtitle_with_count), "%s  (%d items)",
 			items[i].subtitle, items[i].num_lines);
-		dl->AddText(ImVec2(item_pos.x + 15 * scale, item_pos.y + 26 * scale),
+		dl->AddText(ImVec2(item_pos.x + 15 * scale, item_pos.y + 30 * scale),
 			IM_COL32(140, 145, 155, 255), subtitle_with_count);
 
 		// Expand indicator (chevron that rotates)
@@ -6401,230 +6034,6 @@ static void ShowUsecase_ImageGalleryGrid()
 	}
 
 	ImGui::Dummy(ImVec2(cols * (cell_size + gap), rows * (cell_size + gap)));
-}
-
-// ============================================================
-// USECASE: Animated Badge Counter
-// ============================================================
-static void ShowUsecase_AnimatedBadgeCounter()
-{
-	ImGui::TextWrapped(
-		"Notification badges with animated count updates. "
-		"Badges bounce and pulse when count changes.");
-
-	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static int badge_counts[4] = { 3, 12, 99, 0 };
-	static float badge_bounce[4] = { 0, 0, 0, 0 };
-
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	const char* labels[] = { "Mail", "Chat", "Alerts", "Tasks" };
-	ImU32 colors[] = {
-		IM_COL32(244, 67, 54, 255),   // Red
-		IM_COL32(76, 175, 80, 255),   // Green
-		IM_COL32(255, 152, 0, 255),   // Orange
-		IM_COL32(33, 150, 243, 255)   // Blue
-	};
-
-	float spacing = 90 * scale;
-
-	for (int i = 0; i < 4; i++)
-	{
-		ImVec2 icon_pos(pos.x + 30 * scale + i * spacing, pos.y + 40 * scale);
-
-		// Icon background (simulated app icon)
-		dl->AddRectFilled(
-			ImVec2(icon_pos.x - 25 * scale, icon_pos.y - 25 * scale),
-			ImVec2(icon_pos.x + 25 * scale, icon_pos.y + 25 * scale),
-			IM_COL32(60, 65, 80, 255), 12 * scale);
-
-		// Icon letter
-		ImVec2 letter_size = ImGui::CalcTextSize(labels[i]);
-		dl->AddText(ImVec2(icon_pos.x - letter_size.x * 0.5f, icon_pos.y - letter_size.y * 0.5f),
-			IM_COL32(200, 205, 215, 255), labels[i]);
-
-		// Animate bounce decay
-		if (badge_bounce[i] > 0.0f)
-			badge_bounce[i] = ImMax(0.0f, badge_bounce[i] - dt * 3.0f);
-
-		// Badge (only if count > 0)
-		if (badge_counts[i] > 0)
-		{
-			float bounce = iam_tween_float(ImGui::GetID("badge_bounce") + i, 0,
-				1.0f + badge_bounce[i] * 0.4f, 0.15f,
-				iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-
-			ImVec2 badge_center(icon_pos.x + 20 * scale, icon_pos.y - 20 * scale);
-			float badge_radius = 12 * scale * bounce;
-
-			// Badge glow when bouncing
-			if (badge_bounce[i] > 0.1f)
-			{
-				dl->AddCircleFilled(badge_center, badge_radius + 4 * scale,
-					IM_COL32((colors[i] >> 0) & 0xFF, (colors[i] >> 8) & 0xFF, (colors[i] >> 16) & 0xFF,
-						(int)(badge_bounce[i] * 100)));
-			}
-
-			// Badge circle
-			dl->AddCircleFilled(badge_center, badge_radius, colors[i]);
-
-			// Badge count
-			char count_str[8];
-			if (badge_counts[i] > 99)
-				snprintf(count_str, sizeof(count_str), "99+");
-			else
-				snprintf(count_str, sizeof(count_str), "%d", badge_counts[i]);
-
-			ImVec2 count_size = ImGui::CalcTextSize(count_str);
-			dl->AddText(
-				ImVec2(badge_center.x - count_size.x * 0.5f, badge_center.y - count_size.y * 0.5f),
-				IM_COL32(255, 255, 255, 255), count_str);
-		}
-
-		// Label below
-		ImVec2 label_size = ImGui::CalcTextSize(labels[i]);
-		dl->AddText(ImVec2(icon_pos.x - label_size.x * 0.5f, icon_pos.y + 30 * scale),
-			IM_COL32(150, 155, 165, 255), labels[i]);
-	}
-
-	// Control buttons
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 90 * scale));
-	if (ImGui::Button("Add Notification##Badge"))
-	{
-		int idx = (int)(ImGui::GetTime() * 10) % 4;
-		badge_counts[idx]++;
-		badge_bounce[idx] = 1.0f;
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Clear All##Badge"))
-	{
-		for (int i = 0; i < 4; i++)
-		{
-			badge_counts[i] = 0;
-			badge_bounce[i] = 0.0f;
-		}
-	}
-
-	ImGui::Dummy(ImVec2(0, 20 * scale));
-}
-
-// ============================================================
-// USECASE: Magnetic Cursor Effect
-// ============================================================
-static void ShowUsecase_MagneticCursor()
-{
-	ImGui::TextWrapped(
-		"Buttons with magnetic cursor attraction effect. "
-		"Elements subtly move towards the cursor when hovering nearby.");
-
-	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 140 * scale);
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	// Background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(25, 30, 40, 255), 8 * scale);
-
-	ImVec2 mouse = ImGui::GetMousePos();
-
-	struct MagneticButton {
-		const char* label;
-		ImVec2 base_pos;
-		float radius;
-		ImU32 color;
-	};
-
-	// Define buttons at base positions
-	float center_y = canvas_pos.y + canvas_size.y * 0.5f;
-	MagneticButton buttons[] = {
-		{ "A", ImVec2(canvas_pos.x + 80 * scale, center_y), 30 * scale, IM_COL32(244, 67, 54, 255) },
-		{ "B", ImVec2(canvas_pos.x + 180 * scale, center_y), 35 * scale, IM_COL32(76, 175, 80, 255) },
-		{ "C", ImVec2(canvas_pos.x + 290 * scale, center_y), 28 * scale, IM_COL32(33, 150, 243, 255) },
-		{ "D", ImVec2(canvas_pos.x + 380 * scale, center_y), 32 * scale, IM_COL32(255, 152, 0, 255) }
-	};
-
-	for (int i = 0; i < 4; i++)
-	{
-		ImVec2 base = buttons[i].base_pos;
-		float attract_radius = buttons[i].radius * 2.5f;
-
-		// Calculate distance to mouse
-		float dx = mouse.x - base.x;
-		float dy = mouse.y - base.y;
-		float dist = sqrtf(dx * dx + dy * dy);
-
-		// Magnetic attraction
-		float attraction = 0.0f;
-		if (dist < attract_radius && dist > 0.01f)
-		{
-			attraction = 1.0f - (dist / attract_radius);
-			attraction = attraction * attraction; // Quadratic falloff
-		}
-
-		// Target offset towards cursor
-		float max_offset = 15 * scale;
-		float target_x = (dist > 0.01f) ? (dx / dist) * max_offset * attraction : 0.0f;
-		float target_y = (dist > 0.01f) ? (dy / dist) * max_offset * attraction : 0.0f;
-
-		// Smooth the offset
-		float offset_x = iam_tween_float(ImGui::GetID("mag_x") + i, 0, target_x, 0.1f,
-			iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-		float offset_y = iam_tween_float(ImGui::GetID("mag_y") + i, 0, target_y, 0.1f,
-			iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-		ImVec2 actual_pos(base.x + offset_x, base.y + offset_y);
-
-		// Scale up when attracted
-		float target_scale = 1.0f + attraction * 0.2f;
-		float anim_scale = iam_tween_float(ImGui::GetID("mag_scale") + i, 0, target_scale, 0.15f,
-			iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-
-		float actual_radius = buttons[i].radius * anim_scale;
-
-		// Glow effect when attracted
-		if (attraction > 0.1f)
-		{
-			dl->AddCircleFilled(actual_pos, actual_radius + 8 * scale * attraction,
-				IM_COL32((buttons[i].color >> 0) & 0xFF, (buttons[i].color >> 8) & 0xFF,
-					(buttons[i].color >> 16) & 0xFF, (int)(attraction * 80)));
-		}
-
-		// Shadow
-		dl->AddCircleFilled(ImVec2(actual_pos.x + 3 * scale, actual_pos.y + 3 * scale),
-			actual_radius, IM_COL32(0, 0, 0, 60));
-
-		// Button
-		dl->AddCircleFilled(actual_pos, actual_radius, buttons[i].color);
-
-		// Label
-		ImVec2 label_size = ImGui::CalcTextSize(buttons[i].label);
-		dl->AddText(ImVec2(actual_pos.x - label_size.x * 0.5f, actual_pos.y - label_size.y * 0.5f),
-			IM_COL32(255, 255, 255, 255), buttons[i].label);
-
-		// Click effect
-		float click_dist = sqrtf((mouse.x - actual_pos.x) * (mouse.x - actual_pos.x) +
-								  (mouse.y - actual_pos.y) * (mouse.y - actual_pos.y));
-		if (ImGui::IsMouseClicked(0) && click_dist <= actual_radius)
-		{
-			// Could trigger action here
-		}
-	}
-
-	// Instruction
-	const char* hint = "Move cursor near buttons";
-	ImVec2 hint_size = ImGui::CalcTextSize(hint);
-	dl->AddText(ImVec2(canvas_pos.x + (canvas_size.x - hint_size.x) * 0.5f,
-		canvas_pos.y + canvas_size.y - 25 * scale),
-		IM_COL32(100, 105, 115, 255), hint);
-
-	ImGui::Dummy(canvas_size);
 }
 
 // ============================================================
@@ -6795,18 +6204,19 @@ static void ShowUsecase_AnimatedGraphNode()
 		ImU32 color;
 	};
 
+	// Node positions scaled 200% for larger display
 	Node nodes[] = {
-		{ ImVec2(50, 50), "Input", IM_COL32(100, 180, 255, 255) },
-		{ ImVec2(180, 30), "Process", IM_COL32(255, 180, 100, 255) },
-		{ ImVec2(180, 90), "Filter", IM_COL32(180, 100, 255, 255) },
-		{ ImVec2(310, 60), "Output", IM_COL32(100, 255, 150, 255) }
+		{ ImVec2(100, 100), "Input", IM_COL32(100, 180, 255, 255) },
+		{ ImVec2(360, 60), "Process", IM_COL32(255, 180, 100, 255) },
+		{ ImVec2(360, 180), "Filter", IM_COL32(180, 100, 255, 255) },
+		{ ImVec2(620, 120), "Output", IM_COL32(100, 255, 150, 255) }
 	};
 
 	int connections[][2] = { {0, 1}, {0, 2}, {1, 3}, {2, 3} };
 
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
-	ImVec2 canvas_size(380 * scale, 140 * scale);
+	ImVec2 canvas_size(760 * scale, 280 * scale);  // 200% larger canvas
 
 	dl->AddRectFilled(canvas_pos,
 		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
@@ -6821,10 +6231,10 @@ static void ShowUsecase_AnimatedGraphNode()
 		int from = connections[c][0];
 		int to = connections[c][1];
 
-		ImVec2 p1(canvas_pos.x + nodes[from].pos.x * scale + 35 * scale,
-				  canvas_pos.y + nodes[from].pos.y * scale + 15 * scale);
+		ImVec2 p1(canvas_pos.x + nodes[from].pos.x * scale + 70 * scale,
+				  canvas_pos.y + nodes[from].pos.y * scale + 30 * scale);
 		ImVec2 p2(canvas_pos.x + nodes[to].pos.x * scale,
-				  canvas_pos.y + nodes[to].pos.y * scale + 15 * scale);
+				  canvas_pos.y + nodes[to].pos.y * scale + 30 * scale);
 
 		// Base line
 		dl->AddLine(p1, p2, IM_COL32(80, 85, 100, 255), 2 * scale);
@@ -6840,7 +6250,7 @@ static void ShowUsecase_AnimatedGraphNode()
 	{
 		ImVec2 node_pos(canvas_pos.x + nodes[i].pos.x * scale,
 					    canvas_pos.y + nodes[i].pos.y * scale);
-		ImVec2 node_size(70 * scale, 30 * scale);
+		ImVec2 node_size(140 * scale, 60 * scale);  // 200% larger nodes
 
 		bool is_hovered = mouse.x >= node_pos.x && mouse.x <= node_pos.x + node_size.x &&
 						  mouse.y >= node_pos.y && mouse.y <= node_pos.y + node_size.y;
@@ -7015,872 +6425,2746 @@ static void ShowUsecase_PlaybackControls()
 	ImGui::Dummy(canvas_size);
 }
 
-// ============================================================
-// SURPRISE SECTION USECASES
-// ============================================================
 
 // ============================================================
-// USECASE: Orbiting Planets
+// USECASE: Icon Button Rotation
 // ============================================================
-static void ShowUsecase_OrbitingPlanets()
+static void ShowUsecase_IconButtonRotation()
 {
-	ImGui::TextWrapped(
-		"Mini solar system using iam_tween_float for smooth orbital motion and "
-		"gravitational pull effects. Click anywhere to create gravity wells!");
+	ImGui::TextWrapped("Icon button that rotates its icon shape on hover using iam_tween_float.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static float orbit_angles[4] = { 0, 1.57f, 3.14f, 4.71f };
-	static bool pull_active = false;
-	static ImVec2 pull_target;
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 200 * scale);
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// Space background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(10, 12, 20, 255), 8 * scale);
+	static bool hovered[3] = {false, false, false};
+	const char* labels[] = {"Settings", "Menu", "Add"};
 
-	ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float btn_size = 50 * scale;
+	float spacing = 70 * scale;
 
-	// Twinkling stars using iam_oscillate for smooth brightness
-	for (int i = 0; i < 20; i++)
+	for (int i = 0; i < 3; i++)
 	{
-		float sx = canvas_pos.x + ((i * 127 + 47) % (int)canvas_size.x);
-		float sy = canvas_pos.y + ((i * 89 + 23) % (int)canvas_size.y);
+		ImVec2 btn_pos(pos.x + i * spacing, pos.y);
+		ImVec2 btn_center(btn_pos.x + btn_size * 0.5f, btn_pos.y + btn_size * 0.5f);
 
-		// Each star twinkles at different rate using oscillate
-		float twinkle = 0.65f + 0.35f * iam_oscillate(ImGui::GetID("star_twinkle") + i,
-			1.0f, 0.5f + (i % 3) * 0.2f, iam_wave_sine, (float)i * 0.1f, dt);
+		ImGui::SetCursorScreenPos(btn_pos);
+		ImGui::PushID(i);
+		ImGui::InvisibleButton("icon_btn", ImVec2(btn_size, btn_size));
+		hovered[i] = ImGui::IsItemHovered();
+		ImGui::PopID();
 
-		dl->AddCircleFilled(ImVec2(sx, sy), 2 * scale * twinkle,
-			IM_COL32(255, 255, 255, (int)(twinkle * 255)));
+		// Rotation tween (in radians)
+		float target_rot = hovered[i] ? (IM_PI * 0.5f) : 0.0f;  // 90 degrees
+		float rotation = iam_tween_float(ImGui::GetID("icon_rot") + i, ImHashStr("rot"),
+			target_rot, 0.3f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		// Scale on hover
+		float target_scale = hovered[i] ? 1.15f : 1.0f;
+		float btn_scale = iam_tween_float(ImGui::GetID("icon_scl") + i, ImHashStr("scl"),
+			target_scale, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		// Background
+		ImU32 bg_col = hovered[i] ? IM_COL32(70, 130, 180, 255) : IM_COL32(60, 65, 75, 255);
+		dl->AddCircleFilled(btn_center, btn_size * 0.45f * btn_scale, bg_col);
+
+		// Draw rotating icon shapes
+		float icon_r = 12 * scale * btn_scale;
+		float cos_r = cosf(rotation);
+		float sin_r = sinf(rotation);
+
+		if (i == 0) // Settings gear icon - rotating lines
+		{
+			for (int j = 0; j < 4; j++)
+			{
+				float angle = rotation + j * (IM_PI * 0.5f);
+				float c = cosf(angle);
+				float s = sinf(angle);
+				dl->AddLine(
+					ImVec2(btn_center.x + c * 5 * scale, btn_center.y + s * 5 * scale),
+					ImVec2(btn_center.x + c * icon_r, btn_center.y + s * icon_r),
+					IM_COL32(255, 255, 255, 255), 3 * scale);
+			}
+			dl->AddCircle(btn_center, 6 * scale * btn_scale, IM_COL32(255, 255, 255, 255), 0, 2 * scale);
+		}
+		else if (i == 1) // Menu icon - rotating lines
+		{
+			for (int j = -1; j <= 1; j++)
+			{
+				float offset = j * 5 * scale;
+				// Rotate the offset
+				float rx = -offset * sin_r;
+				float ry = offset * cos_r;
+				dl->AddLine(
+					ImVec2(btn_center.x + rx - 8 * scale * cos_r, btn_center.y + ry - 8 * scale * sin_r),
+					ImVec2(btn_center.x + rx + 8 * scale * cos_r, btn_center.y + ry + 8 * scale * sin_r),
+					IM_COL32(255, 255, 255, 255), 2.5f * scale);
+			}
+		}
+		else // Add icon - rotating plus
+		{
+			// Vertical line (rotated)
+			dl->AddLine(
+				ImVec2(btn_center.x - sin_r * icon_r, btn_center.y + cos_r * icon_r),
+				ImVec2(btn_center.x + sin_r * icon_r, btn_center.y - cos_r * icon_r),
+				IM_COL32(255, 255, 255, 255), 3 * scale);
+			// Horizontal line (rotated)
+			dl->AddLine(
+				ImVec2(btn_center.x - cos_r * icon_r, btn_center.y - sin_r * icon_r),
+				ImVec2(btn_center.x + cos_r * icon_r, btn_center.y + sin_r * icon_r),
+				IM_COL32(255, 255, 255, 255), 3 * scale);
+		}
+
+		// Label
+		ImVec2 label_size = ImGui::CalcTextSize(labels[i]);
+		dl->AddText(ImVec2(btn_center.x - label_size.x * 0.5f, btn_pos.y + btn_size + 5 * scale),
+			IM_COL32(150, 150, 160, 255), labels[i]);
 	}
 
-	// Sun pulse using iam_oscillate
-	float sun_pulse = 1.0f + 0.15f * iam_oscillate(ImGui::GetID("sun_pulse"),
-		1.0f, 0.5f, iam_wave_sine, 0.0f, dt);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size + 30 * scale));
+	ImGui::Dummy(ImVec2(1, 1));
+}
 
-	dl->AddCircleFilled(center, 25 * scale * sun_pulse, IM_COL32(255, 200, 50, 40));
-	dl->AddCircleFilled(center, 18 * scale * sun_pulse, IM_COL32(255, 220, 100, 100));
-	dl->AddCircleFilled(center, 12 * scale, IM_COL32(255, 240, 150, 255));
+// ============================================================
+// USECASE: Button Glow Effect
+// ============================================================
+static void ShowUsecase_ButtonGlow()
+{
+	ImGui::TextWrapped("Button with animated glow effect on focus/hover using iam_oscillate.");
 
-	// Planet properties
-	float orbit_radii[] = { 45 * scale, 70 * scale, 100 * scale, 130 * scale };
-	float orbit_speeds[] = { 2.0f, 1.2f, 0.7f, 0.4f };
-	float planet_sizes[] = { 6 * scale, 10 * scale, 8 * scale, 14 * scale };
-	ImU32 planet_colors[] = {
-		IM_COL32(180, 180, 200, 255), IM_COL32(100, 150, 255, 255),
-		IM_COL32(255, 100, 100, 255), IM_COL32(255, 200, 150, 255)
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool focused = false;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 btn_size(180 * scale, 45 * scale);
+
+	ImGui::InvisibleButton("glow_btn", btn_size);
+	bool hovered = ImGui::IsItemHovered();
+	if (ImGui::IsItemClicked()) focused = !focused;
+
+	// Glow intensity
+	float glow_target = (focused || hovered) ? 1.0f : 0.0f;
+	float glow = iam_tween_float(ImGui::GetID("glow"), ImHashStr("g"),
+		glow_target, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Pulsing glow when focused
+	float pulse = 0.0f;
+	if (focused)
+		pulse = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("pulse"), 1.0f, 2.0f, iam_wave_sine, 0.0f, dt);
+
+	// Draw glow layers
+	if (glow > 0.01f)
+	{
+		for (int i = 3; i >= 0; i--)
+		{
+			float offset = (4 - i) * 4 * scale * glow;
+			int alpha = (int)(30 * glow * (1.0f + pulse * 0.5f) / (i + 1));
+			dl->AddRectFilled(
+				ImVec2(pos.x - offset, pos.y - offset),
+				ImVec2(pos.x + btn_size.x + offset, pos.y + btn_size.y + offset),
+				IM_COL32(100, 150, 255, alpha), 12 * scale);
+		}
+	}
+
+	// Button background
+	ImU32 bg_col = focused ? IM_COL32(70, 120, 200, 255) : IM_COL32(60, 65, 75, 255);
+	dl->AddRectFilled(pos, ImVec2(pos.x + btn_size.x, pos.y + btn_size.y), bg_col, 8 * scale);
+
+	// Text
+	const char* text = focused ? "Focused (click)" : "Click to focus";
+	ImVec2 text_size = ImGui::CalcTextSize(text);
+	dl->AddText(ImVec2(pos.x + (btn_size.x - text_size.x) * 0.5f, pos.y + (btn_size.y - text_size.y) * 0.5f),
+		IM_COL32(255, 255, 255, 255), text);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Like Heart Button
+// ============================================================
+static void ShowUsecase_LikeHeartButton()
+{
+	ImGui::TextWrapped("Instagram-style heart button with hover grow, click bounce, and particle burst animations.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool liked = false;
+	static float like_time = 0.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float heart_size = 40 * scale;
+	ImVec2 center(pos.x + heart_size, pos.y + heart_size);
+
+	ImGui::InvisibleButton("heart_btn", ImVec2(heart_size * 2, heart_size * 2));
+	bool hovered = ImGui::IsItemHovered();
+	if (ImGui::IsItemClicked())
+	{
+		liked = !liked;
+		like_time = 0.0f;
+	}
+
+	like_time += dt;
+
+	// Hover scale animation
+	float hover_scale = iam_tween_float(ImGui::GetID("heart_hover"), ImHashStr("hh"),
+		hovered ? 1.15f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Click bounce scale when liked (adds to hover scale)
+	float click_scale = iam_tween_float(ImGui::GetID("heart_scale"), ImHashStr("hs"),
+		liked ? 1.2f : 1.0f, 0.25f, iam_ease_preset(iam_ease_out_elastic), iam_policy_crossfade, dt);
+
+	float heart_scale = hover_scale * click_scale;
+
+	// Color transition
+	float color_t = iam_tween_float(ImGui::GetID("heart_col"), ImHashStr("hc"),
+		liked ? 1.0f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Hover glow intensity
+	float glow_alpha = iam_tween_float(ImGui::GetID("heart_glow"), ImHashStr("hg"),
+		hovered ? 0.4f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	ImU32 heart_col = IM_COL32(
+		(int)(150 + 105 * color_t),
+		(int)(150 - 100 * color_t),
+		(int)(150 - 100 * color_t), 255);
+
+	// Draw glow behind heart when hovered
+	if (glow_alpha > 0.01f)
+	{
+		float hs_glow = heart_size * 0.5f * heart_scale;
+		ImU32 glow_col = IM_COL32(255, 100, 100, (int)(glow_alpha * 100));
+		dl->AddCircleFilled(center, hs_glow * 1.5f, glow_col);
+	}
+
+	// Draw heart shape
+	float hs = heart_size * 0.4f * heart_scale;
+	dl->AddCircleFilled(ImVec2(center.x - hs * 0.5f, center.y - hs * 0.2f), hs * 0.55f, heart_col);
+	dl->AddCircleFilled(ImVec2(center.x + hs * 0.5f, center.y - hs * 0.2f), hs * 0.55f, heart_col);
+	dl->AddTriangleFilled(
+		ImVec2(center.x - hs * 1.0f, center.y),
+		ImVec2(center.x + hs * 1.0f, center.y),
+		ImVec2(center.x, center.y + hs * 1.1f), heart_col);
+
+	// Particles burst when liked
+	if (liked && like_time < 0.6f)
+	{
+		for (int i = 0; i < 12; i++)
+		{
+			float angle = i * 3.14159f * 2.0f / 12.0f + like_time * 0.5f;
+			float dist = like_time * 100 * scale;
+			float alpha = 1.0f - like_time * 1.7f;
+			if (alpha > 0)
+			{
+				ImVec2 p(center.x + cosf(angle) * dist, center.y + sinf(angle) * dist);
+				float particle_size = (3 + (i % 3)) * scale * alpha;
+				dl->AddCircleFilled(p, particle_size, IM_COL32(255, 100, 100, (int)(alpha * 255)));
+			}
+		}
+	}
+
+	const char* text = liked ? "Liked!" : (hovered ? "Click me!" : "Hover & Click");
+	ImVec2 text_size = ImGui::CalcTextSize(text);
+	dl->AddText(ImVec2(center.x - text_size.x * 0.5f, pos.y + heart_size * 2 + 10 * scale),
+		IM_COL32(180, 180, 190, 255), text);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + heart_size * 2 + 35 * scale));
+}
+
+// ============================================================
+// USECASE: Download Progress Button
+// ============================================================
+static void ShowUsecase_DownloadProgressButton()
+{
+	ImGui::TextWrapped("Button that transforms into a progress indicator during download.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int state = 0;  // 0=idle, 1=downloading, 2=complete
+	static float progress = 0.0f;
+
+	if (state == 1)
+	{
+		progress += dt * 0.4f;
+		if (progress >= 1.0f)
+		{
+			progress = 1.0f;
+			state = 2;
+		}
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 btn_size(200 * scale, 50 * scale);
+
+	ImGui::InvisibleButton("download_btn", btn_size);
+	if (ImGui::IsItemClicked() && state != 1)
+	{
+		if (state == 2) { state = 0; progress = 0.0f; }
+		else state = 1;
+	}
+
+	// Width transition for progress mode
+	float target_width = (state == 1) ? btn_size.y : btn_size.x;
+	float current_width = iam_tween_float(ImGui::GetID("dl_width"), ImHashStr("w"),
+		target_width, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	ImVec2 center(pos.x + btn_size.x * 0.5f, pos.y + btn_size.y * 0.5f);
+	float half_w = current_width * 0.5f;
+	float half_h = btn_size.y * 0.5f;
+
+	// Background color
+	ImU32 bg_col = state == 2 ? IM_COL32(76, 175, 80, 255) : IM_COL32(70, 130, 180, 255);
+	dl->AddRectFilled(ImVec2(center.x - half_w, center.y - half_h),
+		ImVec2(center.x + half_w, center.y + half_h), bg_col, half_h);
+
+	if (state == 1)
+	{
+		// Progress arc
+		float start_angle = -3.14159f * 0.5f;
+		float end_angle = start_angle + progress * 3.14159f * 2.0f;
+		dl->PathArcTo(center, 15 * scale, start_angle, end_angle, 32);
+		dl->PathStroke(IM_COL32(255, 255, 255, 255), 0, 3 * scale);
+
+		char pct[8];
+		snprintf(pct, sizeof(pct), "%.0f%%", progress * 100);
+		ImVec2 ts = ImGui::CalcTextSize(pct);
+		dl->AddText(ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), IM_COL32(255, 255, 255, 255), pct);
+	}
+	else
+	{
+		const char* text = state == 2 ? "Complete!" : "Download";
+		ImVec2 ts = ImGui::CalcTextSize(text);
+		dl->AddText(ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), IM_COL32(255, 255, 255, 255), text);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Submit Button States
+// ============================================================
+static void ShowUsecase_SubmitButtonStates()
+{
+	ImGui::TextWrapped("Form submit button with idle/loading/success/error state transitions.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int state = 0;  // 0=idle, 1=loading, 2=success, 3=error
+	static float state_time = 0.0f;
+	static float spinner_angle = 0.0f;
+
+	state_time += dt;
+	spinner_angle += dt * 5.0f;
+
+	// Auto-transition after loading
+	if (state == 1 && state_time > 2.0f)
+	{
+		state = (((int)(state_time * 100)) % 2 == 0) ? 2 : 3;
+		state_time = 0.0f;
+	}
+
+	// Auto-reset after success/error
+	if ((state == 2 || state == 3) && state_time > 1.5f)
+	{
+		state = 0;
+		state_time = 0.0f;
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 btn_size(180 * scale, 45 * scale);
+
+	ImGui::InvisibleButton("submit_btn", btn_size);
+	if (ImGui::IsItemClicked() && state == 0)
+	{
+		state = 1;
+		state_time = 0.0f;
+	}
+
+	// Color based on state
+	ImU32 colors[] = {
+		IM_COL32(70, 130, 180, 255),  // idle - blue
+		IM_COL32(100, 100, 110, 255), // loading - gray
+		IM_COL32(76, 175, 80, 255),   // success - green
+		IM_COL32(244, 67, 54, 255)    // error - red
 	};
 
-	// Handle click for gravity pull
-	ImVec2 mouse = ImGui::GetMousePos();
-	if (ImGui::IsMouseClicked(0) &&
-		mouse.x >= canvas_pos.x && mouse.x <= canvas_pos.x + canvas_size.x &&
-		mouse.y >= canvas_pos.y && mouse.y <= canvas_pos.y + canvas_size.y)
+	ImU32 bg_col = colors[state];
+	dl->AddRectFilled(pos, ImVec2(pos.x + btn_size.x, pos.y + btn_size.y), bg_col, 6 * scale);
+
+	ImVec2 center(pos.x + btn_size.x * 0.5f, pos.y + btn_size.y * 0.5f);
+
+	if (state == 1)
 	{
-		pull_active = true;
-		pull_target = mouse;
+		// Spinner
+		float r = 10 * scale;
+		dl->PathArcTo(center, r, spinner_angle, spinner_angle + 4.0f, 16);
+		dl->PathStroke(IM_COL32(255, 255, 255, 255), 0, 2 * scale);
+	}
+	else
+	{
+		const char* texts[] = {"Submit", "", "Success!", "Error"};
+		const char* text = texts[state];
+		ImVec2 ts = ImGui::CalcTextSize(text);
+		dl->AddText(ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), IM_COL32(255, 255, 255, 255), text);
 	}
 
-	// Animate pull wave using tween
-	float pull_wave = iam_tween_float(ImGui::GetID("pull_wave"), ImHashStr("wave"),
-		pull_active ? 1.0f : 0.0f, 0.8f,
-		iam_ease_preset(iam_ease_out_expo), iam_policy_crossfade, dt);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size.y + 10 * scale));
+}
 
-	if (pull_wave > 0.95f) pull_active = false;
+// ============================================================
+// NAVIGATION USECASES
+// ============================================================
 
-	// Draw planets with tweened positions
+// ============================================================
+// USECASE: Pill Navigation
+// ============================================================
+static void ShowUsecase_PillNavigation()
+{
+	ImGui::TextWrapped("Tab navigation with sliding pill indicator using iam_tween_float. Pills sized to fit text.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int selected = 0;
+	const char* tabs[] = {"Home", "Profile", "Settings", "Help"};
+	int tab_count = 4;
+
+	// Calculate widths based on text size + padding
+	float tab_padding = 20 * scale;  // Horizontal padding inside each pill
+	float tab_height = 35 * scale;
+	float outer_padding = 4 * scale;
+
+	float tab_widths[4];
+	float tab_positions[4];
+	float total_width = 0;
+	for (int i = 0; i < tab_count; i++)
+	{
+		ImVec2 text_size = ImGui::CalcTextSize(tabs[i]);
+		tab_widths[i] = text_size.x + tab_padding * 2;
+		tab_positions[i] = total_width;
+		total_width += tab_widths[i];
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	// Background
+	dl->AddRectFilled(pos, ImVec2(pos.x + total_width + outer_padding * 2, pos.y + tab_height + outer_padding * 2),
+		IM_COL32(40, 45, 55, 255), (tab_height + outer_padding * 2) * 0.5f);
+
+	// Animated pill position and width
+	float pill_x = iam_tween_float(ImGui::GetID("pill_x"), ImHashStr("px"),
+		tab_positions[selected], 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	float pill_w = iam_tween_float(ImGui::GetID("pill_w"), ImHashStr("pw"),
+		tab_widths[selected], 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	// Draw pill
+	dl->AddRectFilled(
+		ImVec2(pos.x + outer_padding + pill_x, pos.y + outer_padding),
+		ImVec2(pos.x + outer_padding + pill_x + pill_w, pos.y + outer_padding + tab_height),
+		IM_COL32(70, 130, 180, 255), tab_height * 0.5f);
+
+	// Draw tabs
+	for (int i = 0; i < tab_count; i++)
+	{
+		ImVec2 tab_pos(pos.x + outer_padding + tab_positions[i], pos.y + outer_padding);
+		ImGui::SetCursorScreenPos(tab_pos);
+		ImGui::PushID(i);
+		if (ImGui::InvisibleButton("tab", ImVec2(tab_widths[i], tab_height)))
+			selected = i;
+		ImGui::PopID();
+
+		ImVec2 text_size = ImGui::CalcTextSize(tabs[i]);
+		ImU32 text_col = (i == selected) ? IM_COL32(255, 255, 255, 255) : IM_COL32(150, 150, 160, 255);
+		dl->AddText(ImVec2(tab_pos.x + (tab_widths[i] - text_size.x) * 0.5f, tab_pos.y + (tab_height - text_size.y) * 0.5f),
+			text_col, tabs[i]);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tab_height + outer_padding * 2 + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Dropdown Menu
+// ============================================================
+static void ShowUsecase_DropdownMenu()
+{
+	ImGui::TextWrapped("Animated dropdown menu with staggered item reveal.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool open = false;
+	static float open_time = 0.0f;
+	const char* items[] = {"New File", "Open...", "Save", "Export", "Close"};
+	int item_count = 5;
+
+	if (open) open_time += dt;
+	else open_time = 0.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float btn_width = 120 * scale;
+	float btn_height = 35 * scale;
+	float item_height = 30 * scale;
+
+	// Dropdown button
+	ImGui::InvisibleButton("dropdown_btn", ImVec2(btn_width, btn_height));
+	if (ImGui::IsItemClicked()) open = !open;
+
+	dl->AddRectFilled(pos, ImVec2(pos.x + btn_width, pos.y + btn_height),
+		IM_COL32(60, 65, 75, 255), 4 * scale);
+	dl->AddText(ImVec2(pos.x + 10 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+		IM_COL32(255, 255, 255, 255), "File");
+
+	// Arrow
+	float arrow_x = pos.x + btn_width - 20 * scale;
+	float arrow_y = pos.y + btn_height * 0.5f;
+	float arrow_rot = iam_tween_float(ImGui::GetID("arrow_rot"), ImHashStr("ar"),
+		open ? 3.14159f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	dl->AddTriangleFilled(
+		ImVec2(arrow_x - 5 * scale, arrow_y - 3 * scale * (open ? -1 : 1)),
+		ImVec2(arrow_x + 5 * scale, arrow_y - 3 * scale * (open ? -1 : 1)),
+		ImVec2(arrow_x, arrow_y + 5 * scale * (open ? -1 : 1)),
+		IM_COL32(180, 180, 190, 255));
+
+	// Dropdown menu
+	float menu_height = iam_tween_float(ImGui::GetID("menu_h"), ImHashStr("mh"),
+		open ? item_count * item_height : 0.0f, 0.25f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	if (menu_height > 1.0f)
+	{
+		ImVec2 menu_pos(pos.x, pos.y + btn_height + 2 * scale);
+		dl->AddRectFilled(menu_pos, ImVec2(menu_pos.x + btn_width, menu_pos.y + menu_height),
+			IM_COL32(50, 55, 65, 255), 4 * scale);
+
+		for (int i = 0; i < item_count; i++)
+		{
+			float item_y = menu_pos.y + i * item_height;
+			if (item_y + item_height > menu_pos.y + menu_height) break;
+
+			// Staggered fade in
+			float item_alpha = ImClamp((open_time - i * 0.05f) * 5.0f, 0.0f, 1.0f);
+			float item_offset = (1.0f - item_alpha) * 10 * scale;
+
+			dl->AddText(ImVec2(menu_pos.x + 10 * scale + item_offset, item_y + (item_height - ImGui::GetFontSize()) * 0.5f),
+				IM_COL32(200, 200, 210, (int)(item_alpha * 255)), items[i]);
+		}
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_height + menu_height + 15 * scale));
+}
+
+// ============================================================
+// USECASE: Context Menu
+// ============================================================
+static void ShowUsecase_ContextMenu()
+{
+	ImGui::TextWrapped("Right-click context menu with scale animation. Right-click in the box below.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool show_menu = false;
+	static ImVec2 menu_pos;
+	const char* items[] = {"Cut", "Copy", "Paste", "Delete"};
+	int item_count = 4;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 area_size(250 * scale, 100 * scale);
+
+	// Clickable area
+	dl->AddRectFilled(pos, ImVec2(pos.x + area_size.x, pos.y + area_size.y),
+		IM_COL32(40, 45, 55, 255), 4 * scale);
+	dl->AddText(ImVec2(pos.x + 10 * scale, pos.y + 10 * scale), IM_COL32(100, 100, 110, 255), "Right-click here");
+
+	ImGui::InvisibleButton("context_area", area_size);
+	if (ImGui::IsItemClicked(1)) // Right click
+	{
+		show_menu = true;
+		menu_pos = ImGui::GetMousePos();
+	}
+	if (ImGui::IsMouseClicked(0) && show_menu)
+		show_menu = false;
+
+	// Menu animation
+	float menu_scale = iam_tween_float(ImGui::GetID("ctx_scale"), ImHashStr("cs"),
+		show_menu ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	if (menu_scale > 0.01f)
+	{
+		float menu_width = 100 * scale * menu_scale;
+		float item_height = 28 * scale;
+		float menu_height = item_count * item_height * menu_scale;
+
+		dl->AddRectFilled(menu_pos, ImVec2(menu_pos.x + menu_width, menu_pos.y + menu_height),
+			IM_COL32(50, 55, 65, 240), 4 * scale);
+		dl->AddRect(menu_pos, ImVec2(menu_pos.x + menu_width, menu_pos.y + menu_height),
+			IM_COL32(70, 75, 85, 255), 4 * scale);
+
+		for (int i = 0; i < item_count; i++)
+		{
+			float item_y = menu_pos.y + i * item_height * menu_scale;
+			dl->AddText(ImVec2(menu_pos.x + 10 * scale, item_y + (item_height * menu_scale - ImGui::GetFontSize()) * 0.5f),
+				IM_COL32(200, 200, 210, (int)(menu_scale * 255)), items[i]);
+		}
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + area_size.y + 10 * scale));
+}
+
+// ============================================================
+// DIALOGS USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Bottom Sheet
+// ============================================================
+static void ShowUsecase_BottomSheet()
+{
+	ImGui::TextWrapped("iOS-style bottom sheet that slides up from bottom.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool open = false;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(280 * scale, 180 * scale);
+
+	// Container (simulates screen)
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	// Clip all content to container bounds
+	dl->PushClipRect(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y), true);
+
+	// Toggle button
+	ImVec2 btn_pos(pos.x + 10 * scale, pos.y + 10 * scale);
+	ImGui::SetCursorScreenPos(btn_pos);
+	if (ImGui::Button("Show Sheet")) open = true;
+
+	// Sheet animation
+	float sheet_height = 120 * scale;
+	float sheet_y = iam_tween_float(ImGui::GetID("sheet_y"), ImHashStr("sy"),
+		open ? container_size.y - sheet_height : container_size.y, 0.3f,
+		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Backdrop
+	if (sheet_y < container_size.y - 1)
+	{
+		float backdrop_alpha = (container_size.y - sheet_y - 1) / sheet_height * 0.5f;
+		dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+			IM_COL32(0, 0, 0, (int)(backdrop_alpha * 255)));
+	}
+
+	// Sheet
+	ImVec2 sheet_pos(pos.x, pos.y + sheet_y);
+	dl->AddRectFilled(sheet_pos, ImVec2(sheet_pos.x + container_size.x, sheet_pos.y + sheet_height),
+		IM_COL32(50, 55, 65, 255), 12 * scale, ImDrawFlags_RoundCornersTop);
+
+	// Handle
+	dl->AddRectFilled(
+		ImVec2(sheet_pos.x + container_size.x * 0.5f - 20 * scale, sheet_pos.y + 8 * scale),
+		ImVec2(sheet_pos.x + container_size.x * 0.5f + 20 * scale, sheet_pos.y + 12 * scale),
+		IM_COL32(100, 100, 110, 255), 2 * scale);
+
+	// Content
+	if (sheet_y < container_size.y - 10)
+	{
+		dl->AddText(ImVec2(sheet_pos.x + 15 * scale, sheet_pos.y + 30 * scale),
+			IM_COL32(255, 255, 255, 255), "Bottom Sheet");
+		dl->AddText(ImVec2(sheet_pos.x + 15 * scale, sheet_pos.y + 55 * scale),
+			IM_COL32(150, 150, 160, 255), "Swipe down or tap backdrop");
+
+		// Close button
+		ImGui::SetCursorScreenPos(ImVec2(sheet_pos.x + 15 * scale, sheet_pos.y + 80 * scale));
+		if (ImGui::Button("Close##sheet")) open = false;
+	}
+
+	dl->PopClipRect();
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Snackbar
+// ============================================================
+static void ShowUsecase_Snackbar()
+{
+	ImGui::TextWrapped("Animated toast notification stack with different types (success, warning, error, info).");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	struct Toast {
+		int type; // 0=success, 1=warning, 2=error, 3=info
+		float time;
+		bool active;
+	};
+	static Toast toasts[4] = { {0, 0, false}, {1, 0, false}, {2, 0, false}, {3, 0, false} };
+	static int next_toast = 0;
+
+	// Update toasts
 	for (int i = 0; i < 4; i++)
 	{
-		// Update orbit angle
-		orbit_angles[i] += dt * orbit_speeds[i];
-
-		// Base orbital position
-		float base_x = center.x + cosf(orbit_angles[i]) * orbit_radii[i];
-		float base_y = center.y + sinf(orbit_angles[i]) * orbit_radii[i];
-
-		// Apply gravity pull using tween for smooth attraction
-		float pull_offset_x = 0, pull_offset_y = 0;
-		if (pull_wave > 0.01f && pull_wave < 0.95f)
+		if (toasts[i].active)
 		{
-			float dx = pull_target.x - base_x;
-			float dy = pull_target.y - base_y;
-			float attraction = (1.0f - pull_wave) * 30.0f / (i + 1);
-			pull_offset_x = dx * 0.01f * attraction;
-			pull_offset_y = dy * 0.01f * attraction;
-		}
-
-		// Smooth position using tween
-		float px = iam_tween_float(ImGui::GetID("planet_x") + i, ImHashStr("px"),
-			base_x + pull_offset_x, 0.1f,
-			iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-		float py = iam_tween_float(ImGui::GetID("planet_y") + i, ImHashStr("py"),
-			base_y + pull_offset_y, 0.1f,
-			iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-		// Orbit trail
-		dl->AddCircle(center, orbit_radii[i], IM_COL32(100, 100, 150, 40), 64, 1.0f);
-
-		// Planet shadow
-		dl->AddCircleFilled(ImVec2(px + 2 * scale, py + 2 * scale),
-			planet_sizes[i], IM_COL32(0, 0, 0, 60));
-
-		// Planet
-		dl->AddCircleFilled(ImVec2(px, py), planet_sizes[i], planet_colors[i]);
-		dl->AddCircleFilled(ImVec2(px - planet_sizes[i] * 0.3f, py - planet_sizes[i] * 0.3f),
-			planet_sizes[i] * 0.3f, IM_COL32(255, 255, 255, 80));
-
-		// Moon for large planet - orbit using oscillate with sawtooth for continuous rotation
-		if (i == 3)
-		{
-			// Use sawtooth wave for continuous 0 to 2*PI cycle
-			static float moon_angle = 0.0f;
-			moon_angle += dt * 3.14159f;  // Half rotation per second
-			if (moon_angle > IAM_2PI) moon_angle -= IAM_2PI;
-			float moon_dist = 22 * scale;
-			float mx = px + cosf(moon_angle) * moon_dist;
-			float my = py + sinf(moon_angle) * moon_dist;
-			dl->AddCircleFilled(ImVec2(mx, my), 4 * scale, IM_COL32(200, 200, 220, 255));
+			toasts[i].time += dt;
+			if (toasts[i].time > 2.5f) toasts[i].active = false;
 		}
 	}
 
-	// Gravity wave effect
-	if (pull_wave > 0.01f && pull_wave < 0.99f)
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(320 * scale, 180 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(25, 30, 40, 255), 6 * scale);
+	dl->PushClipRect(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y), true);
+
+	// Trigger button
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + 10 * scale, pos.y + 10 * scale));
+	if (ImGui::Button("Add Toast"))
 	{
-		float wave_radius = pull_wave * 120 * scale;
-		int alpha = (int)((1.0f - pull_wave) * 200);
-		dl->AddCircle(pull_target, wave_radius, IM_COL32(100, 150, 255, alpha), 32, 2.0f);
-		dl->AddCircle(pull_target, wave_radius * 0.6f, IM_COL32(150, 200, 255, alpha / 2), 32, 1.5f);
+		toasts[next_toast].active = true;
+		toasts[next_toast].time = 0.0f;
+		toasts[next_toast].type = next_toast;
+		next_toast = (next_toast + 1) % 4;
 	}
 
-	ImGui::Dummy(canvas_size);
+	// Toast colors and icons by type
+	const char* icons[] = { "+", "!", "X", "i" };
+	const char* messages[] = { "Success!", "Warning!", "Error!", "Info" };
+	ImU32 bg_colors[] = {
+		IM_COL32(46, 125, 50, 255),   // success green
+		IM_COL32(237, 108, 2, 255),   // warning orange
+		IM_COL32(211, 47, 47, 255),   // error red
+		IM_COL32(2, 136, 209, 255)    // info blue
+	};
+
+	// Draw toasts stacked from top-right
+	float toast_height = 36 * scale;
+	float toast_width = 140 * scale;
+	int visible_count = 0;
+
+	for (int i = 0; i < 4; i++)
+	{
+		float target_x = toasts[i].active ? (container_size.x - toast_width - 10 * scale) : (container_size.x + 20 * scale);
+		float slide_x = iam_tween_float(ImGui::GetID("toast_x") + i, ImHashStr("tx") + i,
+			target_x, 0.3f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		// Count visible toasts for stacking
+		float target_y = 10 * scale + visible_count * (toast_height + 8 * scale);
+		if (toasts[i].active) visible_count++;
+
+		float slide_y = iam_tween_float(ImGui::GetID("toast_y") + i, ImHashStr("ty") + i,
+			target_y, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		if (slide_x < container_size.x)
+		{
+			ImVec2 toast_pos(pos.x + slide_x, pos.y + slide_y);
+
+			// Toast background with rounded corners
+			dl->AddRectFilled(toast_pos, ImVec2(toast_pos.x + toast_width, toast_pos.y + toast_height),
+				bg_colors[toasts[i].type], 6 * scale);
+
+			// Icon circle
+			float icon_r = 10 * scale;
+			ImVec2 icon_center(toast_pos.x + 18 * scale, toast_pos.y + toast_height * 0.5f);
+			dl->AddCircleFilled(icon_center, icon_r, IM_COL32(255, 255, 255, 60));
+			ImVec2 icon_size = ImGui::CalcTextSize(icons[toasts[i].type]);
+			dl->AddText(ImVec2(icon_center.x - icon_size.x * 0.5f, icon_center.y - icon_size.y * 0.5f),
+				IM_COL32(255, 255, 255, 255), icons[toasts[i].type]);
+
+			// Message text
+			dl->AddText(ImVec2(toast_pos.x + 36 * scale, toast_pos.y + (toast_height - ImGui::GetFontSize()) * 0.5f),
+				IM_COL32(255, 255, 255, 255), messages[toasts[i].type]);
+
+			// Progress bar at bottom (time remaining)
+			float progress = 1.0f - (toasts[i].time / 2.5f);
+			if (progress > 0)
+			{
+				dl->AddRectFilled(
+					ImVec2(toast_pos.x, toast_pos.y + toast_height - 3 * scale),
+					ImVec2(toast_pos.x + toast_width * progress, toast_pos.y + toast_height),
+					IM_COL32(255, 255, 255, 100), 0, ImDrawFlags_RoundCornersBottom);
+			}
+		}
+	}
+
+	dl->PopClipRect();
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
 }
 
 // ============================================================
-// USECASE: Liquid Fill Gauge
+// USECASE: Lightbox
 // ============================================================
-static void ShowUsecase_LiquidFillGauge()
+static void ShowUsecase_Lightbox()
 {
-	ImGui::TextWrapped(
-		"Liquid gauge using iam_tween_float with elastic easing for bouncy fill, "
-		"and ping-pong policy for continuous wave animation.");
+	ImGui::TextWrapped("Image lightbox overlay with zoom animation.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static float target_level = 0.65f;
-
-	if (ImGui::Button("-10%##Liquid")) target_level = ImMax(0.0f, target_level - 0.1f);
-	ImGui::SameLine();
-	if (ImGui::Button("+10%##Liquid")) target_level = ImMin(1.0f, target_level + 0.1f);
-	ImGui::SameLine();
-	ImGui::Text("Target: %.0f%%", target_level * 100);
-
-	// Main level uses elastic easing for bouncy liquid effect
-	float level = iam_tween_float(ImGui::GetID("liquid_level"), ImHashStr("lvl"),
-		target_level, 0.8f, iam_ease_preset(iam_ease_out_elastic), iam_policy_crossfade, dt);
-
-	// Wave animations using oscillate for continuous wave motion
-	float wave_phase1 = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("wave1"),
-		1.0f, 0.8f, iam_wave_sine, 0.0f, dt);
-	float wave_phase2 = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("wave2"),
-		1.0f, 1.2f, iam_wave_sine, 0.5f, dt);
-
-	// Color transition using tween
-	float color_t = iam_tween_float(ImGui::GetID("liquid_color"), ImHashStr("col"),
-		level, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 160 * scale);
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// Background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(25, 30, 40, 255), 8 * scale);
+	static bool open = false;
 
-	// Gauge container
-	float gauge_radius = 60 * scale;
-	ImVec2 gauge_center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(300 * scale, 150 * scale);
 
-	// Outer ring with glow based on level
-	float ring_glow = iam_tween_float(ImGui::GetID("ring_glow"), ImHashStr("glow"),
-		level > 0.8f ? 1.0f : 0.0f, 0.3f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-	if (ring_glow > 0.01f)
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 4 * scale);
+
+	// Thumbnail grid
+	float thumb_size = 50 * scale;
+	for (int i = 0; i < 4; i++)
 	{
-		dl->AddCircle(gauge_center, gauge_radius + 8 * scale,
-			IM_COL32(100, 200, 255, (int)(ring_glow * 100)), 64, 6 * scale);
+		ImVec2 thumb_pos(pos.x + 15 * scale + i * (thumb_size + 10 * scale), pos.y + 15 * scale);
+		ImU32 thumb_col = IM_COL32(100 + i * 30, 80 + i * 20, 120, 255);
+		dl->AddRectFilled(thumb_pos, ImVec2(thumb_pos.x + thumb_size, thumb_pos.y + thumb_size), thumb_col, 4 * scale);
+
+		ImGui::SetCursorScreenPos(thumb_pos);
+		ImGui::PushID(i);
+		if (ImGui::InvisibleButton("thumb", ImVec2(thumb_size, thumb_size)))
+			open = true;
+		ImGui::PopID();
 	}
-	dl->AddCircle(gauge_center, gauge_radius + 5 * scale, IM_COL32(60, 70, 90, 255), 64, 4 * scale);
 
-	// Clip liquid to circle
-	float liquid_y = gauge_center.y + gauge_radius - level * gauge_radius * 2;
+	// Lightbox overlay
+	float lb_scale = iam_tween_float(ImGui::GetID("lb_scale"), ImHashStr("ls"),
+		open ? 1.0f : 0.0f, 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
 
-	// Smooth color interpolation
-	int r = (int)(255 * (1.0f - color_t) + 100 * color_t);
-	int g = (int)(100 * (1.0f - color_t) + 200 * color_t);
-	int b = (int)(100 * (1.0f - color_t) + 255 * color_t);
-	ImU32 liquid_color = IM_COL32(r, g, b, 200);
-
-	// Draw liquid with ImAnim-driven wave effect
-	for (int y_step = 0; y_step <= 30; y_step++)
+	if (lb_scale > 0.01f)
 	{
-		float y = gauge_center.y - gauge_radius + (y_step / 30.0f) * gauge_radius * 2;
-		if (y < liquid_y) continue;
+		// Backdrop
+		dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+			IM_COL32(0, 0, 0, (int)(lb_scale * 200)));
 
-		float dy = y - gauge_center.y;
-		float half_width = sqrtf(ImMax(0.0f, gauge_radius * gauge_radius - dy * dy));
+		// Expanded image
+		float img_size = 100 * scale * lb_scale;
+		ImVec2 img_pos(pos.x + (container_size.x - img_size) * 0.5f, pos.y + (container_size.y - img_size) * 0.5f);
+		dl->AddRectFilled(img_pos, ImVec2(img_pos.x + img_size, img_pos.y + img_size),
+			IM_COL32(130, 100, 150, 255), 8 * scale);
 
-		// Wave offset driven by tweened phases
-		float wave1 = (wave_phase1 * 2.0f - 1.0f) * 4 * scale * sinf(y * 0.08f);
-		float wave2 = (wave_phase2 * 2.0f - 1.0f) * 3 * scale * sinf(y * 0.12f + 1.5f);
-		float wave_offset = wave1 + wave2;
+		// Close button
+		ImVec2 close_pos(img_pos.x + img_size - 25 * scale * lb_scale, img_pos.y + 5 * scale);
+		float radius = 12 * scale * lb_scale;
+		dl->AddCircleFilled(ImVec2(close_pos.x + radius, close_pos.y + radius), radius, IM_COL32(200, 60, 60, (int)(lb_scale * 255)));
+		dl->AddText(ImVec2(close_pos.x - 4 * scale, close_pos.y - 7 * scale),
+			IM_COL32(255, 255, 255, (int)(lb_scale * 255)), "X");
 
-		// Adjust wave intensity based on distance from surface
-		float surface_dist = y - liquid_y;
-		float wave_factor = ImClamp(1.0f - surface_dist / (20 * scale), 0.0f, 1.0f);
-		wave_offset *= wave_factor;
+		ImGui::SetCursorScreenPos(ImVec2(close_pos.x - 15 * scale, close_pos.y - 15 * scale));
+		if (ImGui::InvisibleButton("close_lb", ImVec2(30 * scale, 30 * scale)))
+			open = false;
+	}
 
-		if (half_width > 0)
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Command Palette
+// ============================================================
+static void ShowUsecase_CommandPalette()
+{
+	ImGui::TextWrapped("Spotlight/Command-K style search palette.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool open = false;
+	static char search[64] = "";
+	const char* commands[] = {"New File", "Open Project", "Save All", "Find in Files", "Git Commit"};
+	int cmd_count = 5;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(380 * scale, 200 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 4 * scale);
+
+	// Trigger
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + 10 * scale, pos.y + 10 * scale));
+	if (ImGui::Button("Press Ctrl/Cmd + K") || (ImGui::IsKeyPressed(ImGuiKey_K) && ImGui::GetIO().KeyCtrl))
+		open = !open;
+
+	// Palette animation
+	float palette_scale = iam_tween_float(ImGui::GetID("pal_scale"), ImHashStr("ps"),
+		open ? 1.0f : 0.8f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	float palette_alpha = iam_tween_float(ImGui::GetID("pal_alpha"), ImHashStr("pa"),
+		open ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	if (palette_alpha > 0.01f)
+	{
+		// Backdrop
+		dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+			IM_COL32(0, 0, 0, (int)(palette_alpha * 150)));
+
+		// Palette
+		float pal_width = 250 * scale * palette_scale;
+		float pal_height = 150 * scale;
+		ImVec2 pal_pos(pos.x + (container_size.x - pal_width) * 0.5f, pos.y + 30 * scale);
+
+		dl->AddRectFilled(pal_pos, ImVec2(pal_pos.x + pal_width, pal_pos.y + pal_height),
+			IM_COL32(45, 50, 60, (int)(palette_alpha * 255)), 8 * scale);
+
+		// Search box
+		dl->AddRectFilled(
+			ImVec2(pal_pos.x + 10 * scale, pal_pos.y + 10 * scale),
+			ImVec2(pal_pos.x + pal_width - 10 * scale, pal_pos.y + 35 * scale),
+			IM_COL32(35, 40, 50, (int)(palette_alpha * 255)), 4 * scale);
+		dl->AddText(ImVec2(pal_pos.x + 15 * scale, pal_pos.y + 15 * scale),
+			IM_COL32(100, 100, 110, (int)(palette_alpha * 255)), "Type a command...");
+
+		// Commands
+		for (int i = 0; i < cmd_count && i < 4; i++)
 		{
-			dl->AddRectFilled(
-				ImVec2(gauge_center.x - half_width + wave_offset, y),
-				ImVec2(gauge_center.x + half_width + wave_offset, y + gauge_radius * 2 / 30.0f + 1),
-				liquid_color);
+			float item_y = pal_pos.y + 45 * scale + i * 25 * scale;
+			dl->AddText(ImVec2(pal_pos.x + 15 * scale, item_y),
+				IM_COL32(200, 200, 210, (int)(palette_alpha * 255)), commands[i]);
 		}
 	}
 
-	// Percentage text with scale animation
-	float text_scale = iam_tween_float(ImGui::GetID("pct_scale"), ImHashStr("scl"),
-		1.0f, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Inline Confirmation
+// ============================================================
+static void ShowUsecase_InlineConfirmation()
+{
+	ImGui::TextWrapped("Inline delete confirmation that expands in place.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool confirming = false;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float btn_height = 35 * scale;
+
+	// Width animation
+	float expanded_width = iam_tween_float(ImGui::GetID("conf_w"), ImHashStr("cw"),
+		confirming ? 200 * scale : 80 * scale, 0.2f,
+		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Background
+	ImU32 bg_col = confirming ? IM_COL32(180, 60, 60, 255) : IM_COL32(60, 65, 75, 255);
+	dl->AddRectFilled(pos, ImVec2(pos.x + expanded_width, pos.y + btn_height), bg_col, 4 * scale);
+
+	ImGui::SetCursorScreenPos(pos);
+	ImGui::InvisibleButton("conf_btn", ImVec2(expanded_width, btn_height));
+
+	if (!confirming)
+	{
+		if (ImGui::IsItemClicked()) confirming = true;
+		dl->AddText(ImVec2(pos.x + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+			IM_COL32(255, 255, 255, 255), "Delete");
+	}
+	else
+	{
+		// Confirm/Cancel buttons
+		float half = expanded_width * 0.5f;
+		dl->AddLine(ImVec2(pos.x + half, pos.y + 5 * scale), ImVec2(pos.x + half, pos.y + btn_height - 5 * scale),
+			IM_COL32(255, 255, 255, 100));
+
+		dl->AddText(ImVec2(pos.x + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+			IM_COL32(255, 255, 255, 255), "Confirm");
+		dl->AddText(ImVec2(pos.x + half + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+			IM_COL32(255, 255, 255, 255), "Cancel");
+
+		ImVec2 mouse = ImGui::GetMousePos();
+		if (ImGui::IsItemClicked())
+		{
+			if (mouse.x < pos.x + half )
+				ImGui::TextWrapped("Deleted!"); // Would perform action
+			confirming = false;
+		}
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_height + 10 * scale));
+}
+
+// ============================================================
+// LOADING USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Upload Progress
+// ============================================================
+static void ShowUsecase_UploadProgress()
+{
+	ImGui::TextWrapped("File upload progress with percentage and animated bar.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float progress = 0.0f;
+	static bool uploading = false;
+
+	if (uploading)
+	{
+		progress += dt * 0.2f;
+		if (progress >= 1.0f) { progress = 1.0f; uploading = false; }
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	if (ImGui::Button(uploading ? "Uploading..." : (progress >= 1.0f ? "Done! Reset" : "Start Upload")))
+	{
+		if (progress >= 1.0f) progress = 0.0f;
+		else uploading = true;
+	}
+
+	// Progress bar
+	float bar_width = 250 * scale;
+	float bar_height = 20 * scale;
+	ImVec2 bar_pos(pos.x, pos.y + 60 * scale);
+
+	// Animated fill
+	float fill = iam_tween_float(ImGui::GetID("up_fill"), ImHashStr("uf"),
+		progress, 0.1f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width, bar_pos.y + bar_height),
+		IM_COL32(40, 45, 55, 255), bar_height * 0.5f);
+	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width * fill, bar_pos.y + bar_height),
+		IM_COL32(76, 175, 80, 255), bar_height * 0.5f);
+
+	// Percentage
 	char pct[16];
-	snprintf(pct, sizeof(pct), "%.0f%%", level * 100);
-	ImVec2 text_size = ImGui::CalcTextSize(pct);
-	dl->AddText(ImVec2(gauge_center.x - text_size.x * 0.5f, gauge_center.y - text_size.y * 0.5f),
-		IM_COL32(255, 255, 255, 255), pct);
+	snprintf(pct, sizeof(pct), "%.0f%%", fill * 100);
+	ImVec2 pct_size = ImGui::CalcTextSize(pct);
+	dl->AddText(ImVec2(bar_pos.x + bar_width + 10 * scale, bar_pos.y + (bar_height - pct_size.y) * 0.5f),
+		IM_COL32(200, 200, 210, 255), pct);
 
-	// Glass highlight
-	dl->AddCircle(gauge_center, gauge_radius, IM_COL32(255, 255, 255, 40), 64, 2 * scale);
+	// File info
+	dl->AddText(ImVec2(bar_pos.x, bar_pos.y + bar_height + 8 * scale),
+		IM_COL32(150, 150, 160, 255), "document.pdf - 2.4 MB");
 
-	ImGui::Dummy(canvas_size);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, bar_pos.y + bar_height + 35 * scale));
 }
 
 // ============================================================
-// USECASE: DNA Helix
+// USECASE: Multi-step Progress
 // ============================================================
-static void ShowUsecase_DNAHelix()
+static void ShowUsecase_MultiStepProgress()
 {
-	ImGui::TextWrapped(
-		"DNA helix using iam_tween_float with repeat policy for continuous rotation "
-		"and ping-pong for pulsing nucleotides. Click to toggle speed!");
+	ImGui::TextWrapped("File upload progress with animated bars and completion states.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static bool fast_mode = false;
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 180 * scale);
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// Handle click to toggle speed
-	ImVec2 mouse = ImGui::GetMousePos();
-	if (ImGui::IsMouseClicked(0) &&
-		mouse.x >= canvas_pos.x && mouse.x <= canvas_pos.x + canvas_size.x &&
-		mouse.y >= canvas_pos.y && mouse.y <= canvas_pos.y + canvas_size.y)
-	{
-		fast_mode = !fast_mode;
-	}
-
-	// Background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(15, 20, 35, 255), 8 * scale);
-
-	ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
-
-	// Helix dimensions with oscillating width for breathing effect
-	float helix_breathe = 1.0f + 0.05f * iam_oscillate(ImGui::GetID("helix_breathe"),
-		1.0f, 0.5f, iam_wave_sine, 0.0f, dt);
-	float helix_width = 50 * scale * helix_breathe;
-	float helix_height = 140 * scale;
-
-	// Rotation using accumulated time for continuous spinning
-	static float dna_rotation = 0.0f;
-	float rotation_speed = fast_mode ? 2.0f : 1.0f;
-	dna_rotation += dt * rotation_speed;
-	if (dna_rotation > IAM_2PI) dna_rotation -= IAM_2PI;
-	float rotation = dna_rotation;
-
-	// Speed transition effect
-	float speed_indicator = iam_tween_float(ImGui::GetID("speed_ind"), ImHashStr("spd"),
-		fast_mode ? 1.0f : 0.0f, 0.3f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-	// Base pair colors
-	ImU32 colors1[] = { IM_COL32(255, 100, 100, 255), IM_COL32(100, 255, 100, 255) };  // A-T
-	ImU32 colors2[] = { IM_COL32(100, 100, 255, 255), IM_COL32(255, 255, 100, 255) };  // G-C
-
-	struct HelixPoint {
-		ImVec2 pos;
-		float z;
-		ImU32 color;
-		int index;
+	struct FileUpload {
+		const char* name;
+		float progress;
+		float target_progress;
+		bool complete;
 	};
+	static FileUpload files[3] = {
+		{"document.pdf", 0.0f, 0.0f, false},
+		{"image.png", 0.0f, 0.0f, false},
+		{"data.csv", 0.0f, 0.0f, false}
+	};
+	static float auto_timer = 0.0f;
+	static int uploading_index = 0;
 
-	HelixPoint points[80];
-	int point_count = 0;
-
-	for (int i = 0; i < 20; i++)
+	// Auto-progress simulation
+	auto_timer += dt;
+	if (auto_timer > 0.03f)
 	{
-		float t = (float)i / 20.0f;
-		float y = center.y - helix_height * 0.5f + t * helix_height;
-		float angle = rotation + t * IAM_2PI * 2.0f;
-
-		float x1 = center.x + cosf(angle) * helix_width;
-		float z1 = sinf(angle);
-
-		float x2 = center.x + cosf(angle + IAM_PI) * helix_width;
-		float z2 = sinf(angle + IAM_PI);
-
-		ImU32* pair_colors = (i % 2 == 0) ? colors1 : colors2;
-
-		points[point_count++] = { ImVec2(x1, y), z1, pair_colors[0], i * 2 };
-		points[point_count++] = { ImVec2(x2, y), z2, pair_colors[1], i * 2 + 1 };
-	}
-
-	// Depth sort
-	for (int i = 0; i < point_count - 1; i++)
-	{
-		for (int j = 0; j < point_count - i - 1; j++)
+		auto_timer = 0.0f;
+		if (uploading_index < 3 && !files[uploading_index].complete)
 		{
-			if (points[j].z > points[j + 1].z)
+			files[uploading_index].target_progress += 0.02f;
+			if (files[uploading_index].target_progress >= 1.0f)
 			{
-				HelixPoint temp = points[j];
-				points[j] = points[j + 1];
-				points[j + 1] = temp;
+				files[uploading_index].target_progress = 1.0f;
+				files[uploading_index].complete = true;
+				uploading_index++;
 			}
 		}
 	}
 
-	// Draw base pair connections
-	for (int i = 0; i < 20; i++)
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(300 * scale, 160 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 6 * scale);
+
+	// Reset button
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + 10 * scale, pos.y + 10 * scale));
+	if (ImGui::Button("Reset Upload"))
 	{
-		float t = (float)i / 20.0f;
-		float y = center.y - helix_height * 0.5f + t * helix_height;
-		float angle = rotation + t * IAM_2PI * 2.0f;
-
-		float x1 = center.x + cosf(angle) * helix_width;
-		float x2 = center.x + cosf(angle + IAM_PI) * helix_width;
-
-		float z_mid = (sinf(angle) + sinf(angle + IAM_PI)) * 0.5f;
-		int alpha = (int)(150 + z_mid * 50);
-		dl->AddLine(ImVec2(x1, y), ImVec2(x2, y), IM_COL32(100, 100, 150, alpha), 2 * scale);
-	}
-
-	// Draw backbone strands
-	for (int strand = 0; strand < 2; strand++)
-	{
-		float phase = strand * IAM_PI;
-		ImVec2 prev_pos;
-
-		for (int i = 0; i <= 40; i++)
+		for (int i = 0; i < 3; i++)
 		{
-			float t = (float)i / 40.0f;
-			float y = center.y - helix_height * 0.5f + t * helix_height;
-			float angle = rotation + t * IAM_2PI * 2.0f + phase;
-
-			float x = center.x + cosf(angle) * helix_width;
-			float z = sinf(angle);
-
-			ImVec2 pos(x, y);
-			int alpha = (int)(150 + z * 100);
-			ImU32 strand_color = strand == 0 ?
-				IM_COL32(255, 150, 100, alpha) : IM_COL32(100, 200, 255, alpha);
-
-			if (i > 0)
-				dl->AddLine(prev_pos, pos, strand_color, (2 + z) * scale);
-			prev_pos = pos;
+			files[i].progress = 0.0f;
+			files[i].target_progress = 0.0f;
+			files[i].complete = false;
 		}
+		uploading_index = 0;
 	}
 
-	// Draw nucleotides with individual pulse animations
-	for (int i = 0; i < point_count; i++)
+	// Draw file upload items
+	float item_y = pos.y + 60 * scale;
+	float bar_width = 180 * scale;
+	float bar_height = 6 * scale;
+
+	for (int i = 0; i < 3; i++)
 	{
-		// Each nucleotide pulses at slightly different rate using oscillate
-		float pulse_osc = iam_oscillate(ImGui::GetID("nucleotide") + points[i].index,
-			0.15f, 2.0f + (points[i].index % 5) * 0.2f, iam_wave_sine, (float)(points[i].index) * 0.1f, dt);
-		float pulse = 1.0f + pulse_osc;
+		// Animate progress bar
+		files[i].progress = iam_tween_float(ImGui::GetID("file_prog") + i, ImHashStr("fp") + i,
+			files[i].target_progress, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
 
-		float size = (4 + points[i].z * 2) * scale * pulse;
-		int alpha = (int)(200 + points[i].z * 55);
-		ImU32 col = (points[i].color & 0x00FFFFFF) | ((ImU32)alpha << 24);
-		dl->AddCircleFilled(points[i].pos, size, col);
+		// File name
+		dl->AddText(ImVec2(pos.x + 15 * scale, item_y), IM_COL32(200, 200, 210, 255), files[i].name);
+
+		// Progress bar background
+		ImVec2 bar_pos(pos.x + 100 * scale, item_y + 4 * scale);
+		dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width, bar_pos.y + bar_height),
+			IM_COL32(50, 55, 65, 255), 3 * scale);
+
+		// Progress bar fill
+		ImU32 bar_color = files[i].complete ? IM_COL32(76, 175, 80, 255) : IM_COL32(33, 150, 243, 255);
+		float fill_width = bar_width * files[i].progress;
+		if (fill_width > 0)
+		{
+			dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + fill_width, bar_pos.y + bar_height),
+				bar_color, 3 * scale);
+		}
+
+		// Percentage or checkmark
+		if (files[i].complete)
+		{
+			// Animate checkmark scale
+			float check_scale = iam_tween_float(ImGui::GetID("check") + i, ImHashStr("ck") + i,
+				1.0f, 0.3f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+			ImVec2 check_pos(bar_pos.x + bar_width + 8 * scale, item_y);
+			dl->AddText(check_pos, IM_COL32(76, 175, 80, (int)(255 * check_scale)), "OK");
+		}
+		else
+		{
+			char pct[8];
+			snprintf(pct, sizeof(pct), "%d%%", (int)(files[i].progress * 100));
+			dl->AddText(ImVec2(bar_pos.x + bar_width + 8 * scale, item_y), IM_COL32(150, 150, 160, 255), pct);
+		}
+
+		item_y += 28 * scale;
 	}
 
-	// Speed indicator text
-	const char* speed_text = fast_mode ? "FAST - Click to slow" : "Click to speed up";
-	ImVec2 text_size = ImGui::CalcTextSize(speed_text);
-	int text_alpha = (int)(150 + speed_indicator * 50);
-	dl->AddText(ImVec2(canvas_pos.x + (canvas_size.x - text_size.x) * 0.5f,
-		canvas_pos.y + canvas_size.y - 20 * scale),
-		IM_COL32(200, 200, 200, text_alpha), speed_text);
-
-	ImGui::Dummy(canvas_size);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
 }
 
 // ============================================================
-// USECASE: Heartbeat Monitor
+// USECASE: Infinite Scroll Loader
 // ============================================================
-static void ShowUsecase_HeartbeatMonitor()
+static void ShowUsecase_InfiniteScrollLoader()
 {
-	ImGui::TextWrapped(
-		"ECG monitor using iam_tween_float with repeat policy for heartbeat cycle "
-		"and crossfade for smooth BPM transitions. Heart icon pulses with each beat.");
+	ImGui::TextWrapped("Loading indicator at the bottom of scrollable content.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
-
-	static int target_bpm = 72;
-	static bool flatline = false;
-
-	ImGui::SliderInt("BPM##Heartbeat", &target_bpm, 40, 180);
-	ImGui::SameLine();
-	if (ImGui::Button(flatline ? "Revive" : "Flatline"))
-		flatline = !flatline;
-
-	// Smooth BPM transition using tween
-	float current_bpm = iam_tween_float(ImGui::GetID("bpm_tween"), ImHashStr("bpm"),
-		flatline ? 0.0f : (float)target_bpm, 0.5f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120 * scale);
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// Monitor background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(10, 20, 15, 255), 8 * scale);
+	static float spinner_angle = 0.0f;
+	static bool loading = true;
 
-	// Grid lines with oscillating opacity
-	float grid_alpha = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("grid_pulse"),
-		1.0f, 0.5f, iam_wave_sine, 0.0f, dt);
+	// Only animate when loading
+	if (loading)
+		spinner_angle += dt * 4.0f;
 
-	for (int i = 0; i <= 10; i++)
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(200 * scale, 120 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(40, 45, 55, 255), 4 * scale);
+
+	// Simulated items
+	for (int i = 0; i < 3; i++)
 	{
-		float x = canvas_pos.x + (i / 10.0f) * canvas_size.x;
-		dl->AddLine(ImVec2(x, canvas_pos.y), ImVec2(x, canvas_pos.y + canvas_size.y),
-			IM_COL32(0, 60, 30, (int)(80 + grid_alpha * 40)), 1);
+		float item_y = pos.y + 10 * scale + i * 25 * scale;
+		dl->AddRectFilled(ImVec2(pos.x + 10 * scale, item_y),
+			ImVec2(pos.x + container_size.x - 10 * scale, item_y + 20 * scale),
+			IM_COL32(60, 65, 75, 255), 4 * scale);
 	}
-	for (int i = 0; i <= 4; i++)
+
+	// Loading indicator at bottom (only show when loading)
+	if (loading)
 	{
-		float y = canvas_pos.y + (i / 4.0f) * canvas_size.y;
-		dl->AddLine(ImVec2(canvas_pos.x, y), ImVec2(canvas_pos.x + canvas_size.x, y),
-			IM_COL32(0, 60, 30, (int)(80 + grid_alpha * 40)), 1);
+		// Animate loader visibility
+		float loader_alpha = iam_tween_float(ImGui::GetID("loader_a"), ImHashStr("la"),
+			1.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		ImVec2 loader_center(pos.x + container_size.x * 0.5f, pos.y + container_size.y - 20 * scale);
+
+		// Spinning dots
+		for (int i = 0; i < 3; i++)
+		{
+			float dot_angle = spinner_angle + i * 0.5f;
+			float dot_alpha = (sinf(dot_angle * 2.0f) * 0.5f + 0.5f);
+			float dot_x = loader_center.x + (i - 1) * 15 * scale;
+			float dot_y = loader_center.y + sinf(spinner_angle + i * 0.8f) * 5 * scale;
+			dl->AddCircleFilled(ImVec2(dot_x, dot_y), 4 * scale,
+				IM_COL32(100, 150, 255, (int)((100 + dot_alpha * 155) * loader_alpha)));
+		}
+	}
+	else
+	{
+		// Show "All loaded" text when not loading
+		const char* done_text = "All loaded!";
+		ImVec2 text_size = ImGui::CalcTextSize(done_text);
+		dl->AddText(ImVec2(pos.x + (container_size.x - text_size.x) * 0.5f, pos.y + container_size.y - 25 * scale),
+			IM_COL32(100, 200, 100, 255), done_text);
 	}
 
-	// Beat phase using accumulated time for continuous heartbeat cycle
-	static float beat_time = 0.0f;
-	float beat_period = current_bpm > 1.0f ? 60.0f / current_bpm : 100.0f;
-	beat_time += dt;
-	float beat_phase = fmodf(beat_time / beat_period, 1.0f);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+	ImGui::Checkbox("Loading", &loading);
+}
 
-	float center_y = canvas_pos.y + canvas_size.y * 0.5f;
+// ============================================================
+// USECASE: Pull to Refresh
+// ============================================================
+static void ShowUsecase_PullToRefresh()
+{
+	ImGui::TextWrapped("Pull-down-to-refresh gesture indicator.");
 
-	// ECG waveform generator
-	auto ecg_sample = [](float t) -> float {
-		t = fmodf(t, 1.0f);
-		if (t < 0.1f) return 0.15f * sinf(t / 0.1f * IAM_PI);
-		if (t < 0.15f) return 0.0f;
-		if (t < 0.18f) return -0.1f * sinf((t - 0.15f) / 0.03f * IAM_PI);
-		if (t < 0.22f) return 1.0f * sinf((t - 0.18f) / 0.04f * IAM_PI);
-		if (t < 0.26f) return -0.25f * sinf((t - 0.22f) / 0.04f * IAM_PI);
-		if (t < 0.35f) return 0.0f;
-		if (t < 0.5f) return 0.25f * sinf((t - 0.35f) / 0.15f * IAM_PI);
-		return 0.0f;
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float pull_amount = 0.0f;
+	static bool refreshing = false;
+	static float refresh_angle = 0.0f;
+
+	if (refreshing)
+	{
+		refresh_angle += dt * 5.0f;
+		pull_amount -= dt * 2.0f;
+		if (pull_amount <= 0) { pull_amount = 0; refreshing = false; }
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(200 * scale, 100 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(40, 45, 55, 255), 4 * scale);
+
+	// Drag area
+	ImGui::SetCursorScreenPos(pos);
+	ImGui::InvisibleButton("pull_area", container_size);
+	if (ImGui::IsItemActive() && !refreshing)
+	{
+		pull_amount += ImGui::GetIO().MouseDelta.y * 0.02f;
+		pull_amount = ImClamp(pull_amount, 0.0f, 1.0f);
+	}
+	if (ImGui::IsItemDeactivated() && pull_amount > 0.8f)
+		refreshing = true;
+
+	// Pull indicator
+	float indicator_y = iam_tween_float(ImGui::GetID("pull_y"), ImHashStr("py"),
+		pull_amount * 50 * scale, 0.1f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	if (indicator_y > 1.0f || refreshing)
+	{
+		ImVec2 ind_center(pos.x + container_size.x * 0.5f, pos.y + 10 * scale + indicator_y * 0.5f);
+
+		if (refreshing)
+		{
+			// Spinning
+			dl->PathArcTo(ind_center, 10 * scale, refresh_angle, refresh_angle + 4.0f, 16);
+			dl->PathStroke(IM_COL32(100, 150, 255, 255), 0, 2 * scale);
+		}
+		else
+		{
+			// Arrow
+			float arrow_rot = pull_amount * 3.14159f;
+			dl->AddCircle(ind_center, 10 * scale, IM_COL32(100, 150, 255, (int)(pull_amount * 255)), 0, 2 * scale);
+		}
+	}
+
+	// Content
+	dl->AddText(ImVec2(pos.x + 10 * scale, pos.y + 50 * scale),
+		IM_COL32(150, 150, 160, 255), refreshing ? "Refreshing..." : "Pull down to refresh");
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Data Fetch States
+// ============================================================
+static void ShowUsecase_DataFetchStates()
+{
+	ImGui::TextWrapped("Loading/Success/Error states for data fetching.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int state = 0; // 0=idle, 1=loading, 2=success, 3=error
+	static float state_time = 0.0f;
+	static float spinner_angle = 0.0f;
+
+	state_time += dt;
+	spinner_angle += dt * 5.0f;
+
+	if (state == 1 && state_time > 2.0f)
+	{
+		state = (((int)(state_time * 100)) % 3 == 0) ? 3 : 2;
+		state_time = 0.0f;
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	if (ImGui::Button("Fetch Data") && state != 1)
+	{
+		state = 1;
+		state_time = 0.0f;
+	}
+
+	// State display
+	ImVec2 box_pos(pos.x, pos.y + 35 * scale);
+	ImVec2 box_size(200 * scale, 80 * scale);
+
+	ImU32 bg_colors[] = {
+		IM_COL32(50, 55, 65, 255),   // idle
+		IM_COL32(50, 55, 65, 255),   // loading
+		IM_COL32(45, 80, 50, 255),   // success
+		IM_COL32(80, 45, 45, 255)    // error
 	};
 
-	// Waveform amplitude based on BPM (flatline when 0)
-	float amplitude_scale = iam_tween_float(ImGui::GetID("amplitude"), ImHashStr("amp"),
-		flatline ? 0.0f : 1.0f, 0.5f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	dl->AddRectFilled(box_pos, ImVec2(box_pos.x + box_size.x, box_pos.y + box_size.y),
+		bg_colors[state], 8 * scale);
 
-	// Draw waveform using history buffer simulated with phase offsets
-	ImVec2 prev_point;
-	int num_samples = 60;
+	ImVec2 center(box_pos.x + box_size.x * 0.5f, box_pos.y + box_size.y * 0.5f);
 
-	for (int i = 0; i <= num_samples; i++)
+	if (state == 1)
 	{
-		float x = canvas_pos.x + (float)i / num_samples * canvas_size.x;
-
-		// Each sample represents a point in past time
-		float sample_phase = beat_phase - (float)(num_samples - i) / num_samples * 2.0f;
-		sample_phase = fmodf(sample_phase + 10.0f, 1.0f);
-
-		float amplitude = ecg_sample(sample_phase) * 40 * scale * amplitude_scale;
-		float y = center_y - amplitude;
-
-		ImVec2 point(x, y);
-
-		if (i > 0)
-		{
-			// Line glow intensity using oscillate
-			float glow = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("line_glow"),
-				1.0f, 1.2f, iam_wave_sine, 0.0f, dt);
-
-			dl->AddLine(prev_point, point, IM_COL32(0, 255, 100, (int)(30 + glow * 30)), 6 * scale);
-			dl->AddLine(prev_point, point, IM_COL32(0, 255, 100, (int)(80 + glow * 40)), 3 * scale);
-			dl->AddLine(prev_point, point, IM_COL32(100, 255, 150, 255), 2 * scale);
-		}
-
-		prev_point = point;
+		// Spinner
+		dl->PathArcTo(center, 15 * scale, spinner_angle, spinner_angle + 4.0f, 16);
+		dl->PathStroke(IM_COL32(100, 150, 255, 255), 0, 3 * scale);
+		dl->AddText(ImVec2(center.x - 30 * scale, center.y + 25 * scale), IM_COL32(150, 150, 160, 255), "Loading...");
+	}
+	else
+	{
+		const char* messages[] = {"Click to fetch", "", "Data loaded!", "Failed to load"};
+		ImVec2 msg_size = ImGui::CalcTextSize(messages[state]);
+		dl->AddText(ImVec2(center.x - msg_size.x * 0.5f, center.y - msg_size.y * 0.5f),
+			IM_COL32(200, 200, 210, 255), messages[state]);
 	}
 
-	// BPM display with smooth update
-	char bpm_text[16];
-	snprintf(bpm_text, sizeof(bpm_text), "%.0f BPM", current_bpm);
-	dl->AddText(ImVec2(canvas_pos.x + 10 * scale, canvas_pos.y + 10 * scale),
-		IM_COL32(0, 255, 100, 255), bpm_text);
-
-	// Heart icon with oscillating pulse tied to beat
-	float heart_pulse_osc = iam_oscillate(ImGui::GetID("heart_pulse"),
-		0.15f, current_bpm / 60.0f, iam_wave_sine, 0.0f, dt);
-	float heart_pulse = 1.0f + fabsf(heart_pulse_osc);
-
-	// Heart visibility fades with flatline
-	float heart_alpha = iam_tween_float(ImGui::GetID("heart_alpha"), ImHashStr("halp"),
-		flatline ? 0.3f : 1.0f, 0.5f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-	ImVec2 heart_pos(canvas_pos.x + canvas_size.x - 30 * scale, canvas_pos.y + 25 * scale);
-	float hs = 8 * scale * (flatline ? 1.0f : heart_pulse);
-	ImU32 heart_col = IM_COL32(255, 50, 50, (int)(heart_alpha * 255));
-
-	dl->AddCircleFilled(ImVec2(heart_pos.x - hs * 0.5f, heart_pos.y), hs * 0.6f, heart_col);
-	dl->AddCircleFilled(ImVec2(heart_pos.x + hs * 0.5f, heart_pos.y), hs * 0.6f, heart_col);
-	dl->AddTriangleFilled(
-		ImVec2(heart_pos.x - hs, heart_pos.y + hs * 0.2f),
-		ImVec2(heart_pos.x + hs, heart_pos.y + hs * 0.2f),
-		ImVec2(heart_pos.x, heart_pos.y + hs * 1.2f),
-		heart_col);
-
-	ImGui::Dummy(canvas_size);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, box_pos.y + box_size.y + 10 * scale));
 }
 
 // ============================================================
-// USECASE: Bouncing Balls Physics
+// USECASE: Percentage Counter
 // ============================================================
-static void ShowUsecase_BouncingBalls()
+static void ShowUsecase_PercentageCounter()
 {
-	ImGui::TextWrapped(
-		"Physics simulation with iam_tween_float for spawn animations, "
-		"squash/stretch effects, and smooth position interpolation. Click to spawn!");
+	ImGui::TextWrapped("Animated percentage counter with easing.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
-
-	struct Ball {
-		ImVec2 pos;
-		ImVec2 vel;
-		float radius;
-		ImU32 color;
-		bool active;
-		float spawn_time;
-		float squash;  // For squash/stretch on bounce
-	};
-
-	static Ball balls[8];
-	static bool initialized = false;
-	static int spawn_index = 0;
-
-	if (!initialized)
-	{
-		for (int i = 0; i < 8; i++)
-			balls[i].active = false;
-		balls[0] = { ImVec2(100, 50), ImVec2(80, 0), 15, IM_COL32(255, 100, 100, 255), true, 1.0f, 0.0f };
-		balls[1] = { ImVec2(200, 30), ImVec2(-60, 20), 12, IM_COL32(100, 255, 100, 255), true, 1.0f, 0.0f };
-		balls[2] = { ImVec2(300, 60), ImVec2(40, -30), 18, IM_COL32(100, 100, 255, 255), true, 1.0f, 0.0f };
-		spawn_index = 3;
-		initialized = true;
-	}
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 150 * scale);
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// Background
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(20, 25, 35, 255), 8 * scale);
+	static float target_pct = 75.0f;
 
-	// Floor with subtle glow using oscillate
-	float floor_glow = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("floor_glow"),
-		1.0f, 0.7f, iam_wave_sine, 0.0f, dt);
-	dl->AddRectFilled(
-		ImVec2(canvas_pos.x, canvas_pos.y + canvas_size.y - 5 * scale),
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(60 + (int)(floor_glow * 20), 70, 90, 255), 0, ImDrawFlags_RoundCornersBottom);
+	ImGui::SliderFloat("Target %", &target_pct, 0.0f, 100.0f);
 
-	// Spawn ball on click
-	ImVec2 mouse = ImGui::GetMousePos();
-	if (ImGui::IsMouseClicked(0) &&
-		mouse.x >= canvas_pos.x && mouse.x <= canvas_pos.x + canvas_size.x &&
-		mouse.y >= canvas_pos.y && mouse.y <= canvas_pos.y + canvas_size.y)
-	{
-		ImU32 colors[] = {
-			IM_COL32(255, 100, 100, 255), IM_COL32(100, 255, 100, 255),
-			IM_COL32(100, 100, 255, 255), IM_COL32(255, 255, 100, 255),
-			IM_COL32(255, 100, 255, 255), IM_COL32(100, 255, 255, 255)
-		};
-		int idx = spawn_index % 8;
-		float r = 12 + (spawn_index % 4) * 3;
-		balls[idx] = {
-			ImVec2(mouse.x - canvas_pos.x, mouse.y - canvas_pos.y),
-			ImVec2((float)((spawn_index * 47) % 200) - 100, 0),
-			r * scale,
-			colors[spawn_index % 6],
-			true,
-			0.0f,  // Just spawned
-			0.0f
-		};
-		spawn_index++;
-	}
+	// Animated value
+	float current_pct = iam_tween_float(ImGui::GetID("pct_val"), ImHashStr("pv"),
+		target_pct, 0.8f, iam_ease_preset(iam_ease_out_expo), iam_policy_crossfade, dt);
 
-	float gravity = 400 * scale;
-	float bounce_factor = 0.75f;
-	float friction = 0.99f;
-	float floor_y = canvas_size.y - 5 * scale;
+	ImVec2 pos = ImGui::GetCursorScreenPos();
 
-	// Update and draw balls
-	for (int i = 0; i < 8; i++)
-	{
-		if (!balls[i].active) continue;
+	// Large percentage display
+	char pct_text[16];
+	snprintf(pct_text, sizeof(pct_text), "%.0f%%", current_pct);
 
-		Ball& b = balls[i];
-
-		// Spawn animation using tween
-		float spawn_scale = iam_tween_float(ImGui::GetID("ball_spawn") + i, ImHashStr("spn"),
-			1.0f, 0.3f,
-			iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-		b.spawn_time += dt;
-
-		// Squash effect decay
-		if (b.squash > 0.01f)
-		{
-			b.squash = iam_tween_float(ImGui::GetID("ball_squash") + i, ImHashStr("sqsh"),
-				0.0f, 0.15f,
-				iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-		}
-
-		// Physics update
-		b.vel.y += gravity * dt;
-		b.vel.x *= friction;
-		b.pos.x += b.vel.x * dt;
-		b.pos.y += b.vel.y * dt;
-
-		// Wall bounces
-		if (b.pos.x - b.radius < 0)
-		{
-			b.pos.x = b.radius;
-			b.vel.x = -b.vel.x * bounce_factor;
-		}
-		if (b.pos.x + b.radius > canvas_size.x)
-		{
-			b.pos.x = canvas_size.x - b.radius;
-			b.vel.x = -b.vel.x * bounce_factor;
-		}
-
-		// Floor bounce with squash effect
-		if (b.pos.y + b.radius > floor_y)
-		{
-			b.pos.y = floor_y - b.radius;
-			float impact = fabsf(b.vel.y);
-			b.vel.y = -b.vel.y * bounce_factor;
-
-			// Trigger squash based on impact velocity
-			if (impact > 50)
-				b.squash = ImMin(0.4f, impact / 500.0f);
-
-			if (fabsf(b.vel.y) < 10 && fabsf(b.vel.x) < 10)
-			{
-				b.vel.y = 0;
-				b.vel.x = 0;
-			}
-		}
-
-		// Smooth rendered position using tween
-		float render_x = iam_tween_float(ImGui::GetID("ball_rx") + i, ImHashStr("rx"),
-			b.pos.x, 0.05f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-		float render_y = iam_tween_float(ImGui::GetID("ball_ry") + i, ImHashStr("ry"),
-			b.pos.y, 0.05f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-		// Calculate squash/stretch
-		float squash_x = 1.0f + b.squash * 0.5f;
-		float squash_y = 1.0f - b.squash * 0.3f;
-
-		// Shadow (size based on height)
-		float height_factor = 1.0f - (render_y / floor_y);
-		float shadow_scale = 0.6f + height_factor * 0.4f;
-		dl->AddEllipseFilled(
-			ImVec2(canvas_pos.x + render_x, canvas_pos.y + floor_y - 2 * scale),
-			ImVec2(b.radius * shadow_scale * squash_x, b.radius * 0.25f * squash_x),
-			IM_COL32(0, 0, 0, (int)(40 + height_factor * 40)));
-
-		// Ball with squash/stretch
-		ImVec2 screen_pos(canvas_pos.x + render_x, canvas_pos.y + render_y);
-		float actual_radius = b.radius * spawn_scale;
-
-		// Draw as ellipse for squash effect
-		dl->AddEllipseFilled(screen_pos,
-			ImVec2(actual_radius * squash_x, actual_radius * squash_y), b.color);
-
-		// Highlight
-		dl->AddCircleFilled(
-			ImVec2(screen_pos.x - actual_radius * 0.25f, screen_pos.y - actual_radius * 0.25f),
-			actual_radius * 0.25f, IM_COL32(255, 255, 255, 120));
-	}
-
-	// Hint with pulsing alpha using oscillate
-	float hint_alpha = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("hint_alpha"),
-		1.0f, 1.0f, iam_wave_sine, 0.0f, dt);
-	const char* hint = "Click to spawn balls!";
-	ImVec2 hint_size = ImGui::CalcTextSize(hint);
-	dl->AddText(ImVec2(canvas_pos.x + (canvas_size.x - hint_size.x) * 0.5f, canvas_pos.y + 5 * scale),
-		IM_COL32(100, 110, 130, (int)(150 + hint_alpha * 50)), hint);
-
-	ImGui::Dummy(canvas_size);
-}
-
-// ============================================================
-// USECASE: Neon Sign
-// ============================================================
-static void ShowUsecase_NeonSign()
-{
-	ImGui::TextWrapped(
-		"Flickering neon sign effect with glow animation. "
-		"Uses iam_oscillate for intensity pulse, power surge, and bloom effects.");
-
-	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
-
-	// ImAnim: Intensity pulse using oscillate
-	float pulse = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("neon_pulse"),
-		1.0f, 10.0f, iam_wave_sine, 0.0f, dt);
-
-	// ImAnim: Power surge effect using oscillate (slow)
-	float surge_t = 0.5f + 0.5f * iam_oscillate(ImGui::GetID("neon_surge"),
-		1.0f, 0.5f, iam_wave_sine, 0.0f, dt);
-	float surge = surge_t * 0.3f;
-
-	// ImAnim: Flicker cycle using sawtooth oscillate for continuous 0-10 cycling
-	static float flicker_time = 0.0f;
-	flicker_time += dt;
-	float flicker_cycle = fmodf(flicker_time * 6.67f, 10.0f);  // 1.5s period for 0-10
-
-	// Derive flicker state from cycle
-	int flicker_state = (int)flicker_cycle;
-	bool is_on = flicker_state < 8;  // Occasionally flicker off
-
-	// ImAnim: Glow bloom radius using oscillate
-	float bloom_factor = 1.0f + 0.2f * iam_oscillate(ImGui::GetID("neon_bloom"),
-		1.0f, 3.3f, iam_wave_sine, 0.0f, dt);
-
-	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 120 * scale);
-	ImDrawList* dl = ImGui::GetWindowDrawList();
-
-	// Dark background (like night)
-	dl->AddRectFilled(canvas_pos,
-		ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-		IM_COL32(15, 15, 25, 255), 8 * scale);
-
-	ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
-
-	// Neon text "OPEN"
-	const char* text = "OPEN";
+	ImGui::PushFont(ImGui::GetFont());
 	float font_scale = 3.0f;
-	ImVec2 text_size = ImGui::CalcTextSize(text);
+	ImVec2 text_size = ImGui::CalcTextSize(pct_text);
 	text_size.x *= font_scale;
 	text_size.y *= font_scale;
 
-	ImVec2 text_pos(center.x - text_size.x * 0.5f, center.y - text_size.y * 0.5f);
+	ImGui::SetWindowFontScale(font_scale);
+	dl->AddText(pos, IM_COL32(100, 200, 255, 255), pct_text);
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::PopFont();
 
-	// Calculate final intensity using ImAnim tweens
-	float base_intensity = is_on ? (0.8f + 0.2f * pulse) : 0.2f;
-	float intensity = base_intensity + surge;
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + text_size.y + 10 * scale));
+}
 
-	ImU32 neon_color = IM_COL32(255, 50, 100, (int)(intensity * 255));
-	ImU32 glow_color = IM_COL32(255, 50, 100, (int)(intensity * 60));
+// ============================================================
+// INPUT CONTROLS USECASES
+// ============================================================
 
-	// Multiple glow layers
-	for (int layer = 4; layer >= 0; layer--)
+// ============================================================
+// USECASE: Segmented Control
+// ============================================================
+static void ShowUsecase_SegmentedControl()
+{
+	ImGui::TextWrapped("Toggle switch group with animated knob and glow effects.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool toggles[3] = {true, false, true};
+	const char* labels[] = {"WiFi", "Bluetooth", "Location"};
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(220 * scale, 100 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	float toggle_width = 44 * scale;
+	float toggle_height = 24 * scale;
+	float knob_radius = 10 * scale;
+
+	for (int i = 0; i < 3; i++)
 	{
-		float glow_offset = layer * 4 * scale;
-		int glow_alpha = (int)(intensity * 40 / (layer + 1));
+		float item_y = pos.y + 15 * scale + i * 28 * scale;
 
-		// Draw glowing background for each character
-		for (int c = 0; c < 4; c++)
+		// Label
+		dl->AddText(ImVec2(pos.x + 15 * scale, item_y + 3 * scale), IM_COL32(200, 200, 210, 255), labels[i]);
+
+		// Toggle switch position
+		ImVec2 toggle_pos(pos.x + container_size.x - toggle_width - 15 * scale, item_y);
+
+		// Animate knob position
+		float knob_x = iam_tween_float(ImGui::GetID("knob") + i, ImHashStr("kx") + i,
+			toggles[i] ? (toggle_width - knob_radius - 2 * scale) : (knob_radius + 2 * scale),
+			0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		// Animate background color
+		float on_amount = iam_tween_float(ImGui::GetID("ton") + i, ImHashStr("to") + i,
+			toggles[i] ? 1.0f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		// Track background
+		ImU32 track_col = IM_COL32(
+			(int)(50 + 26 * on_amount),
+			(int)(55 + 120 * on_amount),
+			(int)(65 + 15 * on_amount), 255);
+		dl->AddRectFilled(toggle_pos, ImVec2(toggle_pos.x + toggle_width, toggle_pos.y + toggle_height),
+			track_col, toggle_height * 0.5f);
+
+		// Glow when on
+		if (on_amount > 0.1f)
 		{
-			char ch[2] = { text[c], 0 };
-			ImVec2 char_size = ImGui::CalcTextSize(ch);
-			float char_x = text_pos.x + c * char_size.x * font_scale;
+			dl->AddRectFilled(toggle_pos, ImVec2(toggle_pos.x + toggle_width, toggle_pos.y + toggle_height),
+				IM_COL32(76, 175, 80, (int)(30 * on_amount)), toggle_height * 0.5f);
+		}
 
-			if (layer == 0)
-			{
-				// Main text
-				for (float ox = -1; ox <= 1; ox += 0.5f)
-				{
-					for (float oy = -1; oy <= 1; oy += 0.5f)
-					{
-						ImGui::SetWindowFontScale(font_scale);
-						dl->AddText(ImVec2(char_x + ox * scale, text_pos.y + oy * scale),
-							glow_color, ch);
-						ImGui::SetWindowFontScale(1.0f);
-					}
-				}
-				ImGui::SetWindowFontScale(font_scale);
-				dl->AddText(ImVec2(char_x, text_pos.y), neon_color, ch);
-				ImGui::SetWindowFontScale(1.0f);
-			}
+		// Knob
+		ImVec2 knob_center(toggle_pos.x + knob_x, toggle_pos.y + toggle_height * 0.5f);
+		dl->AddCircleFilled(knob_center, knob_radius, IM_COL32(255, 255, 255, 255));
+		dl->AddCircle(knob_center, knob_radius, IM_COL32(200, 200, 200, 100), 0, 1.0f);
+
+		// Invisible button for interaction
+		ImGui::SetCursorScreenPos(toggle_pos);
+		ImGui::PushID(i);
+		if (ImGui::InvisibleButton("toggle", ImVec2(toggle_width, toggle_height)))
+			toggles[i] = !toggles[i];
+		ImGui::PopID();
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Quantity Stepper
+// ============================================================
+static void ShowUsecase_QuantityStepper()
+{
+	ImGui::TextWrapped("Quantity stepper with animated value changes.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int quantity = 1;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float btn_size = 32 * scale;
+	float display_width = 50 * scale;
+
+	// Minus button
+	ImGui::SetCursorScreenPos(pos);
+	if (ImGui::InvisibleButton("minus", ImVec2(btn_size, btn_size)) && quantity > 0)
+		quantity--;
+
+	float minus_scale = iam_tween_float(ImGui::GetID("minus_s"), ImHashStr("ms"),
+		ImGui::IsItemHovered() ? 1.1f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	ImVec2 minus_center(pos.x + btn_size * 0.5f, pos.y + btn_size * 0.5f);
+	dl->AddCircleFilled(minus_center, btn_size * 0.45f * minus_scale, IM_COL32(70, 75, 85, 255));
+	dl->AddLine(ImVec2(minus_center.x - 8 * scale, minus_center.y), ImVec2(minus_center.x + 8 * scale, minus_center.y),
+		IM_COL32(255, 255, 255, 255), 2 * scale);
+
+	// Quantity display
+	float display_qty = iam_tween_float(ImGui::GetID("qty"), ImHashStr("qt"),
+		(float)quantity, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	char qty_str[8];
+	snprintf(qty_str, sizeof(qty_str), "%d", (int)(display_qty + 0.5f));
+	ImVec2 qty_size = ImGui::CalcTextSize(qty_str);
+	dl->AddText(ImVec2(pos.x + btn_size + (display_width - qty_size.x) * 0.5f, pos.y + (btn_size - qty_size.y) * 0.5f),
+		IM_COL32(255, 255, 255, 255), qty_str);
+
+	// Plus button
+	ImVec2 plus_pos(pos.x + btn_size + display_width, pos.y);
+	ImGui::SetCursorScreenPos(plus_pos);
+	if (ImGui::InvisibleButton("plus", ImVec2(btn_size, btn_size)) && quantity < 99)
+		quantity++;
+
+	float plus_scale = iam_tween_float(ImGui::GetID("plus_s"), ImHashStr("ps"),
+		ImGui::IsItemHovered() ? 1.1f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	ImVec2 plus_center(plus_pos.x + btn_size * 0.5f, plus_pos.y + btn_size * 0.5f);
+	dl->AddCircleFilled(plus_center, btn_size * 0.45f * plus_scale, IM_COL32(70, 130, 180, 255));
+	dl->AddLine(ImVec2(plus_center.x - 8 * scale, plus_center.y), ImVec2(plus_center.x + 8 * scale, plus_center.y),
+		IM_COL32(255, 255, 255, 255), 2 * scale);
+	dl->AddLine(ImVec2(plus_center.x, plus_center.y - 8 * scale), ImVec2(plus_center.x, plus_center.y + 8 * scale),
+		IM_COL32(255, 255, 255, 255), 2 * scale);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Pin Input
+// ============================================================
+static void ShowUsecase_PinInput()
+{
+	ImGui::TextWrapped("PIN/OTP input with animated focus indicator.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static char pin[5] = "";
+	static int focus_idx = 0;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float box_size = 40 * scale;
+	float spacing = 10 * scale;
+
+	for (int i = 0; i < 4; i++)
+	{
+		ImVec2 box_pos(pos.x + i * (box_size + spacing), pos.y);
+
+		// Focus animation
+		float focus_scale = iam_tween_float(ImGui::GetID("pin_f") + i, ImHashStr("pf"),
+			(i == focus_idx) ? 1.05f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		ImU32 border_col = (i == focus_idx) ? IM_COL32(70, 130, 180, 255) : IM_COL32(60, 65, 75, 255);
+		float border_thick = (i == focus_idx) ? 2.5f * scale : 1.5f * scale;
+
+		ImVec2 center(box_pos.x + box_size * 0.5f, box_pos.y + box_size * 0.5f);
+		float half = box_size * 0.5f * focus_scale;
+		dl->AddRect(ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half),
+			border_col, 4 * scale, 0, border_thick);
+
+		// Display digit or dot
+		if (i < (int)strlen(pin))
+		{
+			dl->AddCircleFilled(center, 6 * scale, IM_COL32(255, 255, 255, 255));
 		}
 	}
 
-	// Add bloom circles around letters for extra glow (using bloom_factor tween)
-	for (int c = 0; c < 4; c++)
+	// Simulated input
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + box_size + 10 * scale));
+	if (ImGui::Button("Add Digit") && focus_idx < 4)
 	{
-		char ch[2] = { text[c], 0 };
-		ImVec2 char_size = ImGui::CalcTextSize(ch);
-		float char_x = text_pos.x + c * char_size.x * font_scale + char_size.x * font_scale * 0.5f;
-		float char_y = text_pos.y + char_size.y * font_scale * 0.5f;
+		pin[focus_idx] = '0' + (focus_idx % 10);
+		pin[focus_idx + 1] = '\0';
+		focus_idx++;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear"))
+	{
+		pin[0] = '\0';
+		focus_idx = 0;
+	}
+}
 
-		float bloom_radius = 30 * scale * intensity * bloom_factor;
-		dl->AddCircleFilled(ImVec2(char_x, char_y), bloom_radius,
-			IM_COL32(255, 50, 100, (int)(intensity * 20)));
+// ============================================================
+// USECASE: Range Slider
+// ============================================================
+static void ShowUsecase_RangeSlider()
+{
+	ImGui::TextWrapped("Dual-handle range slider with animated handles.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float min_val = 20.0f;
+	static float max_val = 80.0f;
+	static int dragging = 0; // 0=none, 1=min, 2=max
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float track_width = 250 * scale;
+	float track_height = 6 * scale;
+	float handle_radius = 10 * scale;
+
+	// Track background
+	dl->AddRectFilled(pos, ImVec2(pos.x + track_width, pos.y + track_height),
+		IM_COL32(50, 55, 65, 255), track_height * 0.5f);
+
+	// Active range
+	float min_x = pos.x + track_width * (min_val / 100.0f);
+	float max_x = pos.x + track_width * (max_val / 100.0f);
+	dl->AddRectFilled(ImVec2(min_x, pos.y), ImVec2(max_x, pos.y + track_height),
+		IM_COL32(70, 130, 180, 255), track_height * 0.5f);
+
+	// Handle positions
+	ImVec2 min_handle(min_x, pos.y + track_height * 0.5f);
+	ImVec2 max_handle(max_x, pos.y + track_height * 0.5f);
+
+	// Handle interaction
+	ImGui::SetCursorScreenPos(ImVec2(min_x - handle_radius, pos.y - handle_radius + track_height * 0.5f));
+	ImGui::InvisibleButton("min_h", ImVec2(handle_radius * 2, handle_radius * 2));
+	bool min_hover = ImGui::IsItemHovered();
+	if (ImGui::IsItemActive())
+	{
+		min_val = ImClamp((ImGui::GetMousePos().x - pos.x) / track_width * 100.0f, 0.0f, max_val - 5.0f);
 	}
 
-	// Reflection on floor
-	float reflect_y = canvas_pos.y + canvas_size.y - 15 * scale;
-	for (int c = 0; c < 4; c++)
+	ImGui::SetCursorScreenPos(ImVec2(max_x - handle_radius, pos.y - handle_radius + track_height * 0.5f));
+	ImGui::InvisibleButton("max_h", ImVec2(handle_radius * 2, handle_radius * 2));
+	bool max_hover = ImGui::IsItemHovered();
+	if (ImGui::IsItemActive())
 	{
-		char ch[2] = { text[c], 0 };
-		ImVec2 char_size = ImGui::CalcTextSize(ch);
-		float char_x = text_pos.x + c * char_size.x * font_scale;
+		max_val = ImClamp((ImGui::GetMousePos().x - pos.x) / track_width * 100.0f, min_val + 5.0f, 100.0f);
+	}
 
-		ImGui::SetWindowFontScale(font_scale * 0.3f);
-		dl->AddText(ImVec2(char_x + char_size.x * font_scale * 0.35f, reflect_y),
-			IM_COL32(255, 50, 100, (int)(intensity * 40)), ch);
+	// Animated handles
+	float min_scale = iam_tween_float(ImGui::GetID("min_sc"), ImHashStr("mns"),
+		min_hover ? 1.2f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	float max_scale = iam_tween_float(ImGui::GetID("max_sc"), ImHashStr("mxs"),
+		max_hover ? 1.2f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	dl->AddCircleFilled(min_handle, handle_radius * min_scale, IM_COL32(255, 255, 255, 255));
+	dl->AddCircleFilled(max_handle, handle_radius * max_scale, IM_COL32(255, 255, 255, 255));
+
+	// Labels
+	char label[32];
+	snprintf(label, sizeof(label), "%.0f - %.0f", min_val, max_val);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + track_height + handle_radius + 5 * scale));
+	ImGui::Text("%s", label);
+}
+
+// ============================================================
+// USECASE: Search Input
+// ============================================================
+static void ShowUsecase_SearchInput()
+{
+	ImGui::TextWrapped("Tag input with animated chip add/remove and color coding.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	struct Tag {
+		const char* text;
+		bool active;
+		float anim;
+	};
+	static Tag tags[5] = {
+		{"React", true, 1.0f},
+		{"TypeScript", true, 1.0f},
+		{"Node.js", false, 0.0f},
+		{"Python", false, 0.0f},
+		{"Rust", false, 0.0f}
+	};
+	ImU32 tag_colors[] = {
+		IM_COL32(97, 218, 251, 255),  // React cyan
+		IM_COL32(49, 120, 198, 255),  // TypeScript blue
+		IM_COL32(104, 160, 99, 255),  // Node green
+		IM_COL32(255, 212, 59, 255),  // Python yellow
+		IM_COL32(222, 165, 132, 255)  // Rust orange
+	};
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(300 * scale, 90 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	// Title
+	dl->AddText(ImVec2(pos.x + 10 * scale, pos.y + 8 * scale), IM_COL32(150, 150, 160, 255), "Skills:");
+
+	// Draw tags
+	float tag_x = pos.x + 10 * scale;
+	float tag_y = pos.y + 30 * scale;
+	float tag_height = 24 * scale;
+	float row_spacing = 30 * scale;
+
+	for (int i = 0; i < 5; i++)
+	{
+		// Animate tag scale
+		float target = tags[i].active ? 1.0f : 0.0f;
+		tags[i].anim = iam_tween_float(ImGui::GetID("tag_a") + i, ImHashStr("ta") + i,
+			target, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		ImVec2 text_size = ImGui::CalcTextSize(tags[i].text);
+		float tag_width = (text_size.x + 30 * scale) * tags[i].anim;
+
+		// Wrap to next row if needed
+		if (tag_x + tag_width > pos.x + container_size.x - 10 * scale && tag_x > pos.x + 15 * scale)
+		{
+			tag_x = pos.x + 10 * scale;
+			tag_y += row_spacing;
+		}
+
+		if (tags[i].anim > 0.05f)
+		{
+			// Tag background
+			ImVec2 tag_pos(tag_x, tag_y);
+			float visible_width = tag_width;
+			float visible_height = tag_height * tags[i].anim;
+
+			ImU32 bg_col = tag_colors[i];
+			// Darken the background
+			bg_col = IM_COL32(
+				(int)(((bg_col >> 0) & 0xFF) * 0.3f),
+				(int)(((bg_col >> 8) & 0xFF) * 0.3f),
+				(int)(((bg_col >> 16) & 0xFF) * 0.3f), 255);
+			dl->AddRectFilled(tag_pos, ImVec2(tag_pos.x + visible_width, tag_pos.y + visible_height),
+				bg_col, visible_height * 0.5f);
+
+			// Tag border
+			dl->AddRect(tag_pos, ImVec2(tag_pos.x + visible_width, tag_pos.y + visible_height),
+				tag_colors[i], visible_height * 0.5f, 0, 1.5f * scale);
+
+			// Tag text (centered)
+			float alpha = tags[i].anim;
+			ImVec2 text_pos(tag_pos.x + 8 * scale, tag_pos.y + (visible_height - text_size.y) * 0.5f);
+			dl->AddText(text_pos, IM_COL32(255, 255, 255, (int)(255 * alpha)), tags[i].text);
+
+			// X button
+			ImVec2 x_pos(tag_pos.x + visible_width - 16 * scale, tag_pos.y + visible_height * 0.5f - 5 * scale);
+			dl->AddText(x_pos, IM_COL32(200, 200, 210, (int)(200 * alpha)), "x");
+
+			tag_x += visible_width + 6 * scale;
+		}
+	}
+
+	// Toggle buttons
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 5 * scale));
+	for (int i = 0; i < 5; i++)
+	{
+		ImGui::PushID(i);
+		if (ImGui::SmallButton(tags[i].active ? "-" : "+"))
+			tags[i].active = !tags[i].active;
+		ImGui::PopID();
+		ImGui::SameLine();
+	}
+	ImGui::NewLine();
+}
+
+// ============================================================
+// CARDS & CONTENT USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Stacked Cards
+// ============================================================
+static void ShowUsecase_StackedCards()
+{
+	ImGui::TextWrapped("Stacked card deck with animated reveal on hover.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool expanded = false;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 card_size(150 * scale, 100 * scale);
+
+	ImGui::InvisibleButton("stack_area", ImVec2(card_size.x + 60 * scale, card_size.y + 40 * scale));
+	expanded = ImGui::IsItemHovered();
+
+	// Draw cards back to front
+	for (int i = 2; i >= 0; i--)
+	{
+		float target_offset = expanded ? i * 25 * scale : i * 5 * scale;
+		float offset = iam_tween_float(ImGui::GetID("card") + i, ImHashStr("co"),
+			target_offset, 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		ImVec2 card_pos(pos.x + offset, pos.y + offset * 0.5f);
+		ImU32 card_col = IM_COL32(50 + i * 15, 55 + i * 15, 65 + i * 15, 255);
+
+		dl->AddRectFilled(card_pos, ImVec2(card_pos.x + card_size.x, card_pos.y + card_size.y),
+			card_col, 8 * scale);
+
+		char label[16];
+		snprintf(label, sizeof(label), "Card %d", i + 1);
+		dl->AddText(ImVec2(card_pos.x + 15 * scale, card_pos.y + 15 * scale),
+			IM_COL32(200, 200, 210, 255), label);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + card_size.y + 50 * scale));
+}
+
+// ============================================================
+// USECASE: Notification Card
+// ============================================================
+static void ShowUsecase_NotificationCard()
+{
+	ImGui::TextWrapped("Notification card with slide-in and dismiss animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool visible = false;
+	static float dismiss_x = 0.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	if (ImGui::Button(visible ? "Dismiss" : "Show Notification"))
+		visible = !visible;
+
+	ImVec2 card_pos(pos.x, pos.y + 35 * scale);
+	ImVec2 card_size(280 * scale, 70 * scale);
+
+	// Slide animation
+	float slide_x = iam_tween_float(ImGui::GetID("notif_x"), ImHashStr("nx"),
+		visible ? 0.0f : -card_size.x - 20 * scale, 0.3f,
+		iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	if (slide_x > -card_size.x)
+	{
+		ImVec2 final_pos(card_pos.x + slide_x, card_pos.y);
+
+		// Card
+		dl->AddRectFilled(final_pos, ImVec2(final_pos.x + card_size.x, final_pos.y + card_size.y),
+			IM_COL32(50, 55, 65, 255), 8 * scale);
+
+		// Accent bar
+		dl->AddRectFilled(final_pos, ImVec2(final_pos.x + 4 * scale, final_pos.y + card_size.y),
+			IM_COL32(76, 175, 80, 255), 8 * scale, ImDrawFlags_RoundCornersLeft);
+
+		// Content
+		dl->AddText(ImVec2(final_pos.x + 15 * scale, final_pos.y + 12 * scale),
+			IM_COL32(255, 255, 255, 255), "New Message");
+		dl->AddText(ImVec2(final_pos.x + 15 * scale, final_pos.y + 35 * scale),
+			IM_COL32(150, 150, 160, 255), "You have 3 unread messages");
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, card_pos.y + card_size.y + 15 * scale));
+}
+
+// ============================================================
+// USECASE: Product Card
+// ============================================================
+static void ShowUsecase_ProductCard()
+{
+	ImGui::TextWrapped("Music player card with animated progress, waveform, and controls.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool playing = false;
+	static float progress = 0.0f;
+	static float wave_offset = 0.0f;
+
+	if (playing)
+	{
+		progress += dt * 0.05f;
+		if (progress > 1.0f) progress = 0.0f;
+		wave_offset += dt * 3.0f;
+	}
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 card_size(280 * scale, 120 * scale);
+
+	// Card background with gradient effect
+	dl->AddRectFilled(pos, ImVec2(pos.x + card_size.x, pos.y + card_size.y),
+		IM_COL32(35, 40, 50, 255), 12 * scale);
+
+	// Album art placeholder
+	float art_size = 80 * scale;
+	ImVec2 art_pos(pos.x + 15 * scale, pos.y + 20 * scale);
+	dl->AddRectFilled(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
+		IM_COL32(100, 80, 140, 255), 8 * scale);
+
+	// Album art pulse when playing
+	if (playing)
+	{
+		float pulse = iam_oscillate(ImGui::GetID("pulse"), 1.0f, 1.0f, 0, 0.0f, dt);
+		pulse = pulse * 0.5f + 0.5f;  // Convert -1..1 to 0..1
+		dl->AddRect(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
+			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 8 * scale, 0, 2 * scale);
+	}
+
+	// Song info
+	float info_x = art_pos.x + art_size + 15 * scale;
+	dl->AddText(ImVec2(info_x, pos.y + 20 * scale), IM_COL32(255, 255, 255, 255), "Track Title");
+	dl->AddText(ImVec2(info_x, pos.y + 40 * scale), IM_COL32(150, 150, 160, 255), "Artist Name");
+
+	// Animated waveform when playing
+	float wave_y = pos.y + 60 * scale;
+	float wave_width = card_size.x - info_x + pos.x - 20 * scale;
+	for (int i = 0; i < 20; i++)
+	{
+		float bar_x = info_x + i * (wave_width / 20);
+		float height_factor = playing ?
+			(sinf(wave_offset + i * 0.5f) * 0.5f + 0.5f) * 0.8f + 0.2f : 0.3f;
+		float bar_height = 15 * scale * height_factor;
+		dl->AddRectFilled(
+			ImVec2(bar_x, wave_y + (15 * scale - bar_height) * 0.5f),
+			ImVec2(bar_x + 4 * scale, wave_y + (15 * scale + bar_height) * 0.5f),
+			IM_COL32(150, 120, 200, playing ? 255 : 100), 2 * scale);
+	}
+
+	// Progress bar
+	float prog_y = pos.y + 85 * scale;
+	float prog_width = card_size.x - 30 * scale;
+	dl->AddRectFilled(ImVec2(pos.x + 15 * scale, prog_y),
+		ImVec2(pos.x + 15 * scale + prog_width, prog_y + 4 * scale),
+		IM_COL32(60, 65, 75, 255), 2 * scale);
+
+	// Animated progress fill
+	float animated_progress = iam_tween_float(ImGui::GetID("prog"), ImHashStr("pg"),
+		progress, 0.1f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	dl->AddRectFilled(ImVec2(pos.x + 15 * scale, prog_y),
+		ImVec2(pos.x + 15 * scale + prog_width * animated_progress, prog_y + 4 * scale),
+		IM_COL32(150, 120, 200, 255), 2 * scale);
+
+	// Progress knob
+	float knob_x = pos.x + 15 * scale + prog_width * animated_progress;
+	dl->AddCircleFilled(ImVec2(knob_x, prog_y + 2 * scale), 6 * scale, IM_COL32(255, 255, 255, 255));
+
+	// Time labels
+	char time_cur[8], time_total[8];
+	int cur_sec = (int)(progress * 180);
+	snprintf(time_cur, sizeof(time_cur), "%d:%02d", cur_sec / 60, cur_sec % 60);
+	snprintf(time_total, sizeof(time_total), "3:00");
+	dl->AddText(ImVec2(pos.x + 15 * scale, prog_y + 8 * scale), IM_COL32(120, 120, 130, 255), time_cur);
+	ImVec2 total_size = ImGui::CalcTextSize(time_total);
+	dl->AddText(ImVec2(pos.x + card_size.x - 15 * scale - total_size.x, prog_y + 8 * scale),
+		IM_COL32(120, 120, 130, 255), time_total);
+
+	// Play button
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + card_size.x - 45 * scale, pos.y + 15 * scale));
+	if (ImGui::InvisibleButton("play_btn", ImVec2(30 * scale, 30 * scale)))
+		playing = !playing;
+
+	// Animate play button
+	float btn_scale = iam_tween_float(ImGui::GetID("btn_s"), ImHashStr("bs"),
+		ImGui::IsItemHovered() ? 1.15f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	ImVec2 btn_center(pos.x + card_size.x - 30 * scale, pos.y + 30 * scale);
+	float btn_r = 12 * scale * btn_scale;
+	dl->AddCircleFilled(btn_center, btn_r, IM_COL32(150, 120, 200, 255));
+
+	if (playing)
+	{
+		// Pause icon
+		dl->AddRectFilled(ImVec2(btn_center.x - 4 * scale, btn_center.y - 5 * scale),
+			ImVec2(btn_center.x - 1 * scale, btn_center.y + 5 * scale), IM_COL32(255, 255, 255, 255));
+		dl->AddRectFilled(ImVec2(btn_center.x + 1 * scale, btn_center.y - 5 * scale),
+			ImVec2(btn_center.x + 4 * scale, btn_center.y + 5 * scale), IM_COL32(255, 255, 255, 255));
+	}
+	else
+	{
+		// Play icon (triangle)
+		ImVec2 p1(btn_center.x - 3 * scale, btn_center.y - 6 * scale);
+		ImVec2 p2(btn_center.x - 3 * scale, btn_center.y + 6 * scale);
+		ImVec2 p3(btn_center.x + 6 * scale, btn_center.y);
+		dl->AddTriangleFilled(p1, p2, p3, IM_COL32(255, 255, 255, 255));
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + card_size.y + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Timeline Card
+// ============================================================
+static void ShowUsecase_TimelineCard()
+{
+	ImGui::TextWrapped("Timeline/Activity feed card with staggered animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float anim_time = 0.0f;
+	anim_time += dt;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float item_height = 50 * scale;
+
+	const char* events[] = {"Created project", "Added team member", "Completed task", "Deployed v1.0"};
+
+	for (int i = 0; i < 4; i++)
+	{
+		// Staggered entrance
+		float item_progress = ImClamp((anim_time - i * 0.15f) * 2.0f, 0.0f, 1.0f);
+
+		float item_x = iam_tween_float(ImGui::GetID("tl_x") + i, ImHashStr("tx"),
+			item_progress > 0.5f ? 0.0f : -30 * scale, 0.3f,
+			iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		float item_alpha = item_progress;
+		ImVec2 item_pos(pos.x + 20 * scale + item_x, pos.y + i * item_height);
+
+		// Timeline line
+		if (i < 3)
+		{
+			dl->AddLine(ImVec2(pos.x + 8 * scale, item_pos.y + 12 * scale),
+				ImVec2(pos.x + 8 * scale, item_pos.y + item_height),
+				IM_COL32(60, 65, 75, (int)(item_alpha * 255)), 2 * scale);
+		}
+
+		// Timeline dot
+		dl->AddCircleFilled(ImVec2(pos.x + 8 * scale, item_pos.y + 8 * scale),
+			5 * scale, IM_COL32(70, 130, 180, (int)(item_alpha * 255)));
+
+		// Event text
+		dl->AddText(item_pos, IM_COL32(255, 255, 255, (int)(item_alpha * 255)), events[i]);
+		dl->AddText(ImVec2(item_pos.x, item_pos.y + 18 * scale),
+			IM_COL32(100, 100, 110, (int)(item_alpha * 255)), "2 hours ago");
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 4 * item_height + 10 * scale));
+	if (ImGui::Button("Replay")) anim_time = 0.0f;
+}
+
+// ============================================================
+// TEXT & DISPLAY USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Highlight Text
+// ============================================================
+static void ShowUsecase_HighlightText()
+{
+	ImGui::TextWrapped("Text with animated highlight marker effect.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool highlight = false;
+	static float anim_time = 0.0f;
+
+	if (highlight) anim_time += dt * 2.0f;
+	else anim_time = 0.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	const char* text = "This is highlighted text";
+	ImVec2 text_size = ImGui::CalcTextSize(text);
+
+	// Highlight width animation
+	float highlight_width = iam_tween_float(ImGui::GetID("hl_w"), ImHashStr("hw"),
+		highlight ? text_size.x : 0.0f, 0.4f,
+		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Draw highlight behind text
+	if (highlight_width > 1.0f)
+	{
+		dl->AddRectFilled(pos, ImVec2(pos.x + highlight_width, pos.y + text_size.y + 4 * scale),
+			IM_COL32(255, 230, 100, 100), 2 * scale);
+	}
+
+	dl->AddText(pos, IM_COL32(255, 255, 255, 255), text);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + text_size.y + 15 * scale));
+	if (ImGui::Button(highlight ? "Remove Highlight" : "Highlight"))
+		highlight = !highlight;
+}
+
+// ============================================================
+// USECASE: Animated Label
+// ============================================================
+static void ShowUsecase_AnimatedLabel()
+{
+	ImGui::TextWrapped("Label with animated entrance and color transition.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int label_state = 0; // 0=none, 1=pending, 2=success, 3=error
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	if (ImGui::Button("Pending")) label_state = 1;
+	ImGui::SameLine();
+	if (ImGui::Button("Success")) label_state = 2;
+	ImGui::SameLine();
+	if (ImGui::Button("Error")) label_state = 3;
+
+	ImVec2 label_pos(pos.x, pos.y + 35 * scale);
+
+	if (label_state > 0)
+	{
+		const char* texts[] = {"", "Pending...", "Success!", "Error!"};
+		ImU32 colors[] = {0, IM_COL32(255, 200, 50, 255), IM_COL32(76, 175, 80, 255), IM_COL32(220, 60, 60, 255)};
+
+		// Scale animation
+		float label_scale = iam_tween_float(ImGui::GetID("lbl_s"), ImHashStr("ls"),
+			1.0f, 0.3f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		ImVec2 text_size = ImGui::CalcTextSize(texts[label_state]);
+		ImVec2 bg_size((text_size.x + 20 * scale) * label_scale, (text_size.y + 10 * scale) * label_scale);
+
+		dl->AddRectFilled(label_pos, ImVec2(label_pos.x + bg_size.x, label_pos.y + bg_size.y),
+			colors[label_state], 4 * scale);
+
+		ImVec2 text_pos(label_pos.x + 10 * scale * label_scale, label_pos.y + 5 * scale * label_scale);
+		dl->AddText(text_pos, IM_COL32(255, 255, 255, 255), texts[label_state]);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, label_pos.y + 40 * scale));
+}
+
+// ============================================================
+// USECASE: Scrolling Marquee
+// ============================================================
+static void ShowUsecase_ScrollingMarquee()
+{
+	ImGui::TextWrapped("Horizontal scrolling text marquee animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float scroll_x = 0.0f;
+	scroll_x -= dt * 50.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float container_width = 250 * scale;
+	float height = 25 * scale;
+
+	const char* text = "Breaking News: ImAnim makes UI animations easy and beautiful!";
+	ImVec2 text_size = ImGui::CalcTextSize(text);
+
+	// Reset scroll when text goes off screen
+	if (scroll_x < -text_size.x) scroll_x = container_width;
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_width, pos.y + height),
+		IM_COL32(40, 45, 55, 255), 4 * scale);
+
+	// Clip and draw text
+	ImGui::PushClipRect(pos, ImVec2(pos.x + container_width, pos.y + height), true);
+	dl->AddText(ImVec2(pos.x + scroll_x, pos.y + (height - ImGui::GetFontSize()) * 0.5f),
+		IM_COL32(255, 255, 255, 255), text);
+	ImGui::PopClipRect();
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + height + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Countdown Display
+// ============================================================
+static void ShowUsecase_CountdownDisplay()
+{
+	ImGui::TextWrapped("Animated countdown timer with flip-style digits.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float countdown = 99.0f;
+	countdown -= dt;
+	if (countdown < 0) countdown = 99.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float digit_width = 40 * scale;
+	float digit_height = 50 * scale;
+	float spacing = 8 * scale;
+
+	int seconds = (int)countdown;
+	int tens = seconds / 10;
+	int ones = seconds % 10;
+
+	// Animated digits
+	float tens_y = iam_tween_float(ImGui::GetID("tens"), tens,
+		0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	float ones_y = iam_tween_float(ImGui::GetID("ones"), ones,
+		0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Draw tens digit
+	ImVec2 tens_pos = pos;
+	dl->AddRectFilled(tens_pos, ImVec2(tens_pos.x + digit_width, tens_pos.y + digit_height),
+		IM_COL32(50, 55, 65, 255), 4 * scale);
+	char tens_str[2] = {(char)('0' + tens), '\0'};
+	ImGui::SetWindowFontScale(2.5f);
+	ImVec2 tens_size = ImGui::CalcTextSize(tens_str);
+	dl->AddText(ImVec2(tens_pos.x + (digit_width - tens_size.x) * 0.5f,
+		tens_pos.y + (digit_height - tens_size.y) * 0.5f + tens_y), IM_COL32(255, 255, 255, 255), tens_str);
+
+	// Draw ones digit
+	ImVec2 ones_pos(pos.x + digit_width + spacing, pos.y);
+	dl->AddRectFilled(ones_pos, ImVec2(ones_pos.x + digit_width, ones_pos.y + digit_height),
+		IM_COL32(50, 55, 65, 255), 4 * scale);
+	char ones_str[2] = {(char)('0' + ones), '\0'};
+	dl->AddText(ImVec2(ones_pos.x + (digit_width - tens_size.x) * 0.5f,
+		ones_pos.y + (digit_height - tens_size.y) * 0.5f + ones_y), IM_COL32(255, 255, 255, 255), ones_str);
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + digit_height + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Word Cloud
+// ============================================================
+static void ShowUsecase_WordCloud()
+{
+	ImGui::TextWrapped("Animated word cloud with hover effects.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	const char* words[] = {"Animation", "ImGui", "Tween", "UI", "Design", "Code", "Fast"};
+	float sizes[] = {1.5f, 1.2f, 1.3f, 1.0f, 1.1f, 0.9f, 1.4f};
+	int word_count = 7;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	// 200% larger container
+	ImVec2 container_size(560 * scale, 200 * scale);
+
+	// Container background for visibility
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	// 200% larger positions
+	float x_positions[] = {20, 240, 400, 100, 320, 20, 200};
+	float y_positions[] = {20, 10, 80, 90, 110, 150, 140};
+
+	for (int i = 0; i < word_count; i++)
+	{
+		ImVec2 word_pos(pos.x + x_positions[i] * scale, pos.y + y_positions[i] * scale);
+
+		ImGui::SetCursorScreenPos(word_pos);
+		ImGui::PushID(i);
+		// Scale sizes by 2x as well
+		float base_size = sizes[i] * 2.0f;
+		ImVec2 word_size = ImGui::CalcTextSize(words[i]);
+		word_size.x *= base_size;
+		word_size.y *= base_size;
+		ImGui::InvisibleButton("word", word_size);
+		bool hovered = ImGui::IsItemHovered();
+		ImGui::PopID();
+
+		float word_scale = iam_tween_float(ImGui::GetID("wc") + i, ImHashStr("ws"),
+			hovered ? base_size * 1.2f : base_size, 0.15f,
+			iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+		ImU32 word_col = hovered ? IM_COL32(100, 200, 255, 255) : IM_COL32(200, 200, 210, 255);
+
+		ImGui::SetWindowFontScale(word_scale);
+		dl->AddText(word_pos, word_col, words[i]);
 		ImGui::SetWindowFontScale(1.0f);
 	}
 
-	ImGui::Dummy(canvas_size);
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
 }
+
+// ============================================================
+// USECASE: Animated Tooltip
+// ============================================================
+static void ShowUsecase_AnimatedTooltipText()
+{
+	ImGui::TextWrapped("Text with animated tooltip on hover.");
+
+	// Add empty line before the interactive element
+	ImGui::Dummy(ImVec2(0, 10 * ImGui::GetIO().FontGlobalScale));
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool showing = false;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	const char* text = "Hover over me";
+	ImVec2 text_size = ImGui::CalcTextSize(text);
+
+	dl->AddText(pos, IM_COL32(100, 150, 255, 255), text);
+	dl->AddLine(ImVec2(pos.x, pos.y + text_size.y), ImVec2(pos.x + text_size.x, pos.y + text_size.y),
+		IM_COL32(100, 150, 255, 128), 1 * scale);
+
+	ImGui::SetCursorScreenPos(pos);
+	ImGui::InvisibleButton("tip_text", text_size);
+	showing = ImGui::IsItemHovered();
+
+	// Tooltip animation - slowed down from 0.15f to 0.5f
+	float tip_scale = iam_tween_float(ImGui::GetID("tip_s"), ImHashStr("ts"),
+		showing ? 1.0f : 0.0f, 0.5f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	if (tip_scale > 0.01f)
+	{
+		ImVec2 tip_pos(pos.x, pos.y - 35 * scale);
+		float tip_width = 150 * scale * tip_scale;
+		float tip_height = 25 * scale * tip_scale;
+
+		dl->AddRectFilled(tip_pos, ImVec2(tip_pos.x + tip_width, tip_pos.y + tip_height),
+			IM_COL32(50, 55, 65, (int)(tip_scale * 255)), 4 * scale);
+
+		// Arrow
+		dl->AddTriangleFilled(
+			ImVec2(tip_pos.x + 10 * scale, tip_pos.y + tip_height),
+			ImVec2(tip_pos.x + 20 * scale, tip_pos.y + tip_height),
+			ImVec2(tip_pos.x + 15 * scale, tip_pos.y + tip_height + 6 * scale),
+			IM_COL32(50, 55, 65, (int)(tip_scale * 255)));
+
+		dl->AddText(ImVec2(tip_pos.x + 8 * scale, tip_pos.y + 5 * scale),
+			IM_COL32(200, 200, 210, (int)(tip_scale * 255)), "This is a tooltip!");
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + text_size.y + 15 * scale));
+}
+
+// ============================================================
+// USECASE: Character Reveal
+// ============================================================
+static void ShowUsecase_CharacterReveal()
+{
+	ImGui::TextWrapped("Text with per-character reveal animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float anim_time = 0.0f;
+	anim_time += dt;
+
+	const char* text = "Welcome to ImAnim!";
+	int text_len = (int)strlen(text);
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float x_offset = 0.0f;
+
+	for (int i = 0; i < text_len; i++)
+	{
+		float char_progress = ImClamp((anim_time - i * 0.05f) * 3.0f, 0.0f, 1.0f);
+
+		float char_y = (1.0f - char_progress) * -20 * scale;
+		int char_alpha = (int)(char_progress * 255);
+
+		char c[2] = {text[i], '\0'};
+		dl->AddText(ImVec2(pos.x + x_offset, pos.y + char_y),
+			IM_COL32(255, 255, 255, char_alpha), c);
+
+		x_offset += ImGui::CalcTextSize(c).x;
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 30 * scale));
+	if (ImGui::Button("Replay")) anim_time = 0.0f;
+}
+
+// ============================================================
+// VISUAL EFFECTS USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Pulse Ring
+// ============================================================
+static void ShowUsecase_PulseRing()
+{
+	ImGui::TextWrapped("Pulsating ring effect for attention/notification.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float pulse_time = 0.0f;
+	pulse_time += dt;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 center(pos.x + 50 * scale, pos.y + 50 * scale);
+
+	// Multiple expanding rings
+	for (int i = 0; i < 3; i++)
+	{
+		float ring_time = fmodf(pulse_time + i * 0.5f, 1.5f);
+		float ring_radius = 15 * scale + ring_time * 30 * scale;
+		float ring_alpha = 1.0f - (ring_time / 1.5f);
+
+		dl->AddCircle(center, ring_radius, IM_COL32(100, 150, 255, (int)(ring_alpha * 200)), 0, 2 * scale);
+	}
+
+	// Center dot
+	dl->AddCircleFilled(center, 12 * scale, IM_COL32(100, 150, 255, 255));
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 110 * scale));
+}
+
+// ============================================================
+// USECASE: Morphing Shape
+// ============================================================
+static void ShowUsecase_MorphingShape()
+{
+	ImGui::TextWrapped("Shape morphing between circle and square.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static bool is_circle = true;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 center(pos.x + 60 * scale, pos.y + 60 * scale);
+	float size = 40 * scale;
+
+	// Morph animation (corner radius)
+	float corner = iam_tween_float(ImGui::GetID("morph_c"), ImHashStr("mc"),
+		is_circle ? size : 8 * scale, 0.4f,
+		iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	dl->AddRectFilled(ImVec2(center.x - size, center.y - size),
+		ImVec2(center.x + size, center.y + size),
+		IM_COL32(70, 130, 180, 255), corner);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 130 * scale));
+	if (ImGui::Button(is_circle ? "To Square" : "To Circle"))
+		is_circle = !is_circle;
+}
+
+// ============================================================
+// USECASE: Bouncing Dots
+// ============================================================
+static void ShowUsecase_BouncingDots()
+{
+	ImGui::TextWrapped("Bouncing dots loading animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float bounce_time = 0.0f;
+	bounce_time += dt * 3.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	for (int i = 0; i < 3; i++)
+	{
+		float phase = bounce_time + i * 0.5f;
+		float bounce = fabsf(sinf(phase)) * 20 * scale;
+
+		ImVec2 dot_pos(pos.x + 30 * scale + i * 25 * scale, pos.y + 40 * scale - bounce);
+		dl->AddCircleFilled(dot_pos, 8 * scale, IM_COL32(100, 150, 255, 255));
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 60 * scale));
+}
+
+// ============================================================
+// USECASE: Confetti Burst
+// ============================================================
+static void ShowUsecase_ConfettiBurst()
+{
+	ImGui::TextWrapped("Celebration confetti burst animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float burst_time = -1.0f;
+	if (burst_time >= 0) burst_time += dt;
+	if (burst_time > 2.0f) burst_time = -1.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(200 * scale, 100 * scale);
+	ImVec2 center(pos.x + container_size.x * 0.5f, pos.y + container_size.y * 0.5f);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	if (burst_time >= 0 && burst_time < 2.0f)
+	{
+		// Draw confetti particles
+		for (int i = 0; i < 20; i++)
+		{
+			float angle = (float)i / 20.0f * 6.28318f;
+			float speed = 50 + (i % 5) * 30;
+			float x = center.x + cosf(angle) * speed * burst_time * scale;
+			float y = center.y + sinf(angle) * speed * burst_time * scale + burst_time * burst_time * 100 * scale;
+			float alpha = 1.0f - burst_time * 0.5f;
+
+			ImU32 colors[] = {
+				IM_COL32(255, 100, 100, (int)(alpha * 255)),
+				IM_COL32(100, 255, 100, (int)(alpha * 255)),
+				IM_COL32(100, 100, 255, (int)(alpha * 255)),
+				IM_COL32(255, 255, 100, (int)(alpha * 255))
+			};
+
+			dl->AddRectFilled(ImVec2(x - 3 * scale, y - 3 * scale),
+				ImVec2(x + 3 * scale, y + 3 * scale), colors[i % 4]);
+		}
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+	if (ImGui::Button("Celebrate!")) burst_time = 0.0f;
+}
+
+// ============================================================
+// VFX / GAME / TIMELINE USECASES
+// ============================================================
+
+// ============================================================
+// USECASE: Health Bar
+// ============================================================
+static void ShowUsecase_HealthBar()
+{
+	ImGui::TextWrapped("Game-style health bar with damage animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float health = 100.0f;
+	static float displayed_health = 100.0f;
+
+	// Damage animation (red flash)
+	displayed_health = iam_tween_float(ImGui::GetID("hp_val"), ImHashStr("hv"),
+		health, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float bar_width = 200 * scale;
+	float bar_height = 20 * scale;
+
+	// Background
+	dl->AddRectFilled(pos, ImVec2(pos.x + bar_width, pos.y + bar_height),
+		IM_COL32(40, 20, 20, 255), 4 * scale);
+
+	// Damage ghost (shows previous health)
+	if (displayed_health < health + 0.1f)
+	{
+		float ghost_width = bar_width * (health / 100.0f);
+		dl->AddRectFilled(pos, ImVec2(pos.x + ghost_width, pos.y + bar_height),
+			IM_COL32(200, 50, 50, 150), 4 * scale);
+	}
+
+	// Current health
+	float health_width = bar_width * (displayed_health / 100.0f);
+	ImU32 health_col = displayed_health > 50 ? IM_COL32(76, 175, 80, 255) :
+		(displayed_health > 25 ? IM_COL32(255, 200, 50, 255) : IM_COL32(220, 60, 60, 255));
+	dl->AddRectFilled(pos, ImVec2(pos.x + health_width, pos.y + bar_height),
+		health_col, 4 * scale);
+
+	// Health text
+	char hp_text[16];
+	snprintf(hp_text, sizeof(hp_text), "%.0f / 100", displayed_health);
+	ImVec2 text_size = ImGui::CalcTextSize(hp_text);
+	dl->AddText(ImVec2(pos.x + (bar_width - text_size.x) * 0.5f, pos.y + (bar_height - text_size.y) * 0.5f),
+		IM_COL32(255, 255, 255, 255), hp_text);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + bar_height + 10 * scale));
+	if (ImGui::Button("Take Damage") && health > 0)
+		health -= 15.0f;
+	ImGui::SameLine();
+	if (ImGui::Button("Heal") && health < 100)
+		health += 20.0f;
+	health = ImClamp(health, 0.0f, 100.0f);
+}
+
+// ============================================================
+// USECASE: Cooldown Timer
+// ============================================================
+static void ShowUsecase_CooldownTimer()
+{
+	ImGui::TextWrapped("Ability cooldown with circular sweep animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float cooldown = 0.0f;
+	static float max_cooldown = 3.0f;
+
+	if (cooldown > 0) cooldown -= dt;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float btn_size = 50 * scale;
+	ImVec2 center(pos.x + btn_size * 0.5f, pos.y + btn_size * 0.5f);
+
+	// Button background
+	dl->AddRectFilled(pos, ImVec2(pos.x + btn_size, pos.y + btn_size),
+		cooldown > 0 ? IM_COL32(40, 45, 55, 255) : IM_COL32(70, 130, 180, 255), 8 * scale);
+
+	// Cooldown overlay
+	if (cooldown > 0)
+	{
+		float progress = cooldown / max_cooldown;
+		float angle = -1.5708f + progress * 6.28318f;
+
+		dl->PathArcTo(center, btn_size * 0.4f, -1.5708f, angle, 32);
+		dl->PathLineTo(center);
+		dl->PathFillConvex(IM_COL32(0, 0, 0, 150));
+
+		// Time remaining
+		char time_str[8];
+		snprintf(time_str, sizeof(time_str), "%.1f", cooldown);
+		ImVec2 time_size = ImGui::CalcTextSize(time_str);
+		dl->AddText(ImVec2(center.x - time_size.x * 0.5f, center.y - time_size.y * 0.5f),
+			IM_COL32(255, 255, 255, 255), time_str);
+	}
+	else
+	{
+		dl->AddText(ImVec2(center.x - 4 * scale, center.y - 6 * scale),
+			IM_COL32(255, 255, 255, 255), "Q");
+	}
+
+	ImGui::SetCursorScreenPos(pos);
+	if (ImGui::InvisibleButton("ability", ImVec2(btn_size, btn_size)) && cooldown <= 0)
+		cooldown = max_cooldown;
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size + 10 * scale));
+}
+
+// ============================================================
+// USECASE: Damage Number
+// ============================================================
+static void ShowUsecase_DamageNumber()
+{
+	ImGui::TextWrapped("Floating damage number with pop and fade.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static float dmg_time = -1.0f;
+	static int dmg_value = 0;
+
+	if (dmg_time >= 0) dmg_time += dt;
+	if (dmg_time > 1.5f) dmg_time = -1.0f;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(150 * scale, 80 * scale);
+
+	// Container
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(30, 35, 45, 255), 8 * scale);
+
+	// Target dummy
+	ImVec2 target_center(pos.x + container_size.x * 0.5f, pos.y + container_size.y * 0.5f);
+	dl->AddCircleFilled(target_center, 20 * scale, IM_COL32(100, 60, 60, 255));
+
+	// Damage number
+	if (dmg_time >= 0)
+	{
+		float pop_scale = dmg_time < 0.2f ? (1.0f + dmg_time * 2.0f) : 1.4f - (dmg_time - 0.2f) * 0.3f;
+		float float_y = dmg_time * 40 * scale;
+		float alpha = 1.0f - ImClamp((dmg_time - 0.8f) / 0.7f, 0.0f, 1.0f);
+
+		char dmg_str[8];
+		snprintf(dmg_str, sizeof(dmg_str), "-%d", dmg_value);
+
+		ImGui::SetWindowFontScale(pop_scale * 1.5f);
+		ImVec2 dmg_size = ImGui::CalcTextSize(dmg_str);
+		dl->AddText(ImVec2(target_center.x - dmg_size.x * 0.5f, target_center.y - 30 * scale - float_y),
+			IM_COL32(255, 100, 100, (int)(alpha * 255)), dmg_str);
+		ImGui::SetWindowFontScale(1.0f);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
+	if (ImGui::Button("Hit!"))
+	{
+		dmg_time = 0.0f;
+		dmg_value = 50 + (rand() % 100);
+	}
+}
+
+// ============================================================
+// USECASE: XP Progress
+// ============================================================
+static void ShowUsecase_XPProgress()
+{
+	ImGui::TextWrapped("Experience bar with level-up animation.");
+
+	float dt = GetUsecaseDeltaTime();
+	float scale = ImGui::GetIO().FontGlobalScale;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	static int level = 1;
+	static float xp = 0.0f;
+	static float max_xp = 100.0f;
+	static float level_up_flash = 0.0f;
+
+	if (level_up_flash > 0) level_up_flash -= dt;
+
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	float bar_width = 200 * scale;
+	float bar_height = 16 * scale;
+
+	// Level badge
+	float badge_scale = iam_tween_float(ImGui::GetID("lvl_s"), ImHashStr("ls"),
+		level_up_flash > 0 ? 1.3f : 1.0f, 0.2f,
+		iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	ImVec2 badge_center(pos.x + 20 * scale, pos.y + bar_height * 0.5f);
+	dl->AddCircleFilled(badge_center, 15 * scale * badge_scale,
+		level_up_flash > 0 ? IM_COL32(255, 215, 0, 255) : IM_COL32(70, 130, 180, 255));
+
+	char lvl_str[4];
+	snprintf(lvl_str, sizeof(lvl_str), "%d", level);
+	ImVec2 lvl_size = ImGui::CalcTextSize(lvl_str);
+	dl->AddText(ImVec2(badge_center.x - lvl_size.x * 0.5f, badge_center.y - lvl_size.y * 0.5f),
+		IM_COL32(255, 255, 255, 255), lvl_str);
+
+	// XP bar
+	ImVec2 bar_pos(pos.x + 45 * scale, pos.y);
+	float display_xp = iam_tween_float(ImGui::GetID("xp_val"), ImHashStr("xv"),
+		xp, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width, bar_pos.y + bar_height),
+		IM_COL32(40, 45, 55, 255), bar_height * 0.5f);
+	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width * (display_xp / max_xp), bar_pos.y + bar_height),
+		IM_COL32(76, 175, 80, 255), bar_height * 0.5f);
+
+	// Level up flash
+	if (level_up_flash > 0)
+	{
+		dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_width, bar_pos.y + bar_height),
+			IM_COL32(255, 255, 255, (int)(level_up_flash * 200)), bar_height * 0.5f);
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + bar_height + 10 * scale));
+	if (ImGui::Button("Gain XP"))
+	{
+		xp += 25.0f;
+		if (xp >= max_xp)
+		{
+			level++;
+			xp = 0.0f;
+			level_up_flash = 1.0f;
+		}
+	}
+}
+
 
 // ============================================================
 // MAIN USECASE WINDOW
@@ -7916,7 +9200,7 @@ void ImAnimUsecaseWindow()
 	// Helper macro for usecase items
 	#define USECASE_ITEM(name, func) \
 		if (current_open_all != 0) ImGui::SetNextItemOpen(current_open_all > 0, ImGuiCond_Always); \
-		if (ImGui::TreeNode(name)) { func(); ImGui::TreePop(); }
+		if (ImGui::TreeNode(name)) { func(); ImGui::TreePop(); } ImGui::Spacing();
 
 	// ========================================
 	// BUTTONS & INDICATORS
@@ -7930,6 +9214,11 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Pulse Badge", ShowUsecase_PulseBadge)
 		USECASE_ITEM("Pending Button", ShowUsecase_PendingButton)
 		USECASE_ITEM("Animated Slider", ShowUsecase_AnimatedSlider)
+		USECASE_ITEM("Icon Button Rotation", ShowUsecase_IconButtonRotation)
+		USECASE_ITEM("Button Glow Effect", ShowUsecase_ButtonGlow)
+		USECASE_ITEM("Like Heart Button", ShowUsecase_LikeHeartButton)
+		USECASE_ITEM("Download Progress Button", ShowUsecase_DownloadProgressButton)
+		USECASE_ITEM("Submit Button States", ShowUsecase_SubmitButtonStates)
 		ImGui::Unindent();
 	}
 
@@ -7945,9 +9234,11 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Accordion Sections", ShowUsecase_Accordion)
 		USECASE_ITEM("FAB Menu", ShowUsecase_FABMenu)
 		USECASE_ITEM("Hamburger Menu Morph", ShowUsecase_HamburgerMorph)
-		USECASE_ITEM("Breadcrumb Navigation", ShowUsecase_Breadcrumb)
 		USECASE_ITEM("Slide-in Drawer", ShowUsecase_SlideDrawer)
 		USECASE_ITEM("Search Bar Expansion", ShowUsecase_SearchExpand)
+		USECASE_ITEM("Pill Navigation", ShowUsecase_PillNavigation)
+		USECASE_ITEM("Dropdown Menu", ShowUsecase_DropdownMenu)
+		USECASE_ITEM("Context Menu", ShowUsecase_ContextMenu)
 		ImGui::Unindent();
 	}
 
@@ -7961,9 +9252,13 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Modal Dialog", ShowUsecase_ModalDialog)
 		USECASE_ITEM("Toast Notifications", ShowUsecase_ToastNotifications)
 		USECASE_ITEM("Tooltip Animation", ShowUsecase_TooltipAnimation)
-		USECASE_ITEM("Floating Action Button", ShowUsecase_FloatingActionButton)
 		USECASE_ITEM("Popover Menu", ShowUsecase_PopoverMenu)
 		USECASE_ITEM("Alert Banner", ShowUsecase_AlertBanner)
+		USECASE_ITEM("Bottom Sheet", ShowUsecase_BottomSheet)
+		USECASE_ITEM("Snackbar", ShowUsecase_Snackbar)
+		USECASE_ITEM("Lightbox", ShowUsecase_Lightbox)
+		USECASE_ITEM("Command Palette", ShowUsecase_CommandPalette)
+		USECASE_ITEM("Inline Confirmation", ShowUsecase_InlineConfirmation)
 		ImGui::Unindent();
 	}
 
@@ -7977,8 +9272,13 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Loading Spinners", ShowUsecase_LoadingSpinners)
 		USECASE_ITEM("Skeleton Loading", ShowUsecase_SkeletonLoading)
 		USECASE_ITEM("Circular Progress Ring", ShowUsecase_CircularProgress)
-		USECASE_ITEM("Countdown Timer", ShowUsecase_CountdownTimer)
 		USECASE_ITEM("Stepper / Timeline", ShowUsecase_Stepper)
+		USECASE_ITEM("Upload Progress", ShowUsecase_UploadProgress)
+		USECASE_ITEM("Multi-step Progress", ShowUsecase_MultiStepProgress)
+		USECASE_ITEM("Infinite Scroll Loader", ShowUsecase_InfiniteScrollLoader)
+		USECASE_ITEM("Pull to Refresh", ShowUsecase_PullToRefresh)
+		USECASE_ITEM("Data Fetch States", ShowUsecase_DataFetchStates)
+		USECASE_ITEM("Percentage Counter", ShowUsecase_PercentageCounter)
 		ImGui::Unindent();
 	}
 
@@ -7994,6 +9294,11 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Animated Radio Buttons", ShowUsecase_AnimatedRadio)
 		USECASE_ITEM("Rating Stars", ShowUsecase_RatingStars)
 		USECASE_ITEM("Color Swatches", ShowUsecase_ColorSwatches)
+		USECASE_ITEM("Segmented Control", ShowUsecase_SegmentedControl)
+		USECASE_ITEM("Quantity Stepper", ShowUsecase_QuantityStepper)
+		USECASE_ITEM("Pin Input", ShowUsecase_PinInput)
+		USECASE_ITEM("Range Slider", ShowUsecase_RangeSlider)
+		USECASE_ITEM("Search Input", ShowUsecase_SearchInput)
 		ImGui::Unindent();
 	}
 
@@ -8010,6 +9315,10 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Carousel / Image Slider", ShowUsecase_Carousel)
 		USECASE_ITEM("Expandable List Item", ShowUsecase_ExpandableListItem)
 		USECASE_ITEM("Image Gallery Grid", ShowUsecase_ImageGalleryGrid)
+		USECASE_ITEM("Stacked Cards", ShowUsecase_StackedCards)
+		USECASE_ITEM("Notification Card", ShowUsecase_NotificationCard)
+		USECASE_ITEM("Product Card", ShowUsecase_ProductCard)
+		USECASE_ITEM("Timeline Card", ShowUsecase_TimelineCard)
 		ImGui::Unindent();
 	}
 
@@ -8022,10 +9331,14 @@ void ImAnimUsecaseWindow()
 		ImGui::Indent();
 		USECASE_ITEM("Animated Counter", ShowUsecase_AnimatedCounter)
 		USECASE_ITEM("Typewriter Text", ShowUsecase_TypewriterText)
-		USECASE_ITEM("Typing Text", ShowUsecase_TypingText)
 		USECASE_ITEM("Animated Tags", ShowUsecase_AnimatedTags)
-		USECASE_ITEM("Animated Badge Counter", ShowUsecase_AnimatedBadgeCounter)
-		USECASE_ITEM("Magnetic Cursor", ShowUsecase_MagneticCursor)
+		USECASE_ITEM("Highlight Text", ShowUsecase_HighlightText)
+		USECASE_ITEM("Animated Label", ShowUsecase_AnimatedLabel)
+		USECASE_ITEM("Scrolling Marquee", ShowUsecase_ScrollingMarquee)
+		USECASE_ITEM("Countdown Display", ShowUsecase_CountdownDisplay)
+		USECASE_ITEM("Word Cloud", ShowUsecase_WordCloud)
+		USECASE_ITEM("Animated Tooltip Text", ShowUsecase_AnimatedTooltipText)
+		USECASE_ITEM("Character Reveal", ShowUsecase_CharacterReveal)
 		ImGui::Unindent();
 	}
 
@@ -8042,6 +9355,10 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Avatar Stack", ShowUsecase_AvatarStack)
 		USECASE_ITEM("Particle Burst", ShowUsecase_ParticleBurst)
 		USECASE_ITEM("Glowing Border", ShowUsecase_GlowingBorder)
+		USECASE_ITEM("Pulse Ring", ShowUsecase_PulseRing)
+		USECASE_ITEM("Morphing Shape", ShowUsecase_MorphingShape)
+		USECASE_ITEM("Bouncing Dots", ShowUsecase_BouncingDots)
+		USECASE_ITEM("Confetti Burst", ShowUsecase_ConfettiBurst)
 		ImGui::Unindent();
 	}
 
@@ -8058,6 +9375,10 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Node Connector", ShowUsecase_NodeConnector)
 		USECASE_ITEM("Animated Graph Node", ShowUsecase_AnimatedGraphNode)
 		USECASE_ITEM("Playback Controls", ShowUsecase_PlaybackControls)
+		USECASE_ITEM("Health Bar", ShowUsecase_HealthBar)
+		USECASE_ITEM("Cooldown Timer", ShowUsecase_CooldownTimer)
+		USECASE_ITEM("Damage Number", ShowUsecase_DamageNumber)
+		USECASE_ITEM("XP Progress", ShowUsecase_XPProgress)
 		ImGui::Unindent();
 	}
 
@@ -8080,22 +9401,6 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Funnel Chart", ShowUsecase_FunnelChart)
 		USECASE_ITEM("Scatter Plot", ShowUsecase_ScatterPlot)
 		USECASE_ITEM("Progress Dashboard", ShowUsecase_ProgressDashboard)
-		ImGui::Unindent();
-	}
-
-	// ========================================
-	// SURPRISE!
-	// ========================================
-	if (current_open_all != 0) ImGui::SetNextItemOpen(current_open_all > 0, ImGuiCond_Always);
-	if (ImGui::CollapsingHeader("Surprise!"))
-	{
-		ImGui::Indent();
-		USECASE_ITEM("Orbiting Planets", ShowUsecase_OrbitingPlanets)
-		USECASE_ITEM("Liquid Fill Gauge", ShowUsecase_LiquidFillGauge)
-		USECASE_ITEM("DNA Helix", ShowUsecase_DNAHelix)
-		USECASE_ITEM("Heartbeat Monitor", ShowUsecase_HeartbeatMonitor)
-		USECASE_ITEM("Bouncing Balls Physics", ShowUsecase_BouncingBalls)
-		USECASE_ITEM("Neon Sign", ShowUsecase_NeonSign)
 		ImGui::Unindent();
 	}
 

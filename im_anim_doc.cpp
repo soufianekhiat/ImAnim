@@ -1792,7 +1792,7 @@ static void DocSection_MotionPaths()
 			"ImVec2 pos = iam_path_evaluate_at_distance(PATH_ID, dist);");
 
 		ImGui::Separator();
-		ImGui::Text("Interactive Example (tangent visualization):");
+		ImGui::Text("Interactive Example (tangent & normal visualization):");
 
 		static float eval_t = 0.5f;
 		ImGui::SliderFloat("t##eval", &eval_t, 0.0f, 1.0f);
@@ -1828,17 +1828,26 @@ static void DocSection_MotionPaths()
 			prev = curr;
 		}
 
-		// Draw point and tangent arrow
+		// Draw point, tangent arrow, and normal arrow
 		ImVec2 p(canvas_pos.x + pos.x, canvas_pos.y + pos.y);
 		dl->AddCircleFilled(p, 6.0f, IM_COL32(91, 194, 231, 255));
 
-		// Tangent arrow
+		// Tangent arrow (orange)
 		float len = 30.0f;
 		ImVec2 arrow_end(p.x + tangent.x * len, p.y + tangent.y * len);
 		dl->AddLine(p, arrow_end, IM_COL32(204, 120, 88, 255), 2.0f);
 
+		// Normal arrow (perpendicular to tangent, green)
+		ImVec2 normal(-tangent.y, tangent.x);  // 90 degree rotation
+		ImVec2 normal_end(p.x + normal.x * len, p.y + normal.y * len);
+		dl->AddLine(p, normal_end, IM_COL32(120, 204, 88, 255), 2.0f);
+
 		ImGui::Dummy(ImVec2(200, 100));
-		ImGui::Text("Angle: %.1f deg", angle * 57.2957795f);
+		ImGui::TextColored(ImVec4(0.8f, 0.47f, 0.34f, 1.0f), "Tangent");
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.47f, 0.8f, 0.34f, 1.0f), "Normal");
+		ImGui::SameLine();
+		ImGui::Text("  Angle: %.1f deg", angle * 57.2957795f);
 
 		ImGui::TreePop();
 	}
@@ -1863,14 +1872,20 @@ static void DocSection_MotionPaths()
 			"float angle = iam_tween_path_angle(...);");
 
 		ImGui::Separator();
+		ImGui::Text("Interactive Example (complex knot path):");
 
-		// Create demo path
+		// Create demo path - a figure-8 / infinity knot pattern
+		static ImGuiID const DOC_PATH_KNOT = ImHashStr("doc_path_knot");
 		static bool path_created = false;
 		if (!path_created) {
-			iam_path::begin(DOC_PATH_BEZIER, ImVec2(20, 60))
-				.cubic_to(ImVec2(80, 10), ImVec2(140, 110), ImVec2(200, 60))
+			// Figure-8 knot: two loops crossing in the middle
+			iam_path::begin(DOC_PATH_KNOT, ImVec2(160, 60))
+				.cubic_to(ImVec2(240, 20), ImVec2(280, 80), ImVec2(220, 100))   // Right loop top
+				.cubic_to(ImVec2(180, 110), ImVec2(140, 110), ImVec2(100, 100)) // Cross to left
+				.cubic_to(ImVec2(40, 80), ImVec2(40, 20), ImVec2(100, 20))      // Left loop
+				.cubic_to(ImVec2(140, 20), ImVec2(140, 50), ImVec2(160, 60))    // Back to center
 				.end();
-			iam_path_build_arc_lut(DOC_PATH_BEZIER, 64);
+			iam_path_build_arc_lut(DOC_PATH_KNOT, 128);
 			path_created = true;
 		}
 
@@ -1879,13 +1894,13 @@ static void DocSection_MotionPaths()
 		if (!path_clip_init) {
 			iam_clip::begin(DOC_CLIP_PATH_ANIM)
 				.key_float(DOC_CH_VALUE, 0.0f, 0.0f, iam_ease_in_out_cubic)
-				.key_float(DOC_CH_VALUE, 2.0f, 1.0f)
+				.key_float(DOC_CH_VALUE, 3.0f, 1.0f)
 				.end();
 			path_clip_init = true;
 		}
 
 		static ImGuiID path_anim_inst = ImHashStr("doc_path_anim_inst");
-		if (ImGui::Button("Animate Along Path")) {
+		if (ImGui::Button("Animate Along Knot")) {
 			iam_play(DOC_CLIP_PATH_ANIM, path_anim_inst);
 		}
 
@@ -1894,29 +1909,39 @@ static void DocSection_MotionPaths()
 		if (path_inst.valid()) {
 			path_inst.get_float(DOC_CH_VALUE, &path_t);
 		}
-		ImVec2 pos = iam_path_evaluate(DOC_PATH_BEZIER, path_t);
+		ImVec2 pos = iam_path_evaluate(DOC_PATH_KNOT, path_t);
+		float angle = iam_path_angle(DOC_PATH_KNOT, path_t);
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_size(240, 120);
+		ImVec2 canvas_size(320, 130);
 		ImDrawList* dl = ImGui::GetWindowDrawList();
 		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
 			IM_COL32(30, 30, 40, 255), 4.0f);
 
-		// Draw path
-		ImVec2 prev = iam_path_evaluate(DOC_PATH_BEZIER, 0.0f);
-		for (int i = 1; i <= 50; i++) {
-			float t = (float)i / 50.0f;
-			ImVec2 curr = iam_path_evaluate(DOC_PATH_BEZIER, t);
+		// Draw path with gradient coloring to show direction
+		int segments = 100;
+		ImVec2 prev = iam_path_evaluate(DOC_PATH_KNOT, 0.0f);
+		for (int i = 1; i <= segments; i++) {
+			float t = (float)i / (float)segments;
+			ImVec2 curr = iam_path_evaluate(DOC_PATH_KNOT, t);
+			// Color gradient: start=dim, end=bright to show direction
+			ImU8 alpha = (ImU8)(80 + 100 * t);
 			dl->AddLine(
 				ImVec2(canvas_pos.x + prev.x, canvas_pos.y + prev.y),
 				ImVec2(canvas_pos.x + curr.x, canvas_pos.y + curr.y),
-				IM_COL32(100, 100, 120, 255), 2.0f);
+				IM_COL32(100, 100, 140, alpha), 2.0f);
 			prev = curr;
 		}
 
-		// Draw animated dot
-		dl->AddCircleFilled(ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y), 8.0f,
-			IM_COL32(91, 194, 231, 255));
+		// Draw animated dot with rotation indicator (arrow)
+		ImVec2 p(canvas_pos.x + pos.x, canvas_pos.y + pos.y);
+		dl->AddCircleFilled(p, 8.0f, IM_COL32(91, 194, 231, 255));
+		// Draw direction arrow
+		float arrow_len = 15.0f;
+		float cos_a = cosf(angle);
+		float sin_a = sinf(angle);
+		ImVec2 arrow_tip(p.x + cos_a * arrow_len, p.y + sin_a * arrow_len);
+		dl->AddLine(p, arrow_tip, IM_COL32(255, 200, 100, 255), 2.0f);
 
 		ImGui::Dummy(canvas_size);
 
@@ -1939,6 +1964,87 @@ static void DocSection_MotionPaths()
 			"    blend,   // Morph blend [0,1]: 0=A, 1=B\n"
 			"    opts     // iam_morph_opts\n"
 			");");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (circle to square morph):");
+
+		// Create two paths: a circle and a square
+		static ImGuiID const DOC_PATH_CIRCLE = ImHashStr("doc_path_circle");
+		static ImGuiID const DOC_PATH_SQUARE = ImHashStr("doc_path_square");
+		static bool morph_paths_created = false;
+		if (!morph_paths_created) {
+			// Circle approximation using bezier curves
+			float r = 40.0f;
+			float cx = 80.0f, cy = 60.0f;
+			float k = 0.5522847498f * r;  // Magic number for circle approximation
+			iam_path::begin(DOC_PATH_CIRCLE, ImVec2(cx + r, cy))
+				.cubic_to(ImVec2(cx + r, cy + k), ImVec2(cx + k, cy + r), ImVec2(cx, cy + r))
+				.cubic_to(ImVec2(cx - k, cy + r), ImVec2(cx - r, cy + k), ImVec2(cx - r, cy))
+				.cubic_to(ImVec2(cx - r, cy - k), ImVec2(cx - k, cy - r), ImVec2(cx, cy - r))
+				.cubic_to(ImVec2(cx + k, cy - r), ImVec2(cx + r, cy - k), ImVec2(cx + r, cy))
+				.end();
+
+			// Square path
+			float s = 40.0f;
+			iam_path::begin(DOC_PATH_SQUARE, ImVec2(cx + s, cy - s))
+				.cubic_to(ImVec2(cx + s, cy - s), ImVec2(cx + s, cy + s), ImVec2(cx + s, cy + s))
+				.cubic_to(ImVec2(cx + s, cy + s), ImVec2(cx - s, cy + s), ImVec2(cx - s, cy + s))
+				.cubic_to(ImVec2(cx - s, cy + s), ImVec2(cx - s, cy - s), ImVec2(cx - s, cy - s))
+				.cubic_to(ImVec2(cx - s, cy - s), ImVec2(cx + s, cy - s), ImVec2(cx + s, cy - s))
+				.end();
+			morph_paths_created = true;
+		}
+
+		static float morph_blend = 0.0f;
+		static bool morph_animating = false;
+		static float morph_dir = 1.0f;
+
+		if (ImGui::Button("Morph Shape")) {
+			morph_animating = true;
+		}
+
+		if (morph_animating) {
+			float dt = GetDocDeltaTime();
+			morph_blend += morph_dir * dt * 0.8f;
+			if (morph_blend >= 1.0f) {
+				morph_blend = 1.0f;
+				morph_dir = -1.0f;
+			} else if (morph_blend <= 0.0f) {
+				morph_blend = 0.0f;
+				morph_dir = 1.0f;
+				morph_animating = false;
+			}
+		}
+
+		ImGui::SameLine();
+		ImGui::SliderFloat("Blend##morph", &morph_blend, 0.0f, 1.0f);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(160, 120);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw the morphed shape
+		int segments = 80;
+		iam_morph_opts opts;  // Use defaults
+		ImVec2 prev = iam_path_morph(DOC_PATH_CIRCLE, DOC_PATH_SQUARE, 0.0f, morph_blend, opts);
+		for (int i = 1; i <= segments; i++) {
+			float t = (float)i / (float)segments;
+			ImVec2 curr = iam_path_morph(DOC_PATH_CIRCLE, DOC_PATH_SQUARE, t, morph_blend, opts);
+			dl->AddLine(
+				ImVec2(canvas_pos.x + prev.x, canvas_pos.y + prev.y),
+				ImVec2(canvas_pos.x + curr.x, canvas_pos.y + curr.y),
+				IM_COL32(91, 194, 231, 255), 2.0f);
+			prev = curr;
+		}
+
+		// Labels
+		ImVec2 label_pos(canvas_pos.x + 5, canvas_pos.y + 5);
+		dl->AddText(label_pos, IM_COL32(150, 150, 150, 255),
+			morph_blend < 0.5f ? "Circle" : "Square");
+
+		ImGui::Dummy(canvas_size);
 
 		ImGui::TreePop();
 	}
@@ -2118,6 +2224,68 @@ static void DocSection_Procedural()
 			"    opts,\n"
 			"    dt\n"
 			");");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (noise visualization):");
+
+		static ImGuiID const DOC_NOISE_CHAN_X = ImHashStr("doc_noise_chan_x");
+		static ImGuiID const DOC_NOISE_CHAN_Y = ImHashStr("doc_noise_chan_y");
+		static int noise_type = 1;  // Default to simplex
+		static int noise_octaves = 3;
+		static float noise_freq = 1.5f;
+
+		ImGui::SliderInt("Octaves##noise", &noise_octaves, 1, 6);
+		ImGui::SliderFloat("Frequency##noise", &noise_freq, 0.5f, 5.0f);
+		const char* noise_types[] = { "Perlin", "Simplex", "Value", "Worley" };
+		ImGui::Combo("Type##noise", &noise_type, noise_types, 4);
+
+		iam_noise_opts opts;
+		opts.type = (iam_noise_type)noise_type;
+		opts.octaves = noise_octaves;
+		opts.persistence = 0.5f;
+		opts.lacunarity = 2.0f;
+		opts.seed = 12345;
+
+		float noise_x = iam_noise_channel_float(DOC_NOISE_CHAN_X, noise_freq, 50.0f, opts, dt);
+		opts.seed = 67890;  // Different seed for Y
+		float noise_y = iam_noise_channel_float(DOC_NOISE_CHAN_Y, noise_freq, 30.0f, opts, dt);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 80);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw center cross for reference
+		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+		dl->AddLine(ImVec2(center.x - 20, center.y), ImVec2(center.x + 20, center.y),
+			IM_COL32(60, 60, 70, 255), 1.0f);
+		dl->AddLine(ImVec2(center.x, center.y - 20), ImVec2(center.x, center.y + 20),
+			IM_COL32(60, 60, 70, 255), 1.0f);
+
+		// Draw noisy dot
+		ImVec2 dot_pos(center.x + noise_x, center.y + noise_y);
+		dl->AddCircleFilled(dot_pos, 8.0f, IM_COL32(91, 194, 231, 255));
+
+		// Draw trail effect
+		static ImVec2 trail[16] = {};
+		static int trail_idx = 0;
+		static float trail_timer = 0.0f;
+		trail_timer += dt;
+		if (trail_timer > 0.05f) {
+			trail_timer = 0.0f;
+			trail[trail_idx] = dot_pos;
+			trail_idx = (trail_idx + 1) % 16;
+		}
+		for (int i = 0; i < 16; i++) {
+			int idx = (trail_idx + i) % 16;
+			if (trail[idx].x > 0) {
+				float alpha = (float)i / 16.0f * 100.0f;
+				dl->AddCircleFilled(trail[idx], 3.0f, IM_COL32(91, 194, 231, (ImU8)alpha));
+			}
+		}
+
+		ImGui::Dummy(canvas_size);
 
 		ImGui::TreePop();
 	}
@@ -2319,6 +2487,58 @@ static void DocSection_Advanced()
 			"// Or manual blend\n"
 			"iam_style_blend(STYLE_DARK, STYLE_LIGHT, t, iam_col_oklab);");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (color blend preview):");
+
+		static float style_blend = 0.0f;
+		static bool style_animating = false;
+		static float style_dir = 1.0f;
+
+		if (ImGui::Button("Animate Style Blend")) {
+			style_animating = true;
+		}
+		ImGui::SameLine();
+		ImGui::SliderFloat("Blend##style", &style_blend, 0.0f, 1.0f);
+
+		if (style_animating) {
+			style_blend += style_dir * dt * 1.0f;
+			if (style_blend >= 1.0f) { style_blend = 1.0f; style_dir = -1.0f; }
+			else if (style_blend <= 0.0f) { style_blend = 0.0f; style_dir = 1.0f; style_animating = false; }
+		}
+
+		// Preview style colors (dark to light)
+		ImVec4 dark_bg(0.1f, 0.1f, 0.12f, 1.0f);
+		ImVec4 light_bg(0.95f, 0.95f, 0.95f, 1.0f);
+		ImVec4 dark_btn(0.2f, 0.4f, 0.8f, 1.0f);
+		ImVec4 light_btn(0.3f, 0.6f, 0.95f, 1.0f);
+
+		// Lerp colors
+		ImVec4 bg_col(
+			dark_bg.x + (light_bg.x - dark_bg.x) * style_blend,
+			dark_bg.y + (light_bg.y - dark_bg.y) * style_blend,
+			dark_bg.z + (light_bg.z - dark_bg.z) * style_blend, 1.0f);
+		ImVec4 btn_col(
+			dark_btn.x + (light_btn.x - dark_btn.x) * style_blend,
+			dark_btn.y + (light_btn.y - dark_btn.y) * style_blend,
+			dark_btn.z + (light_btn.z - dark_btn.z) * style_blend, 1.0f);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(180, 60);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			ImGui::ColorConvertFloat4ToU32(bg_col), 4.0f);
+		// Fake button
+		ImVec2 btn_pos(canvas_pos.x + 20, canvas_pos.y + 15);
+		ImVec2 btn_size(80, 30);
+		dl->AddRectFilled(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
+			ImGui::ColorConvertFloat4ToU32(btn_col), 4.0f);
+		ImVec4 text_col = style_blend < 0.5f ? ImVec4(1,1,1,1) : ImVec4(0.1f,0.1f,0.1f,1);
+		dl->AddText(ImVec2(btn_pos.x + 15, btn_pos.y + 7),
+			ImGui::ColorConvertFloat4ToU32(text_col), "Button");
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("%s", style_blend < 0.5f ? "Dark Theme" : "Light Theme");
+
 		ImGui::TreePop();
 	}
 
@@ -2349,6 +2569,59 @@ static void DocSection_Advanced()
 			"// Sample result\n"
 			"ImVec4 color = result.sample(0.5f);");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (gradient blend):");
+
+		static float grad_blend = 0.0f;
+		static bool grad_animating = false;
+		static float grad_dir = 1.0f;
+
+		if (ImGui::Button("Animate Gradient")) {
+			grad_animating = true;
+		}
+		ImGui::SameLine();
+		ImGui::SliderFloat("Blend##grad", &grad_blend, 0.0f, 1.0f);
+
+		if (grad_animating) {
+			grad_blend += grad_dir * dt * 0.8f;
+			if (grad_blend >= 1.0f) { grad_blend = 1.0f; grad_dir = -1.0f; }
+			else if (grad_blend <= 0.0f) { grad_blend = 0.0f; grad_dir = 1.0f; grad_animating = false; }
+		}
+
+		// Gradient A: Red -> Yellow
+		// Gradient B: Blue -> Cyan -> Green
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 30);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		int steps = 50;
+		float step_w = canvas_size.x / (float)steps;
+		for (int i = 0; i < steps; i++) {
+			float t = (float)i / (float)(steps - 1);
+			// Gradient A: Red to Yellow
+			ImVec4 col_a(1.0f, t, 0.0f, 1.0f);
+			// Gradient B: Blue to Cyan to Green
+			ImVec4 col_b;
+			if (t < 0.5f) {
+				float lt = t * 2.0f;
+				col_b = ImVec4(0.0f, lt, 1.0f - lt * 0.5f, 1.0f);
+			} else {
+				float lt = (t - 0.5f) * 2.0f;
+				col_b = ImVec4(0.0f, 0.5f + lt * 0.5f, 0.5f - lt * 0.5f, 1.0f);
+			}
+			// Blend
+			ImVec4 col(
+				col_a.x + (col_b.x - col_a.x) * grad_blend,
+				col_a.y + (col_b.y - col_a.y) * grad_blend,
+				col_a.z + (col_b.z - col_a.z) * grad_blend, 1.0f);
+			ImVec2 p0(canvas_pos.x + i * step_w, canvas_pos.y);
+			ImVec2 p1(canvas_pos.x + (i + 1) * step_w + 1, canvas_pos.y + canvas_size.y);
+			dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(col));
+		}
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("%s", grad_blend < 0.5f ? "Red-Yellow" : "Blue-Cyan-Green");
+
 		ImGui::TreePop();
 	}
 
@@ -2377,6 +2650,66 @@ static void DocSection_Advanced()
 			"\n"
 			"// Apply to point\n"
 			"ImVec2 transformed = current.apply(point);");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (rotation + scale):");
+
+		static float trans_t = 0.0f;
+		static bool trans_animating = false;
+		static float trans_dir = 1.0f;
+
+		if (ImGui::Button("Animate Transform")) {
+			trans_animating = true;
+		}
+		ImGui::SameLine();
+		ImGui::SliderFloat("t##trans", &trans_t, 0.0f, 1.0f);
+
+		if (trans_animating) {
+			trans_t += trans_dir * dt * 0.6f;
+			if (trans_t >= 1.0f) { trans_t = 1.0f; trans_dir = -1.0f; }
+			else if (trans_t <= 0.0f) { trans_t = 0.0f; trans_dir = 1.0f; trans_animating = false; }
+		}
+
+		// Smooth easing
+		float ease_t = trans_t * trans_t * (3.0f - 2.0f * trans_t);
+
+		float rotation = ease_t * 3.14159f;  // 0 to 180 degrees
+		float scale = 1.0f + ease_t * 0.5f;  // 1.0 to 1.5
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(150, 80);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw rotating/scaling square
+		ImVec2 center(canvas_pos.x + canvas_size.x * 0.5f, canvas_pos.y + canvas_size.y * 0.5f);
+		float half_size = 20.0f * scale;
+		float cos_r = cosf(rotation);
+		float sin_r = sinf(rotation);
+
+		// Square corners
+		ImVec2 corners[4] = {
+			ImVec2(-half_size, -half_size),
+			ImVec2(half_size, -half_size),
+			ImVec2(half_size, half_size),
+			ImVec2(-half_size, half_size)
+		};
+
+		// Rotate and translate
+		for (int i = 0; i < 4; i++) {
+			float x = corners[i].x * cos_r - corners[i].y * sin_r;
+			float y = corners[i].x * sin_r + corners[i].y * cos_r;
+			corners[i] = ImVec2(center.x + x, center.y + y);
+		}
+
+		dl->AddQuadFilled(corners[0], corners[1], corners[2], corners[3],
+			IM_COL32(91, 194, 231, 200));
+		dl->AddQuad(corners[0], corners[1], corners[2], corners[3],
+			IM_COL32(120, 220, 255, 255), 2.0f);
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("Rot: %.0f deg  Scale: %.2f", rotation * 57.2957795f, scale);
 
 		ImGui::TreePop();
 	}
@@ -2750,6 +3083,7 @@ static void DocSection_PerAxisEasing()
 
 		static ImVec2 target(180.0f, 80.0f);
 		static int corner = 0;
+		static float auto_timer = 0.0f;
 		ImVec2 corners[] = {
 			ImVec2(30.0f, 30.0f),
 			ImVec2(180.0f, 30.0f),
@@ -2757,9 +3091,18 @@ static void DocSection_PerAxisEasing()
 			ImVec2(30.0f, 80.0f)
 		};
 
+		// Auto-advance every 1.5 seconds
+		auto_timer += dt;
+		if (auto_timer > 1.5f) {
+			auto_timer = 0.0f;
+			corner = (corner + 1) % 4;
+			target = corners[corner];
+		}
+
 		if (ImGui::Button("Next Corner##peraxis")) {
 			corner = (corner + 1) % 4;
 			target = corners[corner];
+			auto_timer = 0.0f;
 		}
 
 		iam_ease_per_axis ez;
@@ -2778,7 +3121,7 @@ static void DocSection_PerAxisEasing()
 			IM_COL32(91, 194, 231, 255));
 
 		ImGui::Dummy(canvas_size);
-		ImGui::Text("Notice: Y bounces, X is smooth");
+		ImGui::Text("Notice: Y bounces, X is smooth (auto-animating)");
 
 		ImGui::TreePop();
 	}
@@ -3020,6 +3363,60 @@ static void DocSection_Layering()
 			"iam_get_blended_vec4(target_id, channel, &out);\n"
 			"iam_get_blended_int(target_id, channel, &out);");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (blend two oscillations):");
+
+		float dt = GetDocDeltaTime();
+
+		// Simple demo: blend between two oscillating values
+		static float layer_time = 0.0f;
+		layer_time += dt;
+
+		// Value A: slow sine wave (left-right)
+		float val_a = sinf(layer_time * 1.5f) * 60.0f;
+		// Value B: fast sine wave (up-down motion pattern)
+		float val_b = sinf(layer_time * 4.0f) * 40.0f;
+
+		static float layer_blend_w = 0.5f;
+		static bool layer_auto_blend = true;
+		ImGui::Checkbox("Auto Blend##layerblend", &layer_auto_blend);
+		if (layer_auto_blend) {
+			// Oscillate blend weight
+			layer_blend_w = (sinf(layer_time * 0.8f) + 1.0f) * 0.5f;
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(120);
+		ImGui::SliderFloat("Weight##layerblend", &layer_blend_w, 0.0f, 1.0f);
+
+		// Blended value
+		float blended = val_a * (1.0f - layer_blend_w) + val_b * layer_blend_w;
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(220, 80);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		float center_x = canvas_pos.x + canvas_size.x * 0.5f;
+		float center_y = canvas_pos.y + canvas_size.y * 0.5f;
+
+		// Draw A (red, semi-transparent)
+		dl->AddCircleFilled(ImVec2(center_x + val_a, center_y - 15), 8.0f,
+			IM_COL32(255, 100, 100, (int)(100 * (1.0f - layer_blend_w) + 50)));
+		// Draw B (blue, semi-transparent)
+		dl->AddCircleFilled(ImVec2(center_x + val_b, center_y + 15), 8.0f,
+			IM_COL32(100, 100, 255, (int)(100 * layer_blend_w + 50)));
+		// Draw blended (cyan, solid)
+		dl->AddCircleFilled(ImVec2(center_x + blended, center_y), 10.0f,
+			IM_COL32(91, 194, 231, 255));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "A:%.0f%%", (1.0f - layer_blend_w) * 100);
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.4f, 0.4f, 1.0f, 1.0f), "B:%.0f%%", layer_blend_w * 100);
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.36f, 0.76f, 0.9f, 1.0f), "Blended");
+
 		ImGui::TreePop();
 	}
 
@@ -3078,7 +3475,16 @@ static void DocSection_Layering()
 		static ImGuiID layer_inst_a = ImHashStr("doc_layer_inst_a");
 		static ImGuiID layer_inst_b = ImHashStr("doc_layer_inst_b");
 		static bool layer_playing = false;
+		static bool layer_auto_started = false;
 		static float blend_weight = 0.5f;
+
+		// Auto-start on first view
+		if (!layer_auto_started) {
+			iam_play(DOC_CLIP_LAYER_A, layer_inst_a);
+			iam_play(DOC_CLIP_LAYER_B, layer_inst_b);
+			layer_playing = true;
+			layer_auto_started = true;
+		}
 
 		if (ImGui::Button(layer_playing ? "Stop##layer" : "Play Both##layer")) {
 			if (!layer_playing) {
@@ -3290,8 +3696,8 @@ static void DocSection_ClipCallbacks()
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImDrawList* dl = ImGui::GetWindowDrawList();
 
-		// Indicator boxes - wider and taller for readability
-		float box_w = 130.0f, box_h = 70.0f, gap = 20.0f;
+		// Indicator boxes - wider to fit text with DPI scaling
+		float box_w = 150.0f, box_h = 70.0f, gap = 15.0f;
 		ImVec2 box_begin(canvas_pos.x, canvas_pos.y);
 		ImVec2 box_update(canvas_pos.x + box_w + gap, canvas_pos.y);
 		ImVec2 box_complete(canvas_pos.x + 2 * (box_w + gap), canvas_pos.y);
@@ -3303,26 +3709,26 @@ static void DocSection_ClipCallbacks()
 		ImU32 col_begin = IM_COL32(100 + (int)(155 * cb_state.begin_flash), 60, 60, 255);
 		dl->AddRectFilled(box_begin, ImVec2(box_begin.x + box_w, box_begin.y + box_h), col_begin, 6.0f);
 		dl->AddRect(box_begin, ImVec2(box_begin.x + box_w, box_begin.y + box_h), IM_COL32(200, 100, 100, 255), 6.0f, 0, 2.0f);
-		dl->AddText(font, font_size * 1.2f, ImVec2(box_begin.x + 15, box_begin.y + 12), IM_COL32_WHITE, "on_begin");
+		dl->AddText(font, font_size * 1.1f, ImVec2(box_begin.x + 20, box_begin.y + 14), IM_COL32_WHITE, "on_begin");
 		char buf[32];
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.begin_count);
-		dl->AddText(font, font_size * 1.1f, ImVec2(box_begin.x + 15, box_begin.y + 42), IM_COL32(220, 220, 220, 255), buf);
+		dl->AddText(font, font_size, ImVec2(box_begin.x + 20, box_begin.y + 42), IM_COL32(220, 220, 220, 255), buf);
 
 		// Update box
 		ImU32 col_update = IM_COL32(60, 100 + (int)(155 * cb_state.update_flash), 60, 255);
 		dl->AddRectFilled(box_update, ImVec2(box_update.x + box_w, box_update.y + box_h), col_update, 6.0f);
 		dl->AddRect(box_update, ImVec2(box_update.x + box_w, box_update.y + box_h), IM_COL32(100, 200, 100, 255), 6.0f, 0, 2.0f);
-		dl->AddText(font, font_size * 1.2f, ImVec2(box_update.x + 12, box_update.y + 12), IM_COL32_WHITE, "on_update");
+		dl->AddText(font, font_size * 1.1f, ImVec2(box_update.x + 20, box_update.y + 14), IM_COL32_WHITE, "on_update");
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.update_count);
-		dl->AddText(font, font_size * 1.1f, ImVec2(box_update.x + 15, box_update.y + 42), IM_COL32(220, 220, 220, 255), buf);
+		dl->AddText(font, font_size, ImVec2(box_update.x + 20, box_update.y + 42), IM_COL32(220, 220, 220, 255), buf);
 
 		// Complete box
 		ImU32 col_complete = IM_COL32(60, 60, 100 + (int)(155 * cb_state.complete_flash), 255);
 		dl->AddRectFilled(box_complete, ImVec2(box_complete.x + box_w, box_complete.y + box_h), col_complete, 6.0f);
 		dl->AddRect(box_complete, ImVec2(box_complete.x + box_w, box_complete.y + box_h), IM_COL32(100, 100, 200, 255), 6.0f, 0, 2.0f);
-		dl->AddText(font, font_size * 1.2f, ImVec2(box_complete.x + 8, box_complete.y + 12), IM_COL32_WHITE, "on_complete");
+		dl->AddText(font, font_size * 1.1f, ImVec2(box_complete.x + 20, box_complete.y + 14), IM_COL32_WHITE, "on_complete");
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.complete_count);
-		dl->AddText(font, font_size * 1.1f, ImVec2(box_complete.x + 15, box_complete.y + 42), IM_COL32(220, 220, 220, 255), buf);
+		dl->AddText(font, font_size, ImVec2(box_complete.x + 20, box_complete.y + 42), IM_COL32(220, 220, 220, 255), buf);
 
 		ImGui::Dummy(ImVec2(3 * box_w + 2 * gap, box_h + 15));
 
@@ -4068,6 +4474,54 @@ static void DocSection_CurveFunctions()
 			"ImVec2 velocity = iam_bezier_quadratic_deriv(p0, p1, p2, t);\n"
 			"ImVec2 velocity = iam_bezier_cubic_deriv(p0, p1, p2, p3, t);");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (cubic bezier):");
+
+		float dt = GetDocDeltaTime();
+		static float bezier_t = 0.0f;
+		bezier_t += dt * 0.4f;
+		if (bezier_t > 1.0f) bezier_t -= 1.0f;
+
+		// Control points
+		ImVec2 p0(20, 70), p1(60, 15), p2(140, 85), p3(180, 30);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200, 100);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw control polygon
+		dl->AddLine(ImVec2(canvas_pos.x + p0.x, canvas_pos.y + p0.y),
+			ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y), IM_COL32(60, 60, 80, 255), 1.0f);
+		dl->AddLine(ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y),
+			ImVec2(canvas_pos.x + p3.x, canvas_pos.y + p3.y), IM_COL32(60, 60, 80, 255), 1.0f);
+
+		// Draw curve
+		ImVec2 prev = iam_bezier_cubic(p0, p1, p2, p3, 0.0f);
+		for (int i = 1; i <= 40; i++) {
+			float t = (float)i / 40.0f;
+			ImVec2 curr = iam_bezier_cubic(p0, p1, p2, p3, t);
+			dl->AddLine(ImVec2(canvas_pos.x + prev.x, canvas_pos.y + prev.y),
+				ImVec2(canvas_pos.x + curr.x, canvas_pos.y + curr.y),
+				IM_COL32(91, 194, 231, 255), 2.0f);
+			prev = curr;
+		}
+
+		// Draw control points
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + p0.x, canvas_pos.y + p0.y), 4.0f, IM_COL32(255, 100, 100, 200));
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + p1.x, canvas_pos.y + p1.y), 4.0f, IM_COL32(255, 200, 100, 200));
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + p2.x, canvas_pos.y + p2.y), 4.0f, IM_COL32(100, 255, 100, 200));
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + p3.x, canvas_pos.y + p3.y), 4.0f, IM_COL32(100, 100, 255, 200));
+
+		// Draw animated point
+		ImVec2 pos = iam_bezier_cubic(p0, p1, p2, p3, bezier_t);
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y), 6.0f,
+			IM_COL32(255, 255, 100, 255));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::Text("t = %.2f", bezier_t);
+
 		ImGui::TreePop();
 	}
 
@@ -4204,6 +4658,34 @@ static void DocSection_QuadTransforms()
 			"    angle_radians,\n"
 			"    ImVec2(100, 50)    // Translation\n"
 			");");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example:");
+
+		float dt = GetDocDeltaTime();
+		static float tq_angle = 0.0f;
+		tq_angle += dt * 1.5f;
+		if (tq_angle > IM_PI * 2.0f) tq_angle -= IM_PI * 2.0f;
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(180, 80);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		ImVec2 quad[4] = {
+			ImVec2(-25, -12),
+			ImVec2(25, -12),
+			ImVec2(25, 12),
+			ImVec2(-25, 12)
+		};
+		ImVec2 center(canvas_pos.x + 90, canvas_pos.y + 40);
+		iam_transform_quad(quad, ImVec2(0, 0), tq_angle, center);
+
+		dl->AddQuadFilled(quad[0], quad[1], quad[2], quad[3], IM_COL32(91, 194, 231, 200));
+		dl->AddQuad(quad[0], quad[1], quad[2], quad[3], IM_COL32(120, 220, 255, 255), 2.0f);
+
+		ImGui::Dummy(canvas_size);
 
 		ImGui::TreePop();
 	}
