@@ -11,23 +11,22 @@
 #include <windows.h>
 #endif
 
-#define IMGUI_VERSION_BAKEDFONT 19200 //The version number where ImFontBaked and global ImGuiStoragePair were introduced
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= IMGUI_VERSION_BAKEDFONT
-	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
-#define IMGUI_STORAGE_PAIR ImGuiStoragePair
-typedef ImFontBaked FontType;
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	// ImGuiStoragePair is nested in ImGuiStorage in Pre-1.92.0 versions
 #define IMGUI_STORAGE_PAIR ImGuiStorage::ImGuiStoragePair
 typedef ImFont FontType;
+#else
+	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
+#define IMGUI_STORAGE_PAIR ImGuiStoragePair
+typedef ImFontBaked FontType;
 #endif
 
 static FontType* GetBakedFont(ImFont* font, float font_size) {
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM > IMGUI_VERSION_BAKEDFONT
-	return font->GetFontBaked(font_size);
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	(void)font_size; // suppress unused warning
 	return font;
+#else
+	return font->GetFontBaked(font_size);
 #endif
 }
 
@@ -929,7 +928,7 @@ float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
 }
 
-float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, float init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
@@ -942,6 +941,11 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 	}
 
 	float_chan* c = g_float.get(key);
+
+	// If this is the first time the channel is used, set its value to initial_value
+	if (c->start_time == 0 && c->sleeping && c->current == chan_traits<float>::default_value()) {
+		c->current = c->start = c->target = init_value;
+	}
 
 	// Fast path: sleeping and target unchanged
 	if (c->sleeping && fabsf(c->target - target) <= 1e-6f && !c->has_pending) {
@@ -1065,7 +1069,7 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	return c->evaluate();
 }
 
-ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float /*dt*/) {
+ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float /*dt*/, ImVec4 init_value ) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
@@ -1077,6 +1081,12 @@ ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float
 	}
 
 	color_chan* c = g_color.get(key);
+
+	// If this is the first time the channel is used, set its value to init_value
+	if (c->start_time == 0 && c->sleeping &&
+		c->current.x == 1.0f && c->current.y == 1.0f && c->current.z == 1.0f && c->current.w == 1.0f) {
+		c->current = c->start = c->target = init_value;
+	}
 
 	if (c->sleeping && (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w)) <= 1e-6f) { return c->current; }
 
