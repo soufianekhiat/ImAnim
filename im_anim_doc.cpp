@@ -4537,6 +4537,178 @@ static void DocSection_ClipPersistence()
 
 		ImGui::TreePop();
 	}
+
+	// --------------------------------------------------------
+	// Interactive Save/Load Demo
+	// --------------------------------------------------------
+	DocApplyOpenAll();
+	if (ImGui::TreeNode("Interactive Save/Load Demo"))
+	{
+		ImGui::TextWrapped(
+			"Modify the middle keyframe value, save the clip, then change it again. "
+			"Load to restore the saved state.");
+
+		static ImGuiID const DOC_PERSIST_CLIP = ImHashStr("doc_persist_clip");
+		static ImGuiID const DOC_PERSIST_CH = ImHashStr("doc_persist_ch");
+		static ImGuiID const DOC_PERSIST_INST = ImHashStr("doc_persist_inst");
+		static char const* PERSIST_FILE_PATH = "persist_demo.ianim";
+
+		static bool persist_clip_init = false;
+		static float middle_key_value = 1.0f;
+		static float saved_middle_value = 1.0f;
+		static bool has_saved = false;
+		static bool persist_playing = false;
+
+		auto rebuild_clip = [&]() {
+			iam_clip::begin(DOC_PERSIST_CLIP)
+				.key_float(DOC_PERSIST_CH, 0.0f, 0.0f, iam_ease_out_cubic)      // Start: 0
+				.key_float(DOC_PERSIST_CH, 1.0f, middle_key_value, iam_ease_in_out_cubic) // Middle: editable
+				.key_float(DOC_PERSIST_CH, 2.0f, 0.0f, iam_ease_in_cubic)       // End: 0
+				.set_loop(true, iam_dir_normal, -1)
+				.end();
+		};
+
+		if (!persist_clip_init) {
+			rebuild_clip();
+			persist_clip_init = true;
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Keyframe Editor:");
+
+		// Slider to modify middle keyframe
+		if (ImGui::SliderFloat("Middle Key Value", &middle_key_value, 0.0f, 2.0f, "%.2f")) {
+			rebuild_clip();
+		}
+
+		ImGui::Spacing();
+
+		// Save button
+		if (ImGui::Button("Save")) {
+			iam_result result = iam_clip_save(DOC_PERSIST_CLIP, PERSIST_FILE_PATH);
+			if (result == iam_ok) {
+				saved_middle_value = middle_key_value;
+				has_saved = true;
+			}
+		}
+		ImGui::SameLine();
+
+		// Load button (only enabled if we have saved something)
+		static iam_result last_load_result = iam_ok;
+		ImGui::BeginDisabled(!has_saved);
+		if (ImGui::Button("Load")) {
+			ImGuiID loaded_id;
+			last_load_result = iam_clip_load(PERSIST_FILE_PATH, &loaded_id);
+			if (last_load_result == iam_ok) {
+				middle_key_value = saved_middle_value;
+				// Always restart the animation after load
+				iam_play(DOC_PERSIST_CLIP, DOC_PERSIST_INST);
+				persist_playing = true;
+			}
+		}
+		ImGui::EndDisabled();
+
+		if (has_saved) {
+			ImGui::SameLine();
+			ImGui::TextDisabled("(Saved: %.2f)", saved_middle_value);
+		}
+		if (last_load_result != iam_ok) {
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Load err: %d", (int)last_load_result);
+		}
+
+		// Debug: show clip info
+		iam_instance dbg_inst = iam_get_instance(DOC_PERSIST_INST);
+		ImGui::Text("Debug: valid=%d playing=%d duration=%.2f time=%.2f",
+			dbg_inst.valid() ? 1 : 0,
+			dbg_inst.is_playing() ? 1 : 0,
+			dbg_inst.duration(),
+			dbg_inst.time());
+
+		ImGui::Spacing();
+		ImGui::Separator();
+
+		// Play button
+		if (ImGui::Button(persist_playing ? "Stop##persist" : "Play##persist")) {
+			if (!persist_playing) {
+				iam_play(DOC_PERSIST_CLIP, DOC_PERSIST_INST);
+				persist_playing = true;
+			} else {
+				iam_get_instance(DOC_PERSIST_INST).stop();
+				persist_playing = false;
+			}
+		}
+
+		// Visualize the animation
+		iam_instance inst = iam_get_instance(DOC_PERSIST_INST);
+		float value = 0.0f;
+		if (inst.valid()) {
+			if (!inst.is_playing()) persist_playing = false;
+			inst.get_float(DOC_PERSIST_CH, &value);
+			ImGui::SameLine();
+			ImGui::Text("Time: %.2f / %.2f playing=%d", inst.time(), inst.duration(), inst.is_playing() ? 1 : 0);
+		}
+
+		// Progress bar showing animated value
+		ImGui::ProgressBar(value / 2.0f, ImVec2(-1, 20));
+		ImGui::Text("Value: %.2f", value);
+
+		// Visual representation
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		float canvas_w = 300.0f;
+		float canvas_h = 100.0f;
+
+		// Background
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw keyframe visualization
+		float k0_x = canvas_pos.x + 30.0f;
+		float k1_x = canvas_pos.x + canvas_w * 0.5f;
+		float k2_x = canvas_pos.x + canvas_w - 30.0f;
+		float base_y = canvas_pos.y + canvas_h - 20.0f;
+		float scale = 30.0f;
+
+		// Keyframe markers (diamonds)
+		ImU32 key_col = IM_COL32(255, 200, 100, 255);
+		float k0_y = base_y;
+		float k1_y = base_y - middle_key_value * scale;
+		float k2_y = base_y;
+
+		// Lines connecting keyframes
+		dl->AddLine(ImVec2(k0_x, k0_y), ImVec2(k1_x, k1_y), IM_COL32(100, 100, 120, 255), 2.0f);
+		dl->AddLine(ImVec2(k1_x, k1_y), ImVec2(k2_x, k2_y), IM_COL32(100, 100, 120, 255), 2.0f);
+
+		// Draw keyframe diamonds
+		auto draw_diamond = [&](float x, float y, ImU32 col, float size = 6.0f) {
+			dl->AddQuadFilled(
+				ImVec2(x, y - size), ImVec2(x + size, y),
+				ImVec2(x, y + size), ImVec2(x - size, y), col);
+		};
+		draw_diamond(k0_x, k0_y, key_col);
+		draw_diamond(k1_x, k1_y, IM_COL32(100, 255, 150, 255)); // Middle key highlighted
+		draw_diamond(k2_x, k2_y, key_col);
+
+		// Draw current position marker
+		if (inst.valid() && inst.is_playing()) {
+			float t = inst.time() / inst.duration();
+			float marker_x = k0_x + t * (k2_x - k0_x);
+			float marker_y = base_y - value * scale;
+			dl->AddCircleFilled(ImVec2(marker_x, marker_y), 8.0f, IM_COL32(91, 194, 231, 255));
+		}
+
+		// Labels
+		dl->AddText(ImVec2(k0_x - 8, base_y + 5), IM_COL32(180, 180, 180, 255), "0");
+		dl->AddText(ImVec2(k1_x - 8, base_y + 5), IM_COL32(180, 180, 180, 255), "1");
+		dl->AddText(ImVec2(k2_x - 8, base_y + 5), IM_COL32(180, 180, 180, 255), "2");
+
+		ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+
+		iam_show_debug_timeline(DOC_PERSIST_INST);
+
+		ImGui::TreePop();
+	}
 }
 
 // ============================================================

@@ -3674,7 +3674,7 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Tracks: count + for each: channel, type, num_keys, keys...
 
 static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static int const IAM_CLIP_VERSION = 1;
+static int const IAM_CLIP_VERSION = 3;
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	using namespace iam_clip_detail;
@@ -3716,10 +3716,16 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 			keyframe& kf = trk.keys[k];
 			fwrite(&kf.time, sizeof(float), 1, f);
 			fwrite(&kf.ease_type, sizeof(int), 1, f);
-			fwrite(&kf.has_bezier, sizeof(bool), 1, f);
+			// Write bools as int to avoid size/alignment issues
+			int has_bezier_i = kf.has_bezier ? 1 : 0;
+			int is_spring_i = kf.is_spring ? 1 : 0;
+			fwrite(&has_bezier_i, sizeof(int), 1, f);
 			fwrite(kf.bezier, sizeof(float), 4, f);
-			fwrite(&kf.is_spring, sizeof(bool), 1, f);
-			fwrite(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fwrite(&is_spring_i, sizeof(int), 1, f);
+			fwrite(&kf.spring.mass, sizeof(float), 1, f);
+			fwrite(&kf.spring.stiffness, sizeof(float), 1, f);
+			fwrite(&kf.spring.damping, sizeof(float), 1, f);
+			fwrite(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fwrite(kf.value, sizeof(float), 4, f);
 		}
 	}
@@ -3789,7 +3795,10 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	}
 
 	for (int t = 0; t < track_count; ++t) {
-		iam_track trk;
+		// Add track to clip first, then work with it directly to avoid ImVector copy issues
+		clip->iam_tracks.push_back(iam_track());
+		iam_track& trk = clip->iam_tracks.back();
+
 		fread(&trk.channel, sizeof(ImGuiID), 1, f);
 		fread(&trk.type, sizeof(int), 1, f);
 
@@ -3800,17 +3809,22 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 			keyframe kf;
 			fread(&kf.time, sizeof(float), 1, f);
 			fread(&kf.ease_type, sizeof(int), 1, f);
-			fread(&kf.has_bezier, sizeof(bool), 1, f);
+			// Read bools as int to match save format
+			int has_bezier_i, is_spring_i;
+			fread(&has_bezier_i, sizeof(int), 1, f);
 			fread(kf.bezier, sizeof(float), 4, f);
-			fread(&kf.is_spring, sizeof(bool), 1, f);
-			fread(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fread(&is_spring_i, sizeof(int), 1, f);
+			fread(&kf.spring.mass, sizeof(float), 1, f);
+			fread(&kf.spring.stiffness, sizeof(float), 1, f);
+			fread(&kf.spring.damping, sizeof(float), 1, f);
+			fread(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fread(kf.value, sizeof(float), 4, f);
+			kf.has_bezier = (has_bezier_i != 0);
+			kf.is_spring = (is_spring_i != 0);
 			kf.channel = trk.channel;
 			kf.type = trk.type;
 			trk.keys.push_back(kf);
 		}
-
-		clip->iam_tracks.push_back(trk);
 	}
 
 	fclose(f);
