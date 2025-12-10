@@ -1872,20 +1872,31 @@ static void DocSection_MotionPaths()
 			"float angle = iam_tween_path_angle(...);");
 
 		ImGui::Separator();
-		ImGui::Text("Interactive Example (complex knot path):");
+		ImGui::Text("Interactive Example (weaving path with multiple crossings):");
 
-		// Create demo path - a figure-8 / infinity knot pattern
+		// Create demo path - a weaving ribbon pattern with multiple self-crossings
 		static ImGuiID const DOC_PATH_KNOT = ImHashStr("doc_path_knot");
 		static bool path_created = false;
 		if (!path_created) {
-			// Figure-8 knot: two loops crossing in the middle
-			iam_path::begin(DOC_PATH_KNOT, ImVec2(160, 60))
-				.cubic_to(ImVec2(240, 20), ImVec2(280, 80), ImVec2(220, 100))   // Right loop top
-				.cubic_to(ImVec2(180, 110), ImVec2(140, 110), ImVec2(100, 100)) // Cross to left
-				.cubic_to(ImVec2(40, 80), ImVec2(40, 20), ImVec2(100, 20))      // Left loop
-				.cubic_to(ImVec2(140, 20), ImVec2(140, 50), ImVec2(160, 60))    // Back to center
+			// Weaving pattern: goes left-to-right while crossing over itself 3 times
+			// Like a ribbon weaving through pegs
+			iam_path::begin(DOC_PATH_KNOT, ImVec2(20, 65))
+				// First wave: go right and down
+				.cubic_to(ImVec2(60, 20), ImVec2(100, 110), ImVec2(140, 65))
+				// Second wave: continue right, cross back up
+				.cubic_to(ImVec2(180, 20), ImVec2(220, 110), ImVec2(260, 65))
+				// Turn around at right edge
+				.cubic_to(ImVec2(290, 40), ImVec2(290, 90), ImVec2(260, 65))
+				// Go back left, weaving through the first pass (crossing #1)
+				.cubic_to(ImVec2(220, 30), ImVec2(180, 100), ImVec2(140, 65))
+				// Continue left, crossing again (crossing #2)
+				.cubic_to(ImVec2(100, 30), ImVec2(60, 100), ImVec2(30, 65))
+				// Small loop at left and come back (crossing #3)
+				.cubic_to(ImVec2(10, 40), ImVec2(10, 90), ImVec2(40, 85))
+				// Final weave back to near start
+				.cubic_to(ImVec2(70, 80), ImVec2(50, 50), ImVec2(20, 65))
 				.end();
-			iam_path_build_arc_lut(DOC_PATH_KNOT, 128);
+			iam_path_build_arc_lut(DOC_PATH_KNOT, 256);
 			path_created = true;
 		}
 
@@ -1894,7 +1905,7 @@ static void DocSection_MotionPaths()
 		if (!path_clip_init) {
 			iam_clip::begin(DOC_CLIP_PATH_ANIM)
 				.key_float(DOC_CH_VALUE, 0.0f, 0.0f, iam_ease_in_out_cubic)
-				.key_float(DOC_CH_VALUE, 3.0f, 1.0f)
+				.key_float(DOC_CH_VALUE, 8.0f, 1.0f)  // 8 seconds for slower animation
 				.end();
 			path_clip_init = true;
 		}
@@ -2589,7 +2600,7 @@ static void DocSection_Advanced()
 		}
 
 		// Gradient A: Red -> Yellow
-		// Gradient B: Blue -> Cyan -> Green
+		// Gradient B: Blue -> Cyan -> Green (smooth transition)
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(200, 30);
 		ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -2600,14 +2611,17 @@ static void DocSection_Advanced()
 			float t = (float)i / (float)(steps - 1);
 			// Gradient A: Red to Yellow
 			ImVec4 col_a(1.0f, t, 0.0f, 1.0f);
-			// Gradient B: Blue to Cyan to Green
+			// Gradient B: Blue -> Cyan -> Green (continuous)
+			// At t=0: Blue (0, 0, 1)
+			// At t=0.5: Cyan (0, 1, 1)
+			// At t=1: Green (0, 1, 0)
 			ImVec4 col_b;
 			if (t < 0.5f) {
-				float lt = t * 2.0f;
-				col_b = ImVec4(0.0f, lt, 1.0f - lt * 0.5f, 1.0f);
+				float lt = t * 2.0f;  // 0 to 1 over first half
+				col_b = ImVec4(0.0f, lt, 1.0f, 1.0f);  // Blue to Cyan
 			} else {
-				float lt = (t - 0.5f) * 2.0f;
-				col_b = ImVec4(0.0f, 0.5f + lt * 0.5f, 0.5f - lt * 0.5f, 1.0f);
+				float lt = (t - 0.5f) * 2.0f;  // 0 to 1 over second half
+				col_b = ImVec4(0.0f, 1.0f, 1.0f - lt, 1.0f);  // Cyan to Green
 			}
 			// Blend
 			ImVec4 col(
@@ -2715,6 +2729,114 @@ static void DocSection_Advanced()
 	}
 
 	// --------------------------------------------------------
+	// Rotation Modes
+	// --------------------------------------------------------
+	DocApplyOpenAll();
+	if (ImGui::TreeNode("Rotation Modes"))
+	{
+		ImGui::TextWrapped(
+			"Control how rotation angles are interpolated. Different modes handle the "
+			"wrap-around at 360 degrees differently, letting you control which direction "
+			"the rotation takes.");
+
+		DocCodeSnippet(
+			"// Available rotation modes:\n"
+			"iam_rotation_shortest  // Never rotates more than 180 deg (default)\n"
+			"iam_rotation_longest   // Always takes the long way (>180 deg)\n"
+			"iam_rotation_cw        // Always rotates clockwise\n"
+			"iam_rotation_ccw       // Always rotates counter-clockwise\n"
+			"iam_rotation_direct    // Raw lerp without unwrapping\n"
+			"\n"
+			"// Use with iam_tween_transform:\n"
+			"iam_transform current = iam_tween_transform(\n"
+			"    id, channel_id,\n"
+			"    target,\n"
+			"    duration, ease, policy,\n"
+			"    iam_rotation_shortest,  // Rotation mode\n"
+			"    dt\n"
+			");");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (try different modes):");
+
+		static int rot_mode = iam_rotation_shortest;
+		static float rot_target = 0.0f;
+
+		ImGui::Text("Mode:");
+		ImGui::RadioButton("Shortest##rotmode", &rot_mode, iam_rotation_shortest);
+		ImGui::SameLine();
+		ImGui::RadioButton("Longest##rotmode", &rot_mode, iam_rotation_longest);
+		ImGui::SameLine();
+		ImGui::RadioButton("CW##rotmode", &rot_mode, iam_rotation_cw);
+		ImGui::RadioButton("CCW##rotmode", &rot_mode, iam_rotation_ccw);
+		ImGui::SameLine();
+		ImGui::RadioButton("Direct##rotmode", &rot_mode, iam_rotation_direct);
+
+		ImGui::Text("Target Angle:");
+		if (ImGui::Button("0##rot")) rot_target = 0.0f;
+		ImGui::SameLine();
+		if (ImGui::Button("90##rot")) rot_target = 1.5708f;
+		ImGui::SameLine();
+		if (ImGui::Button("180##rot")) rot_target = 3.14159f;
+		ImGui::SameLine();
+		if (ImGui::Button("270##rot")) rot_target = 4.7124f;
+		ImGui::SameLine();
+		if (ImGui::Button("360##rot")) rot_target = 6.28318f;
+
+		iam_transform rot_target_tf;
+		rot_target_tf.position = ImVec2(100.0f, 50.0f);
+		rot_target_tf.rotation = rot_target;
+		rot_target_tf.scale = ImVec2(1.0f, 1.0f);
+
+		iam_transform rot_current = iam_tween_transform(
+			ImGui::GetID("rot_mode_doc_demo"),
+			ImGui::GetID("ch_rot"),
+			rot_target_tf,
+			1.0f,
+			iam_ease_preset(iam_ease_out_cubic),
+			iam_policy_crossfade,
+			rot_mode,
+			dt
+		);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(200.0f, 100.0f);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw rotating arrow
+		ImVec2 center(canvas_pos.x + rot_current.position.x, canvas_pos.y + rot_current.position.y);
+		float arrow_len = 35.0f;
+		float cos_r = cosf(rot_current.rotation);
+		float sin_r = sinf(rot_current.rotation);
+		ImVec2 arrow_end(center.x + arrow_len * cos_r, center.y + arrow_len * sin_r);
+
+		// Arrow body
+		dl->AddLine(center, arrow_end, IM_COL32(91, 194, 231, 255), 3.0f);
+		dl->AddCircleFilled(center, 6.0f, IM_COL32(91, 194, 231, 255));
+		dl->AddCircleFilled(arrow_end, 5.0f, IM_COL32(255, 200, 100, 255));
+
+		// Draw target direction (faded)
+		ImVec2 target_end(center.x + arrow_len * cosf(rot_target), center.y + arrow_len * sinf(rot_target));
+		dl->AddLine(center, target_end, IM_COL32(255, 100, 100, 100), 1.5f);
+
+		ImGui::Dummy(canvas_size);
+
+		float deg = rot_current.rotation * 57.2958f;
+		float target_deg = rot_target * 57.2958f;
+		ImGui::Text("Current: %.0f deg -> Target: %.0f deg", deg, target_deg);
+
+		ImGui::TextDisabled("Shortest: min rotation (<180)");
+		ImGui::TextDisabled("Longest: max rotation (>180)");
+		ImGui::TextDisabled("CW/CCW: forced direction");
+		ImGui::TextDisabled("Direct: raw lerp (can spin multiple times)");
+
+		ImGui::TreePop();
+	}
+
+	// --------------------------------------------------------
 	// Relative Tweens
 	// --------------------------------------------------------
 	DocApplyOpenAll();
@@ -2750,7 +2872,8 @@ static void DocSection_Advanced()
 	if (ImGui::TreeNode("Resolved Tweens (Dynamic Targets)"))
 	{
 		ImGui::TextWrapped(
-			"Use callbacks to compute targets dynamically each frame.");
+			"Use callbacks to compute targets dynamically each frame. The target is "
+			"resolved every frame, allowing animations to chase moving targets.");
 
 		DocCodeSnippet(
 			"float resolve_target(void* user) {\n"
@@ -2763,6 +2886,45 @@ static void DocSection_Advanced()
 			"    duration, ease, policy, dt\n"
 			");");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (chasing mouse position):");
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(280, 100);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// The "target" is the mouse position (clamped to canvas)
+		ImVec2 mouse = ImGui::GetMousePos();
+		float target_x = ImClamp(mouse.x - canvas_pos.x, 20.0f, canvas_size.x - 20.0f);
+		float target_y = ImClamp(mouse.y - canvas_pos.y, 20.0f, canvas_size.y - 20.0f);
+
+		// Store target in static for the resolver to access
+		static ImVec2 s_resolved_target(140.0f, 50.0f);
+		s_resolved_target = ImVec2(target_x, target_y);
+
+		// Animate position chasing the dynamic target
+		ImGuiID id = ImGui::GetID("resolved_demo");
+		ImVec2 pos = iam_tween_vec2(id, ImHashStr("pos"), s_resolved_target, 0.3f,
+			iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt);
+
+		// Draw target crosshair
+		dl->AddLine(ImVec2(canvas_pos.x + target_x - 8, canvas_pos.y + target_y),
+			ImVec2(canvas_pos.x + target_x + 8, canvas_pos.y + target_y),
+			IM_COL32(255, 100, 100, 150), 1.5f);
+		dl->AddLine(ImVec2(canvas_pos.x + target_x, canvas_pos.y + target_y - 8),
+			ImVec2(canvas_pos.x + target_x, canvas_pos.y + target_y + 8),
+			IM_COL32(255, 100, 100, 150), 1.5f);
+
+		// Draw chasing circle
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + pos.x, canvas_pos.y + pos.y), 12.0f,
+			IM_COL32(91, 194, 231, 255));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Move mouse over canvas - circle chases the target");
+
 		ImGui::TreePop();
 	}
 
@@ -2773,13 +2935,51 @@ static void DocSection_Advanced()
 	if (ImGui::TreeNode("Rebase (Redirect In-Progress Animation)"))
 	{
 		ImGui::TextWrapped(
-			"Change the target of an animation without restarting from the beginning.");
+			"Change the target of an animation without restarting from the beginning. "
+			"The animation smoothly redirects to the new target from its current position.");
 
 		DocCodeSnippet(
 			"// Animation is running toward target A...\n"
 			"\n"
 			"// Smoothly redirect to target B\n"
 			"iam_rebase_float(id, channel_id, new_target, dt);");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (click buttons to redirect):");
+
+		static float rebase_target = 50.0f;
+		static int target_idx = 0;
+		float targets[] = { 50.0f, 150.0f, 250.0f };
+
+		if (ImGui::Button("Left##rebase")) { rebase_target = targets[0]; target_idx = 0; }
+		ImGui::SameLine();
+		if (ImGui::Button("Center##rebase")) { rebase_target = targets[1]; target_idx = 1; }
+		ImGui::SameLine();
+		if (ImGui::Button("Right##rebase")) { rebase_target = targets[2]; target_idx = 2; }
+
+		ImGuiID id = ImGui::GetID("rebase_demo");
+		float pos_x = iam_tween_float(id, ImHashStr("x"), rebase_target, 1.5f,
+			iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300, 50);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw target markers
+		for (int i = 0; i < 3; i++) {
+			ImU32 col = (i == target_idx) ? IM_COL32(255, 200, 100, 255) : IM_COL32(100, 100, 100, 150);
+			dl->AddCircle(ImVec2(canvas_pos.x + targets[i], canvas_pos.y + 25), 8.0f, col, 0, 2.0f);
+		}
+
+		// Draw animated circle
+		dl->AddCircleFilled(ImVec2(canvas_pos.x + pos_x, canvas_pos.y + 25), 12.0f,
+			IM_COL32(91, 194, 231, 255));
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Click a target while animation is running to redirect");
 
 		ImGui::TreePop();
 	}
@@ -2791,7 +2991,8 @@ static void DocSection_Advanced()
 	if (ImGui::TreeNode("Drag Feedback"))
 	{
 		ImGui::TextWrapped(
-			"Animated feedback for drag operations with snap-to-grid and overshoot.");
+			"Animated feedback for drag operations with snap-to-grid and overshoot. "
+			"Provides smooth visual response during and after dragging.");
 
 		DocCodeSnippet(
 			"iam_drag_opts opts;\n"
@@ -2808,6 +3009,91 @@ static void DocSection_Advanced()
 			"}\n"
 			"\n"
 			"// Use feedback.position for rendering");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (drag the box, release to snap):");
+
+		// Draggable box state
+		static ImVec2 box_pos(75.0f, 60.0f);
+		static ImVec2 drag_offset(0, 0);
+		static bool dragging = false;
+		static ImVec2 snap_target(75.0f, 60.0f);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(300, 120);
+
+		// Create an invisible button to capture mouse input and prevent window dragging
+		ImGui::InvisibleButton("drag_canvas", canvas_size);
+		bool canvas_hovered = ImGui::IsItemHovered();
+		bool canvas_active = ImGui::IsItemActive();
+
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw grid
+		float grid_size = 50.0f;
+		for (float x = grid_size; x < canvas_size.x; x += grid_size) {
+			dl->AddLine(ImVec2(canvas_pos.x + x, canvas_pos.y),
+				ImVec2(canvas_pos.x + x, canvas_pos.y + canvas_size.y),
+				IM_COL32(60, 60, 70, 255), 1.0f);
+		}
+		for (float y = grid_size; y < canvas_size.y; y += grid_size) {
+			dl->AddLine(ImVec2(canvas_pos.x, canvas_pos.y + y),
+				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + y),
+				IM_COL32(60, 60, 70, 255), 1.0f);
+		}
+
+		ImVec2 box_screen_pos(canvas_pos.x + box_pos.x, canvas_pos.y + box_pos.y);
+		ImVec2 box_size(40, 40);
+		ImRect box_rect(ImVec2(box_screen_pos.x - box_size.x * 0.5f, box_screen_pos.y - box_size.y * 0.5f),
+			ImVec2(box_screen_pos.x + box_size.x * 0.5f, box_screen_pos.y + box_size.y * 0.5f));
+
+		ImVec2 mouse = ImGui::GetMousePos();
+		bool box_hovered = box_rect.Contains(mouse) && canvas_hovered;
+
+		// Start dragging when clicking on box
+		if (box_hovered && ImGui::IsMouseClicked(0)) {
+			dragging = true;
+			drag_offset = ImVec2(mouse.x - box_screen_pos.x, mouse.y - box_screen_pos.y);
+		}
+
+		if (dragging) {
+			if (ImGui::IsMouseDown(0)) {
+				// Update position while dragging
+				box_pos.x = mouse.x - canvas_pos.x - drag_offset.x;
+				box_pos.y = mouse.y - canvas_pos.y - drag_offset.y;
+				// Clamp to canvas
+				box_pos.x = ImClamp(box_pos.x, box_size.x * 0.5f, canvas_size.x - box_size.x * 0.5f);
+				box_pos.y = ImClamp(box_pos.y, box_size.y * 0.5f, canvas_size.y - box_size.y * 0.5f);
+				snap_target = box_pos;
+			} else {
+				// Release - snap to grid
+				dragging = false;
+				snap_target.x = ImFloor((box_pos.x + grid_size * 0.5f) / grid_size) * grid_size + grid_size * 0.5f;
+				snap_target.y = ImFloor((box_pos.y + grid_size * 0.5f) / grid_size) * grid_size + grid_size * 0.5f;
+				// Clamp snap target
+				snap_target.x = ImClamp(snap_target.x, grid_size * 0.5f, canvas_size.x - grid_size * 0.5f);
+				snap_target.y = ImClamp(snap_target.y, grid_size * 0.5f, canvas_size.y - grid_size * 0.5f);
+			}
+		}
+
+		// Animate to snap target when not dragging
+		if (!dragging) {
+			ImGuiID id = ImGui::GetID("drag_snap_demo");
+			box_pos = iam_tween_vec2(id, ImHashStr("pos"), snap_target, 0.25f,
+				iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+		}
+
+		// Draw box
+		ImU32 box_col = dragging ? IM_COL32(255, 200, 100, 255) : (box_hovered ? IM_COL32(120, 220, 255, 255) : IM_COL32(91, 194, 231, 255));
+		dl->AddRectFilled(
+			ImVec2(canvas_pos.x + box_pos.x - box_size.x * 0.5f, canvas_pos.y + box_pos.y - box_size.y * 0.5f),
+			ImVec2(canvas_pos.x + box_pos.x + box_size.x * 0.5f, canvas_pos.y + box_pos.y + box_size.y * 0.5f),
+			box_col, 4.0f);
+
+		ImGui::TextDisabled("Drag box and release - snaps to grid with bounce");
 
 		ImGui::TreePop();
 	}
@@ -3152,6 +3438,95 @@ static void DocSection_PerAxisEasing()
 			"    id, channel_id, target_srgb, duration, ez, policy, color_space, dt\n"
 			");");
 
+		ImGui::Separator();
+		ImGui::Text("Interactive Example (R: bounce, G: elastic, B: linear, A: expo):");
+
+		static ImVec4 color_target(1.0f, 0.0f, 1.0f, 1.0f);
+		static bool color_toggle = false;
+		static float color_anim_timer = 0.0f;
+
+		// Auto-toggle every 2 seconds
+		color_anim_timer += dt;
+		if (color_anim_timer > 2.0f) {
+			color_anim_timer = 0.0f;
+			color_toggle = !color_toggle;
+			color_target = color_toggle ? ImVec4(0.0f, 1.0f, 0.0f, 0.3f) : ImVec4(1.0f, 0.0f, 1.0f, 1.0f);
+		}
+
+		if (ImGui::Button("Toggle Color##peraxis_color")) {
+			color_toggle = !color_toggle;
+			color_target = color_toggle ? ImVec4(0.0f, 1.0f, 0.0f, 0.3f) : ImVec4(1.0f, 0.0f, 1.0f, 1.0f);
+			color_anim_timer = 0.0f;
+		}
+
+		iam_ease_per_axis ez_color;
+		ez_color.x = iam_ease_preset(iam_ease_out_bounce);   // Red: bouncy
+		ez_color.y = iam_ease_preset(iam_ease_out_elastic);  // Green: elastic
+		ez_color.z = iam_ease_preset(iam_ease_linear);       // Blue: linear
+		ez_color.w = iam_ease_preset(iam_ease_out_expo);     // Alpha: exponential
+
+		ImGuiID color_id = ImGui::GetID("peraxis_color_demo");
+		ImVec4 color = iam_tween_color_per_axis(color_id, ImHashStr("col"), color_target, 1.5f,
+			ez_color, iam_policy_crossfade, iam_col_srgb, dt);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(500.0f, 200.0f);  // 300% larger
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 8.0f);
+
+		// Draw large color swatch (scaled up)
+		float swatch_margin = 20.0f;
+		float swatch_size = 160.0f;
+		ImU32 swatch_col = ImGui::ColorConvertFloat4ToU32(color);
+		dl->AddRectFilled(
+			ImVec2(canvas_pos.x + swatch_margin, canvas_pos.y + swatch_margin),
+			ImVec2(canvas_pos.x + swatch_margin + swatch_size, canvas_pos.y + swatch_margin + swatch_size),
+			swatch_col, 8.0f);
+		dl->AddRect(
+			ImVec2(canvas_pos.x + swatch_margin, canvas_pos.y + swatch_margin),
+			ImVec2(canvas_pos.x + swatch_margin + swatch_size, canvas_pos.y + swatch_margin + swatch_size),
+			IM_COL32(255, 255, 255, 100), 8.0f, 0, 2.0f);
+
+		// Draw individual channel bars (scaled up)
+		float bar_x = canvas_pos.x + swatch_margin + swatch_size + 30.0f;
+		float bar_w = 150.0f;
+		float bar_h = 28.0f;
+		float bar_spacing = 42.0f;
+		float bar_y_start = canvas_pos.y + 25.0f;
+
+		// Red bar
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start), ImVec2(bar_x + bar_w, bar_y_start + bar_h),
+			IM_COL32(60, 60, 70, 255), 4.0f);
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start), ImVec2(bar_x + bar_w * color.x, bar_y_start + bar_h),
+			IM_COL32(255, 80, 80, 255), 4.0f);
+		dl->AddText(ImVec2(bar_x + bar_w + 10, bar_y_start + 6), IM_COL32(200, 200, 200, 255), "R (bounce)");
+
+		// Green bar
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing), ImVec2(bar_x + bar_w, bar_y_start + bar_spacing + bar_h),
+			IM_COL32(60, 60, 70, 255), 4.0f);
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing), ImVec2(bar_x + bar_w * color.y, bar_y_start + bar_spacing + bar_h),
+			IM_COL32(80, 255, 80, 255), 4.0f);
+		dl->AddText(ImVec2(bar_x + bar_w + 10, bar_y_start + bar_spacing + 6), IM_COL32(200, 200, 200, 255), "G (elastic)");
+
+		// Blue bar
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing * 2), ImVec2(bar_x + bar_w, bar_y_start + bar_spacing * 2 + bar_h),
+			IM_COL32(60, 60, 70, 255), 4.0f);
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing * 2), ImVec2(bar_x + bar_w * color.z, bar_y_start + bar_spacing * 2 + bar_h),
+			IM_COL32(80, 80, 255, 255), 4.0f);
+		dl->AddText(ImVec2(bar_x + bar_w + 10, bar_y_start + bar_spacing * 2 + 6), IM_COL32(200, 200, 200, 255), "B (linear)");
+
+		// Alpha bar
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing * 3), ImVec2(bar_x + bar_w, bar_y_start + bar_spacing * 3 + bar_h),
+			IM_COL32(60, 60, 70, 255), 4.0f);
+		dl->AddRectFilled(ImVec2(bar_x, bar_y_start + bar_spacing * 3), ImVec2(bar_x + bar_w * color.w, bar_y_start + bar_spacing * 3 + bar_h),
+			IM_COL32(200, 200, 200, 255), 4.0f);
+		dl->AddText(ImVec2(bar_x + bar_w + 10, bar_y_start + bar_spacing * 3 + 6), IM_COL32(200, 200, 200, 255), "A (expo)");
+
+		ImGui::Dummy(canvas_size);
+		ImGui::TextDisabled("Each channel animates with its own easing curve");
+
 		ImGui::TreePop();
 	}
 }
@@ -3187,6 +3562,90 @@ static void DocSection_ArcLength()
 			"if (iam_path_has_arc_lut(PATH_ID)) {\n"
 			"    // Can use distance-based functions\n"
 			"}");
+
+		ImGui::Separator();
+		ImGui::Text("Interactive Example: Path Length vs LUT Resolution");
+
+		// Create a complex bezier curve for this demo
+		static ImGuiID const DOC_PATH_LUT_DEMO = ImHashStr("doc_path_lut_demo");
+		static bool lut_demo_init = false;
+		static int lut_resolution = 64;
+		static float path_lengths[5] = { 0 };  // Store lengths for different resolutions
+		int resolutions[] = { 8, 16, 32, 64, 128 };
+
+		if (!lut_demo_init) {
+			// Create a complex curve with tight turns
+			iam_path::begin(DOC_PATH_LUT_DEMO, ImVec2(20, 60))
+				.cubic_to(ImVec2(60, 10), ImVec2(100, 110), ImVec2(140, 60))
+				.cubic_to(ImVec2(180, 10), ImVec2(220, 110), ImVec2(260, 60))
+				.end();
+
+			// Calculate path lengths at different resolutions
+			for (int i = 0; i < 5; i++) {
+				iam_path_build_arc_lut(DOC_PATH_LUT_DEMO, resolutions[i]);
+				path_lengths[i] = iam_path_length(DOC_PATH_LUT_DEMO);
+			}
+			lut_demo_init = true;
+		}
+
+		// Resolution selector
+		ImGui::Text("LUT Resolution:");
+		int res_idx = 3;  // Default to 64
+		for (int i = 0; i < 5; i++) {
+			if (resolutions[i] == lut_resolution) res_idx = i;
+		}
+		if (ImGui::RadioButton("8##lut", &res_idx, 0)) lut_resolution = 8;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("16##lut", &res_idx, 1)) lut_resolution = 16;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("32##lut", &res_idx, 2)) lut_resolution = 32;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("64##lut", &res_idx, 3)) lut_resolution = 64;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("128##lut", &res_idx, 4)) lut_resolution = 128;
+
+		// Rebuild LUT with selected resolution
+		iam_path_build_arc_lut(DOC_PATH_LUT_DEMO, lut_resolution);
+		float current_length = iam_path_length(DOC_PATH_LUT_DEMO);
+
+		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImVec2 canvas_size(280, 100);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+			IM_COL32(30, 30, 40, 255), 4.0f);
+
+		// Draw the curve
+		ImVec2 prev = iam_path_evaluate(DOC_PATH_LUT_DEMO, 0.0f);
+		for (int i = 1; i <= 50; i++) {
+			float t = (float)i / 50.0f;
+			ImVec2 curr = iam_path_evaluate(DOC_PATH_LUT_DEMO, t);
+			dl->AddLine(
+				ImVec2(canvas_pos.x + prev.x, canvas_pos.y + prev.y),
+				ImVec2(canvas_pos.x + curr.x, canvas_pos.y + curr.y),
+				IM_COL32(91, 194, 231, 255), 2.5f);
+			prev = curr;
+		}
+
+		// Draw sample points based on resolution (show how the LUT samples the curve)
+		for (int i = 0; i <= lut_resolution; i++) {
+			float t = (float)i / (float)lut_resolution;
+			ImVec2 pt = iam_path_evaluate(DOC_PATH_LUT_DEMO, t);
+			ImU32 col = (i == 0 || i == lut_resolution) ? IM_COL32(255, 200, 100, 255) : IM_COL32(255, 255, 255, 150);
+			float radius = (i == 0 || i == lut_resolution) ? 4.0f : 2.0f;
+			dl->AddCircleFilled(ImVec2(canvas_pos.x + pt.x, canvas_pos.y + pt.y), radius, col);
+		}
+
+		ImGui::Dummy(canvas_size);
+
+		// Show path length comparison
+		ImGui::Text("Path Length: %.2f px", current_length);
+		ImGui::Text("Length at different resolutions:");
+		for (int i = 0; i < 5; i++) {
+			float diff = path_lengths[i] - path_lengths[4];  // Diff from highest res
+			ImGui::TextDisabled("  %3d subdivs: %.2f px (%.2f from true)", resolutions[i], path_lengths[i], diff);
+		}
+		ImGui::TextDisabled("Higher resolution = more accurate length calculation");
 
 		ImGui::TreePop();
 	}
@@ -3631,7 +4090,7 @@ static void DocSection_ClipCallbacks()
 	// Interactive Example
 	// --------------------------------------------------------
 	DocApplyOpenAll();
-	if (ImGui::TreeNode("Interactive Example"))
+	if (ImGui::TreeNode("Interactive Example##clip_callbacks"))
 	{
 		ImGui::TextWrapped(
 			"Watch the callback indicators light up as the animation plays.");
@@ -3836,7 +4295,7 @@ static void DocSection_AnchorRelativeKeyframes()
 	// Interactive Example
 	// --------------------------------------------------------
 	DocApplyOpenAll();
-	if (ImGui::TreeNode("Interactive Example"))
+	if (ImGui::TreeNode("Interactive Example##anchor_keyframes"))
 	{
 		ImGui::TextWrapped(
 			"This circle animates from left to right edge. Click to toggle position!");
@@ -4278,7 +4737,7 @@ static void DocSection_SmoothNoise()
 	// Interactive Example
 	// --------------------------------------------------------
 	DocApplyOpenAll();
-	if (ImGui::TreeNode("Interactive Example"))
+	if (ImGui::TreeNode("Interactive Example##smooth_noise"))
 	{
 		static float amplitude = 20.0f;
 		static float speed = 1.5f;
@@ -4369,7 +4828,7 @@ static void DocSection_PathMorphingTween()
 	// Interactive Example
 	// --------------------------------------------------------
 	DocApplyOpenAll();
-	if (ImGui::TreeNode("Interactive Example"))
+	if (ImGui::TreeNode("Interactive Example##path_morphing"))
 	{
 		ImGui::TextWrapped(
 			"Morph between a circle and a square path while animating position.");
@@ -4553,7 +5012,7 @@ static void DocSection_CurveFunctions()
 	// Interactive Example
 	// --------------------------------------------------------
 	DocApplyOpenAll();
-	if (ImGui::TreeNode("Interactive Example"))
+	if (ImGui::TreeNode("Interactive Example##curve_functions"))
 	{
 		ImGui::TextWrapped(
 			"Cubic Bezier with draggable control points and tangent visualization.");

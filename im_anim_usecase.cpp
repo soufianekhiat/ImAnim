@@ -3953,7 +3953,7 @@ static void ShowUsecase_KeyframeCurve()
 	float scale = ImGui::GetFontSize() / 13.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 200);
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 1000);  // 500% taller
 
 	// Background
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
@@ -4788,15 +4788,28 @@ static void ShowUsecase_RadarChart()
 	float scale = ImGui::GetFontSize() / 13.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, 375);  // 25% taller canvas
+
+	// Calculate radar size and canvas based on label text sizes
+	const char* axis_labels[] = { "Speed", "Power", "Defense", "Magic", "Stamina", "Luck" };
+	float label_margin = 25 * scale;  // Space between radar edge and labels
+	float max_radius = 85 * scale;    // Radar radius
+
+	// Calculate margins needed for labels
+	float top_label_height = ImGui::CalcTextSize(axis_labels[0]).y;  // "Speed"
+	float side_label_width = ImMax(ImGui::CalcTextSize(axis_labels[3]).x, ImGui::CalcTextSize(axis_labels[4]).x);  // "Magic", "Stamina"
+
+	float margin_top = top_label_height + label_margin + 15 * scale;
+	float margin_bottom = top_label_height + label_margin + 15 * scale;  // "Defense" at bottom
+	float canvas_height = margin_top + max_radius * 2 + margin_bottom;
+
+	ImVec2 canvas_size(ImGui::GetContentRegionAvail().x, canvas_height);
 
 	// Background
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
 		IM_COL32(25, 28, 35, 255), 4.0f);
 
-	const char* axis_labels[] = { "Speed", "Power", "Defense", "Magic", "Stamina", "Luck" };
-	ImVec2 center(pos.x + canvas_size.x * 0.35f, pos.y + canvas_size.y * 0.5f);  // Centered Y
-	float max_radius = 75 * scale;
+	// Center the radar in the canvas
+	ImVec2 center(pos.x + canvas_size.x * 0.5f, pos.y + margin_top + max_radius);
 
 	// Draw grid circles
 	for (int ring = 1; ring <= 4; ring++)
@@ -4899,8 +4912,8 @@ static void ShowUsecase_GaugeMeter()
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + canvas_size.y),
 		IM_COL32(25, 28, 35, 255), 4.0f);
 
-	// Center positioned lower in the taller canvas for upward-facing arc
-	ImVec2 center(pos.x + canvas_size.x * 0.5f, pos.y + canvas_size.y - 30 * scale);
+	// Center positioned near bottom for upward-facing arc (gauge sits at bottom)
+	ImVec2 center(pos.x + canvas_size.x * 0.5f, pos.y + canvas_size.y * 0.92f);
 	float outer_radius = 65 * scale;
 	float inner_radius = 45 * scale;
 
@@ -7098,109 +7111,154 @@ static void ShowUsecase_BottomSheet()
 }
 
 // ============================================================
-// USECASE: Snackbar
+// USECASE: Cookie Consent Banner
 // ============================================================
 static void ShowUsecase_Snackbar()
 {
-	ImGui::TextWrapped("Animated toast notification stack with different types (success, warning, error, info).");
+	ImGui::TextWrapped("Animated cookie consent banner with slide-up entrance and button hover effects.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	struct Toast {
-		int type; // 0=success, 1=warning, 2=error, 3=info
-		float time;
-		bool active;
-	};
-	static Toast toasts[4] = { {0, 0, false}, {1, 0, false}, {2, 0, false}, {3, 0, false} };
-	static int next_toast = 0;
+	static bool show_banner = true;
+	static bool accepted = false;
+	static float hover_accept = 0.0f;
+	static float hover_decline = 0.0f;
+	static float hover_settings = 0.0f;
 
-	// Update toasts
-	for (int i = 0; i < 4; i++)
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 container_size(700 * scale, 350 * scale);  // Wider container for modal to fit
+
+	// Container (simulated webpage)
+	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
+		IM_COL32(45, 50, 60, 255), 10 * scale);
+	dl->PushClipRect(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y), true);
+
+	// Simulated page content - larger text and more lines
+	dl->AddText(ImVec2(pos.x + 25 * scale, pos.y + 25 * scale),
+		IM_COL32(200, 200, 210, 255), "Welcome to Our Website");
+	for (int i = 0; i < 5; i++)
 	{
-		if (toasts[i].active)
+		dl->AddRectFilled(
+			ImVec2(pos.x + 25 * scale, pos.y + 60 * scale + i * 28 * scale),
+			ImVec2(pos.x + container_size.x - 25 * scale, pos.y + 75 * scale + i * 28 * scale),
+			IM_COL32(70, 75, 85, 255), 3 * scale);
+	}
+
+	// Reset button
+	if (!show_banner)
+	{
+		ImGui::SetCursorScreenPos(ImVec2(pos.x + 20 * scale, pos.y + container_size.y - 50 * scale));
+		if (ImGui::Button("Reset Banner"))
 		{
-			toasts[i].time += dt;
-			if (toasts[i].time > 2.5f) toasts[i].active = false;
+			show_banner = true;
+			accepted = false;
 		}
 	}
 
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 container_size(320 * scale, 180 * scale);
+	// Banner slide-up animation - much taller banner
+	float banner_height = 160 * scale;
+	float target_y = show_banner ? (container_size.y - banner_height) : container_size.y;
+	float banner_y = iam_tween_float(ImGui::GetID("banner_y"), ImHashStr("by"),
+		target_y, 0.4f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
 
-	// Container
-	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
-		IM_COL32(25, 30, 40, 255), 6 * scale);
-	dl->PushClipRect(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y), true);
-
-	// Trigger button
-	ImGui::SetCursorScreenPos(ImVec2(pos.x + 10 * scale, pos.y + 10 * scale));
-	if (ImGui::Button("Add Toast"))
+	if (banner_y < container_size.y - 1)
 	{
-		toasts[next_toast].active = true;
-		toasts[next_toast].time = 0.0f;
-		toasts[next_toast].type = next_toast;
-		next_toast = (next_toast + 1) % 4;
-	}
+		ImVec2 banner_pos(pos.x, pos.y + banner_y);
 
-	// Toast colors and icons by type
-	const char* icons[] = { "+", "!", "X", "i" };
-	const char* messages[] = { "Success!", "Warning!", "Error!", "Info" };
-	ImU32 bg_colors[] = {
-		IM_COL32(46, 125, 50, 255),   // success green
-		IM_COL32(237, 108, 2, 255),   // warning orange
-		IM_COL32(211, 47, 47, 255),   // error red
-		IM_COL32(2, 136, 209, 255)    // info blue
-	};
+		// Banner background with gradient effect
+		dl->AddRectFilled(banner_pos,
+			ImVec2(banner_pos.x + container_size.x, banner_pos.y + banner_height),
+			IM_COL32(30, 35, 50, 250), 12 * scale, ImDrawFlags_RoundCornersTop);
 
-	// Draw toasts stacked from top-right
-	float toast_height = 36 * scale;
-	float toast_width = 140 * scale;
-	int visible_count = 0;
-
-	for (int i = 0; i < 4; i++)
-	{
-		float target_x = toasts[i].active ? (container_size.x - toast_width - 10 * scale) : (container_size.x + 20 * scale);
-		float slide_x = iam_tween_float(ImGui::GetID("toast_x") + i, ImHashStr("tx") + i,
-			target_x, 0.3f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-
-		// Count visible toasts for stacking
-		float target_y = 10 * scale + visible_count * (toast_height + 8 * scale);
-		if (toasts[i].active) visible_count++;
-
-		float slide_y = iam_tween_float(ImGui::GetID("toast_y") + i, ImHashStr("ty") + i,
-			target_y, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-
-		if (slide_x < container_size.x)
+		// Cookie icon (animated wobble) - larger
+		float wobble = iam_oscillate(ImGui::GetID("cookie_wobble"), 0.1f, 2.0f, 0, 0.0f, dt);
+		ImVec2 cookie_center(banner_pos.x + 55 * scale, banner_pos.y + 55 * scale);
+		float cookie_r = 30 * scale;
+		dl->AddCircleFilled(cookie_center, cookie_r, IM_COL32(210, 160, 90, 255));
+		// Cookie chips - larger
+		for (int i = 0; i < 6; i++)
 		{
-			ImVec2 toast_pos(pos.x + slide_x, pos.y + slide_y);
+			float angle = (i * 1.1f) + wobble;
+			float dist = (i % 2 == 0) ? 12 * scale : 18 * scale;
+			ImVec2 chip(cookie_center.x + cosf(angle) * dist, cookie_center.y + sinf(angle) * dist);
+			dl->AddCircleFilled(chip, 5 * scale, IM_COL32(120, 80, 40, 255));
+		}
 
-			// Toast background with rounded corners
-			dl->AddRectFilled(toast_pos, ImVec2(toast_pos.x + toast_width, toast_pos.y + toast_height),
-				bg_colors[toasts[i].type], 6 * scale);
+		// Text - better positioned with more spacing
+		float text_x = banner_pos.x + 100 * scale;
+		dl->AddText(ImVec2(text_x, banner_pos.y + 20 * scale),
+			IM_COL32(255, 255, 255, 255), "We use cookies");
+		dl->AddText(ImVec2(text_x, banner_pos.y + 50 * scale),
+			IM_COL32(160, 165, 180, 255), "This site uses cookies to improve your browsing experience.");
+		dl->AddText(ImVec2(text_x, banner_pos.y + 75 * scale),
+			IM_COL32(160, 165, 180, 255), "By clicking Accept, you agree to our use of cookies.");
 
-			// Icon circle
-			float icon_r = 10 * scale;
-			ImVec2 icon_center(toast_pos.x + 18 * scale, toast_pos.y + toast_height * 0.5f);
-			dl->AddCircleFilled(icon_center, icon_r, IM_COL32(255, 255, 255, 60));
-			ImVec2 icon_size = ImGui::CalcTextSize(icons[toasts[i].type]);
-			dl->AddText(ImVec2(icon_center.x - icon_size.x * 0.5f, icon_center.y - icon_size.y * 0.5f),
-				IM_COL32(255, 255, 255, 255), icons[toasts[i].type]);
+		// Buttons with hover animation - larger buttons
+		const char* btn_labels[] = { "Accept All", "Decline", "Settings" };
+		float* hovers[] = { &hover_accept, &hover_decline, &hover_settings };
+		ImU32 btn_colors[] = {
+			IM_COL32(76, 175, 80, 255),  // Accept - green
+			IM_COL32(100, 100, 110, 255), // Decline - gray
+			IM_COL32(70, 130, 180, 255)   // Settings - blue
+		};
 
-			// Message text
-			dl->AddText(ImVec2(toast_pos.x + 36 * scale, toast_pos.y + (toast_height - ImGui::GetFontSize()) * 0.5f),
-				IM_COL32(255, 255, 255, 255), messages[toasts[i].type]);
+		float btn_x = text_x;
+		float btn_y = banner_pos.y + 110 * scale;
 
-			// Progress bar at bottom (time remaining)
-			float progress = 1.0f - (toasts[i].time / 2.5f);
-			if (progress > 0)
+		for (int i = 0; i < 3; i++)
+		{
+			ImVec2 text_size = ImGui::CalcTextSize(btn_labels[i]);
+			float btn_w = text_size.x + 32 * scale;  // More padding
+			float btn_h = 32 * scale;  // Taller buttons
+
+			ImGui::SetCursorScreenPos(ImVec2(btn_x, btn_y));
+			ImGui::PushID(i);
+			bool hovered = ImGui::IsMouseHoveringRect(ImVec2(btn_x, btn_y), ImVec2(btn_x + btn_w, btn_y + btn_h));
+
+			// Animate hover
+			*hovers[i] = iam_tween_float(ImGui::GetID("btn_hover"), ImHashStr("bh"),
+				hovered ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+			float btn_scale = 1.0f + *hovers[i] * 0.08f;
+			float scaled_w = btn_w * btn_scale;
+			float scaled_h = btn_h * btn_scale;
+			float offset_x = (scaled_w - btn_w) * 0.5f;
+			float offset_y = (scaled_h - btn_h) * 0.5f;
+
+			// Button background
+			ImU32 col = btn_colors[i];
+			if (*hovers[i] > 0.01f)
 			{
-				dl->AddRectFilled(
-					ImVec2(toast_pos.x, toast_pos.y + toast_height - 3 * scale),
-					ImVec2(toast_pos.x + toast_width * progress, toast_pos.y + toast_height),
-					IM_COL32(255, 255, 255, 100), 0, ImDrawFlags_RoundCornersBottom);
+				int r = (col >> 0) & 0xFF;
+				int g = (col >> 8) & 0xFF;
+				int b = (col >> 16) & 0xFF;
+				r = ImMin(255, (int)(r + 30 * *hovers[i]));
+				g = ImMin(255, (int)(g + 30 * *hovers[i]));
+				b = ImMin(255, (int)(b + 30 * *hovers[i]));
+				col = IM_COL32(r, g, b, 255);
 			}
+
+			dl->AddRectFilled(
+				ImVec2(btn_x - offset_x, btn_y - offset_y),
+				ImVec2(btn_x + scaled_w - offset_x, btn_y + scaled_h - offset_y),
+				col, 6 * scale);
+
+			// Button text - centered
+			dl->AddText(
+				ImVec2(btn_x + (btn_w - text_size.x) * 0.5f - offset_x, btn_y + (btn_h - ImGui::GetFontSize()) * 0.5f - offset_y),
+				IM_COL32(255, 255, 255, 255), btn_labels[i]);
+
+			if (ImGui::InvisibleButton("btn", ImVec2(btn_w, btn_h)))
+			{
+				if (i == 0) { accepted = true; show_banner = false; }
+				else if (i == 1) { show_banner = false; }
+				// Settings would open a modal
+			}
+			ImGui::PopID();
+
+			btn_x += btn_w + 15 * scale;  // More gap between buttons
 		}
 	}
 
@@ -7260,14 +7318,22 @@ static void ShowUsecase_Lightbox()
 			IM_COL32(130, 100, 150, 255), 8 * scale);
 
 		// Close button
-		ImVec2 close_pos(img_pos.x + img_size - 25 * scale * lb_scale, img_pos.y + 5 * scale);
-		float radius = 12 * scale * lb_scale;
-		dl->AddCircleFilled(ImVec2(close_pos.x + radius, close_pos.y + radius), radius, IM_COL32(200, 60, 60, (int)(lb_scale * 255)));
-		dl->AddText(ImVec2(close_pos.x - 4 * scale, close_pos.y - 7 * scale),
-			IM_COL32(255, 255, 255, (int)(lb_scale * 255)), "X");
+		float close_radius = 12 * scale * lb_scale;
+		ImVec2 close_center(img_pos.x + img_size - 15 * scale * lb_scale, img_pos.y + 15 * scale * lb_scale);
+		dl->AddCircleFilled(close_center, close_radius, IM_COL32(200, 60, 60, (int)(lb_scale * 255)));
 
-		ImGui::SetCursorScreenPos(ImVec2(close_pos.x - 15 * scale, close_pos.y - 15 * scale));
-		if (ImGui::InvisibleButton("close_lb", ImVec2(30 * scale, 30 * scale)))
+		// Draw X inside circle
+		float x_size = 5 * scale * lb_scale;
+		dl->AddLine(ImVec2(close_center.x - x_size, close_center.y - x_size),
+			ImVec2(close_center.x + x_size, close_center.y + x_size),
+			IM_COL32(255, 255, 255, (int)(lb_scale * 255)), 2 * scale);
+		dl->AddLine(ImVec2(close_center.x + x_size, close_center.y - x_size),
+			ImVec2(close_center.x - x_size, close_center.y + x_size),
+			IM_COL32(255, 255, 255, (int)(lb_scale * 255)), 2 * scale);
+
+		// Invisible button aligned with circle
+		ImGui::SetCursorScreenPos(ImVec2(close_center.x - close_radius - 5 * scale, close_center.y - close_radius - 5 * scale));
+		if (ImGui::InvisibleButton("close_lb", ImVec2((close_radius + 5 * scale) * 2, (close_radius + 5 * scale) * 2)))
 			open = false;
 	}
 
@@ -7347,51 +7413,113 @@ static void ShowUsecase_CommandPalette()
 // ============================================================
 static void ShowUsecase_InlineConfirmation()
 {
-	ImGui::TextWrapped("Inline delete confirmation that expands in place.");
+	ImGui::TextWrapped("Inline delete confirmation that expands in place with hover effects.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool confirming = false;
+	static float confirm_hover = 0.0f;
+	static float cancel_hover = 0.0f;
+	static float delete_hover = 0.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	float btn_height = 35 * scale;
+	float padding = 20 * scale;
+	float gap = 15 * scale;  // Gap between Confirm and Cancel
+
+	// Calculate text sizes for proper button widths
+	ImVec2 delete_size = ImGui::CalcTextSize("Delete");
+	ImVec2 confirm_size = ImGui::CalcTextSize("Confirm");
+	ImVec2 cancel_size = ImGui::CalcTextSize("Cancel");
+
+	float collapsed_width = delete_size.x + padding * 2;
+	float confirm_btn_width = confirm_size.x + padding * 2;
+	float cancel_btn_width = cancel_size.x + padding * 2;
+	float expanded_total = confirm_btn_width + gap + cancel_btn_width;
 
 	// Width animation
-	float expanded_width = iam_tween_float(ImGui::GetID("conf_w"), ImHashStr("cw"),
-		confirming ? 200 * scale : 80 * scale, 0.2f,
-		iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+	float target_width = confirming ? expanded_total : collapsed_width;
+	float animated_width = iam_tween_float(ImGui::GetID("conf_w"), ImHashStr("cw"),
+		target_width, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
 
 	// Background
 	ImU32 bg_col = confirming ? IM_COL32(180, 60, 60, 255) : IM_COL32(60, 65, 75, 255);
-	dl->AddRectFilled(pos, ImVec2(pos.x + expanded_width, pos.y + btn_height), bg_col, 4 * scale);
-
-	ImGui::SetCursorScreenPos(pos);
-	ImGui::InvisibleButton("conf_btn", ImVec2(expanded_width, btn_height));
+	dl->AddRectFilled(pos, ImVec2(pos.x + animated_width, pos.y + btn_height), bg_col, 4 * scale);
 
 	if (!confirming)
 	{
+		// Delete button hover detection
+		ImGui::SetCursorScreenPos(pos);
+		ImGui::InvisibleButton("delete_btn", ImVec2(animated_width, btn_height));
+		bool del_hovered = ImGui::IsItemHovered();
 		if (ImGui::IsItemClicked()) confirming = true;
-		dl->AddText(ImVec2(pos.x + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+
+		// Animate delete button hover
+		delete_hover = iam_tween_float(ImGui::GetID("del_h"), ImHashStr("dh"),
+			del_hovered ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		// Hover highlight
+		if (delete_hover > 0.01f)
+		{
+			dl->AddRectFilled(pos, ImVec2(pos.x + animated_width, pos.y + btn_height),
+				IM_COL32(255, 255, 255, (int)(30 * delete_hover)), 4 * scale);
+		}
+
+		// Center "Delete" text in button
+		float text_x = pos.x + (animated_width - delete_size.x) * 0.5f;
+		dl->AddText(ImVec2(text_x, pos.y + (btn_height - delete_size.y) * 0.5f),
 			IM_COL32(255, 255, 255, 255), "Delete");
 	}
 	else
 	{
-		// Confirm/Cancel buttons
-		float half = expanded_width * 0.5f;
-		dl->AddLine(ImVec2(pos.x + half, pos.y + 5 * scale), ImVec2(pos.x + half, pos.y + btn_height - 5 * scale),
-			IM_COL32(255, 255, 255, 100));
+		ImVec2 mouse = ImGui::GetMousePos();
+		float cancel_start_x = pos.x + confirm_btn_width + gap;
 
-		dl->AddText(ImVec2(pos.x + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+		// Check hover for each button
+		bool confirm_hovered = (mouse.x >= pos.x && mouse.x < pos.x + confirm_btn_width &&
+			mouse.y >= pos.y && mouse.y < pos.y + btn_height);
+		bool cancel_hovered = (mouse.x >= cancel_start_x && mouse.x < cancel_start_x + cancel_btn_width &&
+			mouse.y >= pos.y && mouse.y < pos.y + btn_height);
+
+		// Animate hover states
+		confirm_hover = iam_tween_float(ImGui::GetID("conf_h"), ImHashStr("ch"),
+			confirm_hovered ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+		cancel_hover = iam_tween_float(ImGui::GetID("canc_h"), ImHashStr("cah"),
+			cancel_hovered ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		// Confirm button hover highlight
+		if (confirm_hover > 0.01f)
+		{
+			dl->AddRectFilled(pos, ImVec2(pos.x + confirm_btn_width, pos.y + btn_height),
+				IM_COL32(255, 255, 255, (int)(40 * confirm_hover)), 4 * scale, ImDrawFlags_RoundCornersLeft);
+		}
+
+		// Cancel button hover highlight
+		if (cancel_hover > 0.01f)
+		{
+			dl->AddRectFilled(ImVec2(cancel_start_x, pos.y),
+				ImVec2(cancel_start_x + cancel_btn_width, pos.y + btn_height),
+				IM_COL32(255, 255, 255, (int)(40 * cancel_hover)), 4 * scale, ImDrawFlags_RoundCornersRight);
+		}
+
+		// Center "Confirm" text in its section
+		float confirm_text_x = pos.x + (confirm_btn_width - confirm_size.x) * 0.5f;
+		dl->AddText(ImVec2(confirm_text_x, pos.y + (btn_height - confirm_size.y) * 0.5f),
 			IM_COL32(255, 255, 255, 255), "Confirm");
-		dl->AddText(ImVec2(pos.x + half + 15 * scale, pos.y + (btn_height - ImGui::GetFontSize()) * 0.5f),
+
+		// Center "Cancel" text in its section
+		float cancel_text_x = cancel_start_x + (cancel_btn_width - cancel_size.x) * 0.5f;
+		dl->AddText(ImVec2(cancel_text_x, pos.y + (btn_height - cancel_size.y) * 0.5f),
 			IM_COL32(255, 255, 255, 255), "Cancel");
 
-		ImVec2 mouse = ImGui::GetMousePos();
+		// Handle clicks
+		ImGui::SetCursorScreenPos(pos);
+		ImGui::InvisibleButton("conf_area", ImVec2(animated_width, btn_height));
 		if (ImGui::IsItemClicked())
 		{
-			if (mouse.x < pos.x + half )
+			if (mouse.x < pos.x + confirm_btn_width)
 				ImGui::TextWrapped("Deleted!"); // Would perform action
 			confirming = false;
 		}
@@ -7893,296 +8021,601 @@ static void ShowUsecase_SegmentedControl()
 }
 
 // ============================================================
-// USECASE: Quantity Stepper
+// USECASE: Rotary Dial
 // ============================================================
 static void ShowUsecase_QuantityStepper()
 {
-	ImGui::TextWrapped("Quantity stepper with animated value changes.");
+	ImGui::TextWrapped("Rotary dial/knob control with smooth rotation, tick marks, and glow effect.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	static int quantity = 1;
+	static float dial_value = 0.5f;  // 0.0 to 1.0
+	static float dial_velocity = 0.0f;
+	static bool dragging = false;
+	static float last_angle = 0.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	float btn_size = 32 * scale;
-	float display_width = 50 * scale;
+	float dial_radius = 50 * scale;
+	float knob_radius = 40 * scale;
+	ImVec2 center(pos.x + dial_radius + 20 * scale, pos.y + dial_radius + 20 * scale);
 
-	// Minus button
-	ImGui::SetCursorScreenPos(pos);
-	if (ImGui::InvisibleButton("minus", ImVec2(btn_size, btn_size)) && quantity > 0)
-		quantity--;
+	// Interaction area
+	ImGui::SetCursorScreenPos(ImVec2(center.x - dial_radius, center.y - dial_radius));
+	ImGui::InvisibleButton("dial", ImVec2(dial_radius * 2, dial_radius * 2));
+	bool hovered = ImGui::IsItemHovered();
 
-	float minus_scale = iam_tween_float(ImGui::GetID("minus_s"), ImHashStr("ms"),
-		ImGui::IsItemHovered() ? 1.1f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	// Handle drag rotation
+	if (ImGui::IsItemActive())
+	{
+		ImVec2 mouse = ImGui::GetMousePos();
+		float dx = mouse.x - center.x;
+		float dy = mouse.y - center.y;
+		float current_angle = atan2f(dy, dx);
 
-	ImVec2 minus_center(pos.x + btn_size * 0.5f, pos.y + btn_size * 0.5f);
-	dl->AddCircleFilled(minus_center, btn_size * 0.45f * minus_scale, IM_COL32(70, 75, 85, 255));
-	dl->AddLine(ImVec2(minus_center.x - 8 * scale, minus_center.y), ImVec2(minus_center.x + 8 * scale, minus_center.y),
-		IM_COL32(255, 255, 255, 255), 2 * scale);
+		if (!dragging)
+		{
+			dragging = true;
+			last_angle = current_angle;
+		}
+		else
+		{
+			float delta = current_angle - last_angle;
+			// Handle wrap-around
+			if (delta > IM_PI) delta -= IM_PI * 2;
+			if (delta < -IM_PI) delta += IM_PI * 2;
 
-	// Quantity display
-	float display_qty = iam_tween_float(ImGui::GetID("qty"), ImHashStr("qt"),
-		(float)quantity, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+			dial_value += delta / (IM_PI * 1.5f);  // ~270 degree range
+			dial_value = ImClamp(dial_value, 0.0f, 1.0f);
+			dial_velocity = delta / dt * 0.1f;
+			last_angle = current_angle;
+		}
+	}
+	else
+	{
+		dragging = false;
+		// Apply momentum decay
+		if (fabsf(dial_velocity) > 0.001f)
+		{
+			dial_value += dial_velocity * dt;
+			dial_value = ImClamp(dial_value, 0.0f, 1.0f);
+			dial_velocity *= 0.92f;  // Decay
+		}
+	}
 
-	char qty_str[8];
-	snprintf(qty_str, sizeof(qty_str), "%d", (int)(display_qty + 0.5f));
-	ImVec2 qty_size = ImGui::CalcTextSize(qty_str);
-	dl->AddText(ImVec2(pos.x + btn_size + (display_width - qty_size.x) * 0.5f, pos.y + (btn_size - qty_size.y) * 0.5f),
-		IM_COL32(255, 255, 255, 255), qty_str);
+	// Animate hover glow
+	float glow = iam_tween_float(ImGui::GetID("dial_glow"), ImHashStr("dg"),
+		(hovered || dragging) ? 1.0f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
 
-	// Plus button
-	ImVec2 plus_pos(pos.x + btn_size + display_width, pos.y);
-	ImGui::SetCursorScreenPos(plus_pos);
-	if (ImGui::InvisibleButton("plus", ImVec2(btn_size, btn_size)) && quantity < 99)
-		quantity++;
+	// Outer ring with tick marks
+	dl->AddCircle(center, dial_radius, IM_COL32(60, 65, 75, 255), 0, 3 * scale);
 
-	float plus_scale = iam_tween_float(ImGui::GetID("plus_s"), ImHashStr("ps"),
-		ImGui::IsItemHovered() ? 1.1f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	// Glow effect
+	if (glow > 0.01f)
+	{
+		for (int i = 3; i >= 0; i--)
+		{
+			float gr = dial_radius + (i * 3 + 2) * scale;
+			int alpha = (int)(30 * glow * (1.0f - i / 4.0f));
+			dl->AddCircle(center, gr, IM_COL32(100, 180, 255, alpha), 0, 2 * scale);
+		}
+	}
 
-	ImVec2 plus_center(plus_pos.x + btn_size * 0.5f, plus_pos.y + btn_size * 0.5f);
-	dl->AddCircleFilled(plus_center, btn_size * 0.45f * plus_scale, IM_COL32(70, 130, 180, 255));
-	dl->AddLine(ImVec2(plus_center.x - 8 * scale, plus_center.y), ImVec2(plus_center.x + 8 * scale, plus_center.y),
-		IM_COL32(255, 255, 255, 255), 2 * scale);
-	dl->AddLine(ImVec2(plus_center.x, plus_center.y - 8 * scale), ImVec2(plus_center.x, plus_center.y + 8 * scale),
-		IM_COL32(255, 255, 255, 255), 2 * scale);
+	// Tick marks
+	float start_angle = IM_PI * 0.75f;  // 135 degrees
+	float end_angle = IM_PI * 2.25f;    // 405 degrees (270 degree range)
+	int num_ticks = 11;
+	for (int i = 0; i < num_ticks; i++)
+	{
+		float t = (float)i / (num_ticks - 1);
+		float angle = start_angle + t * (end_angle - start_angle);
+		float tick_inner = dial_radius - 8 * scale;
+		float tick_outer = dial_radius - (i % 5 == 0 ? 2 : 5) * scale;
 
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size + 10 * scale));
+		ImU32 tick_col = (t <= dial_value) ? IM_COL32(100, 180, 255, 255) : IM_COL32(80, 85, 95, 255);
+		dl->AddLine(
+			ImVec2(center.x + cosf(angle) * tick_inner, center.y + sinf(angle) * tick_inner),
+			ImVec2(center.x + cosf(angle) * tick_outer, center.y + sinf(angle) * tick_outer),
+			tick_col, (i % 5 == 0 ? 2.5f : 1.5f) * scale);
+	}
+
+	// Knob body with gradient effect
+	dl->AddCircleFilled(center, knob_radius, IM_COL32(50, 55, 65, 255));
+	dl->AddCircleFilled(center, knob_radius - 4 * scale, IM_COL32(70, 75, 85, 255));
+
+	// Knob indicator line
+	float indicator_angle = start_angle + dial_value * (end_angle - start_angle);
+	ImVec2 ind_start(center.x + cosf(indicator_angle) * 12 * scale, center.y + sinf(indicator_angle) * 12 * scale);
+	ImVec2 ind_end(center.x + cosf(indicator_angle) * (knob_radius - 8 * scale), center.y + sinf(indicator_angle) * (knob_radius - 8 * scale));
+	dl->AddLine(ind_start, ind_end, IM_COL32(100, 180, 255, 255), 4 * scale);
+
+	// Center dot
+	dl->AddCircleFilled(center, 6 * scale, IM_COL32(40, 45, 55, 255));
+
+	// Value display
+	char value_text[16];
+	snprintf(value_text, sizeof(value_text), "%.0f%%", dial_value * 100);
+	ImVec2 text_size = ImGui::CalcTextSize(value_text);
+	dl->AddText(ImVec2(center.x - text_size.x * 0.5f, center.y + dial_radius + 15 * scale),
+		IM_COL32(200, 200, 210, 255), value_text);
+
+	// Label
+	dl->AddText(ImVec2(center.x + dial_radius + 30 * scale, center.y - 10 * scale),
+		IM_COL32(150, 150, 160, 255), "Drag to rotate");
+	dl->AddText(ImVec2(center.x + dial_radius + 30 * scale, center.y + 10 * scale),
+		IM_COL32(120, 120, 130, 255), "(with momentum)");
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + dial_radius * 2 + 50 * scale));
 }
 
 // ============================================================
-// USECASE: Pin Input
+// USECASE: Password Strength Meter
 // ============================================================
-static void ShowUsecase_PinInput()
+static void ShowUsecase_StrengthMeter()
 {
-	ImGui::TextWrapped("PIN/OTP input with animated focus indicator.");
+	ImGui::TextWrapped("Animated password strength meter with segmented bar and requirements checklist.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	static char pin[5] = "";
-	static int focus_idx = 0;
+	static int strength = 0; // 0=none, 1=weak, 2=fair, 3=good, 4=strong
+	static bool req_length = false;
+	static bool req_upper = false;
+	static bool req_number = false;
+	static bool req_special = false;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	float box_size = 40 * scale;
-	float spacing = 10 * scale;
+	float bar_width = 420 * scale;   // Even wider bar for text visibility
+	float bar_height = 12 * scale;   // Taller bar
+	float segment_gap = 6 * scale;
+	int num_segments = 4;
+	float segment_width = (bar_width - (num_segments - 1) * segment_gap) / num_segments;
+
+	// Strength colors
+	ImU32 strength_colors[] = {
+		IM_COL32(60, 65, 75, 255),    // Empty
+		IM_COL32(220, 53, 69, 255),   // Weak - red
+		IM_COL32(255, 193, 7, 255),   // Fair - yellow
+		IM_COL32(23, 162, 184, 255),  // Good - cyan
+		IM_COL32(40, 167, 69, 255)    // Strong - green
+	};
+	const char* strength_labels[] = { "", "Weak", "Fair", "Good", "Strong" };
+
+	// Draw strength bar segments
+	for (int i = 0; i < num_segments; i++)
+	{
+		float seg_x = pos.x + i * (segment_width + segment_gap);
+		bool is_filled = (i < strength);
+
+		// Animate fill
+		float fill = iam_tween_float(ImGui::GetID("str_seg") + i, ImHashStr("ss") + i,
+			is_filled ? 1.0f : 0.0f, 0.25f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		// Background
+		dl->AddRectFilled(ImVec2(seg_x, pos.y), ImVec2(seg_x + segment_width, pos.y + bar_height),
+			IM_COL32(60, 65, 75, 255), 3 * scale);
+
+		// Filled overlay
+		if (fill > 0.01f)
+		{
+			ImU32 col = strength_colors[strength];
+			int alpha = (int)(255 * fill);
+			col = (col & 0x00FFFFFF) | ((ImU32)alpha << 24);
+			dl->AddRectFilled(ImVec2(seg_x, pos.y), ImVec2(seg_x + segment_width * fill, pos.y + bar_height),
+				strength_colors[strength], 3 * scale);
+		}
+	}
+
+	// Strength label with color
+	if (strength > 0)
+	{
+		float label_alpha = iam_tween_float(ImGui::GetID("str_label"), ImHashStr("sl"),
+			1.0f, 0.3f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		ImVec2 label_size = ImGui::CalcTextSize(strength_labels[strength]);
+		ImU32 label_col = strength_colors[strength];
+		int a = (int)(255 * label_alpha);
+		label_col = (label_col & 0x00FFFFFF) | ((ImU32)a << 24);
+		dl->AddText(ImVec2(pos.x + bar_width + 10 * scale, pos.y + (bar_height - label_size.y) * 0.5f),
+			label_col, strength_labels[strength]);
+	}
+
+	// Requirements checklist - calculate column width from text
+	float check_y = pos.y + bar_height + 25 * scale;
+	const char* req_labels[] = { "8+ characters", "Uppercase letter", "Number (0-9)", "Special char (!@#)" };
+	bool* reqs[] = { &req_length, &req_upper, &req_number, &req_special };
+
+	// Calculate column width from widest label in first column (indices 0 and 2)
+	float box_size = 14 * scale;
+	float label_gap = 6 * scale;
+	float col1_max = ImMax(ImGui::CalcTextSize(req_labels[0]).x, ImGui::CalcTextSize(req_labels[2]).x);
+	float column_width = box_size + label_gap + col1_max + 20 * scale;  // checkbox + gap + text + padding
 
 	for (int i = 0; i < 4; i++)
 	{
-		ImVec2 box_pos(pos.x + i * (box_size + spacing), pos.y);
+		float check_x = pos.x + (i % 2) * column_width;  // Use calculated column width
+		float y = check_y + (i / 2) * 32 * scale;       // More vertical space
 
-		// Focus animation
-		float focus_scale = iam_tween_float(ImGui::GetID("pin_f") + i, ImHashStr("pf"),
-			(i == focus_idx) ? 1.05f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+		// Animate checkmark
+		float check_fill = iam_tween_float(ImGui::GetID("req_chk") + i, ImHashStr("rc") + i,
+			*reqs[i] ? 1.0f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
 
-		ImU32 border_col = (i == focus_idx) ? IM_COL32(70, 130, 180, 255) : IM_COL32(60, 65, 75, 255);
-		float border_thick = (i == focus_idx) ? 2.5f * scale : 1.5f * scale;
+		// Checkbox background
+		ImVec2 box_pos(check_x, y);
+		dl->AddRectFilled(box_pos, ImVec2(box_pos.x + box_size, box_pos.y + box_size),
+			IM_COL32(60, 65, 75, 255), 3 * scale);
 
-		ImVec2 center(box_pos.x + box_size * 0.5f, box_pos.y + box_size * 0.5f);
-		float half = box_size * 0.5f * focus_scale;
-		dl->AddRect(ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half),
-			border_col, 4 * scale, 0, border_thick);
-
-		// Display digit or dot
-		if (i < (int)strlen(pin))
+		// Checkmark when filled
+		if (check_fill > 0.01f)
 		{
-			dl->AddCircleFilled(center, 6 * scale, IM_COL32(255, 255, 255, 255));
+			dl->AddRectFilled(box_pos, ImVec2(box_pos.x + box_size, box_pos.y + box_size),
+				IM_COL32(40, 167, 69, (int)(255 * check_fill)), 3 * scale);
+
+			// Draw checkmark
+			float cx = box_pos.x + box_size * 0.5f;
+			float cy = box_pos.y + box_size * 0.5f;
+			float s = box_size * 0.3f * check_fill;
+			dl->AddLine(ImVec2(cx - s, cy), ImVec2(cx - s * 0.3f, cy + s * 0.7f), IM_COL32(255, 255, 255, (int)(255 * check_fill)), 2 * scale);
+			dl->AddLine(ImVec2(cx - s * 0.3f, cy + s * 0.7f), ImVec2(cx + s, cy - s * 0.5f), IM_COL32(255, 255, 255, (int)(255 * check_fill)), 2 * scale);
 		}
+
+		// Label
+		dl->AddText(ImVec2(box_pos.x + box_size + 6 * scale, y + (box_size - ImGui::GetFontSize()) * 0.5f),
+			*reqs[i] ? IM_COL32(180, 255, 180, 255) : IM_COL32(150, 150, 160, 255), req_labels[i]);
 	}
 
-	// Simulated input
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + box_size + 10 * scale));
-	if (ImGui::Button("Add Digit") && focus_idx < 4)
+	// Control buttons
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, check_y + 75 * scale));
+	if (ImGui::Button("Increase Strength"))
 	{
-		pin[focus_idx] = '0' + (focus_idx % 10);
-		pin[focus_idx + 1] = '\0';
-		focus_idx++;
+		if (strength < 4) strength++;
+		// Update requirements based on strength
+		req_length = strength >= 1;
+		req_upper = strength >= 2;
+		req_number = strength >= 3;
+		req_special = strength >= 4;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Clear"))
+	if (ImGui::Button("Reset"))
 	{
-		pin[0] = '\0';
-		focus_idx = 0;
+		strength = 0;
+		req_length = req_upper = req_number = req_special = false;
 	}
 }
 
 // ============================================================
-// USECASE: Range Slider
+// USECASE: Analog Joystick Control
 // ============================================================
 static void ShowUsecase_RangeSlider()
 {
-	ImGui::TextWrapped("Dual-handle range slider with animated handles.");
+	ImGui::TextWrapped("Analog joystick with spring-back animation, deadzone visualization, and directional feedback.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	static float min_val = 20.0f;
-	static float max_val = 80.0f;
-	static int dragging = 0; // 0=none, 1=min, 2=max
+	static float stick_x = 0.0f;  // -1 to 1
+	static float stick_y = 0.0f;  // -1 to 1
+	static float target_x = 0.0f;
+	static float target_y = 0.0f;
+	static bool dragging = false;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	float track_width = 250 * scale;
-	float track_height = 6 * scale;
-	float handle_radius = 10 * scale;
+	float base_radius = 70 * scale;
+	float stick_radius = 25 * scale;
+	float deadzone = 0.15f;
+	ImVec2 center(pos.x + base_radius + 20 * scale, pos.y + base_radius + 15 * scale);
 
-	// Track background
-	dl->AddRectFilled(pos, ImVec2(pos.x + track_width, pos.y + track_height),
-		IM_COL32(50, 55, 65, 255), track_height * 0.5f);
+	// Animate stick position with spring effect
+	stick_x = iam_tween_float(ImGui::GetID("joy_x"), ImHashStr("jx"),
+		target_x, dragging ? 0.05f : 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	stick_y = iam_tween_float(ImGui::GetID("joy_y"), ImHashStr("jy"),
+		target_y, dragging ? 0.05f : 0.25f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
 
-	// Active range
-	float min_x = pos.x + track_width * (min_val / 100.0f);
-	float max_x = pos.x + track_width * (max_val / 100.0f);
-	dl->AddRectFilled(ImVec2(min_x, pos.y), ImVec2(max_x, pos.y + track_height),
-		IM_COL32(70, 130, 180, 255), track_height * 0.5f);
+	// Draw base shadow
+	dl->AddCircleFilled(ImVec2(center.x + 3 * scale, center.y + 3 * scale), base_radius, IM_COL32(0, 0, 0, 60));
 
-	// Handle positions
-	ImVec2 min_handle(min_x, pos.y + track_height * 0.5f);
-	ImVec2 max_handle(max_x, pos.y + track_height * 0.5f);
-
-	// Handle interaction
-	ImGui::SetCursorScreenPos(ImVec2(min_x - handle_radius, pos.y - handle_radius + track_height * 0.5f));
-	ImGui::InvisibleButton("min_h", ImVec2(handle_radius * 2, handle_radius * 2));
-	bool min_hover = ImGui::IsItemHovered();
-	if (ImGui::IsItemActive())
+	// Draw base with gradient rings
+	for (int i = 4; i >= 0; i--)
 	{
-		min_val = ImClamp((ImGui::GetMousePos().x - pos.x) / track_width * 100.0f, 0.0f, max_val - 5.0f);
+		float r = base_radius - i * 3 * scale;
+		int gray = 40 + i * 8;
+		dl->AddCircleFilled(center, r, IM_COL32(gray, gray, gray, 255));
 	}
 
-	ImGui::SetCursorScreenPos(ImVec2(max_x - handle_radius, pos.y - handle_radius + track_height * 0.5f));
-	ImGui::InvisibleButton("max_h", ImVec2(handle_radius * 2, handle_radius * 2));
-	bool max_hover = ImGui::IsItemHovered();
-	if (ImGui::IsItemActive())
+	// Draw deadzone circle
+	float dz_radius = base_radius * deadzone;
+	dl->AddCircle(center, dz_radius, IM_COL32(100, 100, 100, 100), 0, 1.5f * scale);
+
+	// Draw direction indicators
+	const char* dirs[] = { "N", "E", "S", "W" };
+	float angles[] = { -IM_PI * 0.5f, 0.0f, IM_PI * 0.5f, IM_PI };
+	for (int i = 0; i < 4; i++)
 	{
-		max_val = ImClamp((ImGui::GetMousePos().x - pos.x) / track_width * 100.0f, min_val + 5.0f, 100.0f);
+		float dist = base_radius * 0.75f;
+		ImVec2 dir_pos(center.x + cosf(angles[i]) * dist, center.y + sinf(angles[i]) * dist);
+
+		// Check if stick is pointing this direction
+		float stick_angle = atan2f(stick_y, stick_x);
+		float stick_mag = sqrtf(stick_x * stick_x + stick_y * stick_y);
+		float angle_diff = fabsf(stick_angle - angles[i]);
+		if (angle_diff > IM_PI) angle_diff = IM_PI * 2.0f - angle_diff;
+
+		bool active = stick_mag > deadzone && angle_diff < IM_PI * 0.35f;
+
+		float brightness = iam_tween_float(ImGui::GetID(dirs[i]), ImHashStr("db"),
+			active ? 1.0f : 0.3f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+		ImU32 dir_col = IM_COL32((int)(100 + 155 * brightness), (int)(100 + 155 * brightness), (int)(100 + 155 * brightness), 255);
+		ImVec2 text_size = ImGui::CalcTextSize(dirs[i]);
+		dl->AddText(ImVec2(dir_pos.x - text_size.x * 0.5f, dir_pos.y - text_size.y * 0.5f), dir_col, dirs[i]);
 	}
 
-	// Animated handles
-	float min_scale = iam_tween_float(ImGui::GetID("min_sc"), ImHashStr("mns"),
-		min_hover ? 1.2f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
-	float max_scale = iam_tween_float(ImGui::GetID("max_sc"), ImHashStr("mxs"),
-		max_hover ? 1.2f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+	// Calculate stick visual position
+	float stick_visual_x = stick_x * (base_radius - stick_radius);
+	float stick_visual_y = stick_y * (base_radius - stick_radius);
+	ImVec2 stick_center(center.x + stick_visual_x, center.y + stick_visual_y);
 
-	dl->AddCircleFilled(min_handle, handle_radius * min_scale, IM_COL32(255, 255, 255, 255));
-	dl->AddCircleFilled(max_handle, handle_radius * max_scale, IM_COL32(255, 255, 255, 255));
+	// Draw stick shadow
+	dl->AddCircleFilled(ImVec2(stick_center.x + 2 * scale, stick_center.y + 2 * scale), stick_radius, IM_COL32(0, 0, 0, 80));
 
-	// Labels
-	char label[32];
-	snprintf(label, sizeof(label), "%.0f - %.0f", min_val, max_val);
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + track_height + handle_radius + 5 * scale));
-	ImGui::Text("%s", label);
+	// Draw stick with hover/active glow
+	bool hovered = false;
+	float dist_to_stick = sqrtf(powf(ImGui::GetMousePos().x - stick_center.x, 2) + powf(ImGui::GetMousePos().y - stick_center.y, 2));
+	if (dist_to_stick < stick_radius * 1.5f) hovered = true;
+
+	float glow = iam_tween_float(ImGui::GetID("stick_glow"), ImHashStr("sg"),
+		(hovered || dragging) ? 1.0f : 0.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+
+	// Glow effect
+	if (glow > 0.01f)
+	{
+		for (int i = 3; i >= 0; i--)
+		{
+			float gr = stick_radius + (i * 3 + 2) * scale;
+			int alpha = (int)(50 * glow * (1.0f - i / 4.0f));
+			dl->AddCircleFilled(stick_center, gr, IM_COL32(100, 150, 255, alpha));
+		}
+	}
+
+	// Draw stick
+	for (int i = 3; i >= 0; i--)
+	{
+		float r = stick_radius - i * 2 * scale;
+		int gray = 80 + i * 25 + (int)(glow * 30);
+		dl->AddCircleFilled(stick_center, r, IM_COL32(gray, gray, (int)(gray + glow * 50), 255));
+	}
+
+	// Stick highlight
+	dl->AddCircleFilled(ImVec2(stick_center.x - 5 * scale, stick_center.y - 5 * scale), 8 * scale, IM_COL32(255, 255, 255, 40));
+
+	// Interaction
+	ImGui::SetCursorScreenPos(ImVec2(center.x - base_radius, center.y - base_radius));
+	ImGui::InvisibleButton("joystick_area", ImVec2(base_radius * 2, base_radius * 2));
+
+	if (ImGui::IsItemActive())
+	{
+		dragging = true;
+		ImVec2 mouse = ImGui::GetMousePos();
+		float dx = (mouse.x - center.x) / (base_radius - stick_radius);
+		float dy = (mouse.y - center.y) / (base_radius - stick_radius);
+
+		// Clamp to unit circle
+		float mag = sqrtf(dx * dx + dy * dy);
+		if (mag > 1.0f)
+		{
+			dx /= mag;
+			dy /= mag;
+		}
+		target_x = dx;
+		target_y = dy;
+	}
+	else
+	{
+		if (dragging)
+		{
+			// Released - spring back to center
+			target_x = 0.0f;
+			target_y = 0.0f;
+		}
+		dragging = false;
+	}
+
+	// Display values
+	float output_x = fabsf(stick_x) > deadzone ? stick_x : 0.0f;
+	float output_y = fabsf(stick_y) > deadzone ? stick_y : 0.0f;
+
+	float text_y = pos.y + base_radius * 2 + 35 * scale;
+	char buf[64];
+	snprintf(buf, sizeof(buf), "X: %+.2f  Y: %+.2f", output_x, output_y);
+	ImVec2 text_size = ImGui::CalcTextSize(buf);
+	dl->AddText(ImVec2(center.x - text_size.x * 0.5f, text_y), IM_COL32(200, 200, 200, 255), buf);
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, text_y + 25 * scale));
 }
 
 // ============================================================
-// USECASE: Search Input
+// USECASE: Animated Reaction Buttons
 // ============================================================
 static void ShowUsecase_SearchInput()
 {
-	ImGui::TextWrapped("Tag input with animated chip add/remove and color coding.");
+	ImGui::TextWrapped("Social media reaction buttons with pop animations, particle effects, and hold-to-change.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	struct Tag {
-		const char* text;
-		bool active;
-		float anim;
+	// Reaction data
+	const char* reaction_chars[] = { "L", "H", "W", "S", "A" };  // Like, Heart, Wow, Sad, Angry
+	const char* reaction_names[] = { "Like", "Love", "Wow", "Sad", "Angry" };
+	ImU32 reaction_colors[] = {
+		IM_COL32(66, 133, 244, 255),   // Like - blue
+		IM_COL32(237, 69, 104, 255),   // Love - red/pink
+		IM_COL32(247, 177, 37, 255),   // Wow - yellow
+		IM_COL32(247, 177, 37, 255),   // Sad - yellow
+		IM_COL32(233, 113, 15, 255)    // Angry - orange
 	};
-	static Tag tags[5] = {
-		{"React", true, 1.0f},
-		{"TypeScript", true, 1.0f},
-		{"Node.js", false, 0.0f},
-		{"Python", false, 0.0f},
-		{"Rust", false, 0.0f}
-	};
-	ImU32 tag_colors[] = {
-		IM_COL32(97, 218, 251, 255),  // React cyan
-		IM_COL32(49, 120, 198, 255),  // TypeScript blue
-		IM_COL32(104, 160, 99, 255),  // Node green
-		IM_COL32(255, 212, 59, 255),  // Python yellow
-		IM_COL32(222, 165, 132, 255)  // Rust orange
-	};
+
+	static int selected_reaction = -1;
+	static bool picker_open = false;
+	static float picker_time = 0.0f;
+	static float reaction_scales[5] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	static float particle_times[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 container_size(300 * scale, 90 * scale);
+	float btn_size = 40 * scale;
+	float picker_btn_size = 32 * scale;
 
-	// Container
-	dl->AddRectFilled(pos, ImVec2(pos.x + container_size.x, pos.y + container_size.y),
-		IM_COL32(30, 35, 45, 255), 8 * scale);
+	// Main reaction button
+	ImVec2 main_btn_pos = pos;
+	ImGui::SetCursorScreenPos(main_btn_pos);
+	ImGui::InvisibleButton("main_reaction", ImVec2(btn_size, btn_size));
+	bool main_hovered = ImGui::IsItemHovered();
 
-	// Title
-	dl->AddText(ImVec2(pos.x + 10 * scale, pos.y + 8 * scale), IM_COL32(150, 150, 160, 255), "Skills:");
-
-	// Draw tags
-	float tag_x = pos.x + 10 * scale;
-	float tag_y = pos.y + 30 * scale;
-	float tag_height = 24 * scale;
-	float row_spacing = 30 * scale;
-
-	for (int i = 0; i < 5; i++)
+	// Open picker on hover (hold)
+	if (main_hovered)
 	{
-		// Animate tag scale
-		float target = tags[i].active ? 1.0f : 0.0f;
-		tags[i].anim = iam_tween_float(ImGui::GetID("tag_a") + i, ImHashStr("ta") + i,
-			target, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+		picker_time += dt;
+		if (picker_time > 0.4f) picker_open = true;
+	}
+	else if (!picker_open)
+	{
+		picker_time = 0.0f;
+	}
 
-		ImVec2 text_size = ImGui::CalcTextSize(tags[i].text);
-		float tag_width = (text_size.x + 30 * scale) * tags[i].anim;
+	// Main button animation
+	float main_scale = iam_tween_float(ImGui::GetID("main_scale"), ImHashStr("ms"),
+		main_hovered ? 1.15f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
 
-		// Wrap to next row if needed
-		if (tag_x + tag_width > pos.x + container_size.x - 10 * scale && tag_x > pos.x + 15 * scale)
+	// Draw main button
+	ImVec2 main_center(main_btn_pos.x + btn_size * 0.5f, main_btn_pos.y + btn_size * 0.5f);
+	float main_r = btn_size * 0.4f * main_scale;
+
+	ImU32 main_col = (selected_reaction >= 0) ? reaction_colors[selected_reaction] : IM_COL32(120, 130, 140, 255);
+	dl->AddCircleFilled(main_center, main_r, main_col);
+
+	// Draw reaction icon on main button
+	const char* main_icon = (selected_reaction >= 0) ? reaction_chars[selected_reaction] : "+";
+	ImVec2 icon_size = ImGui::CalcTextSize(main_icon);
+	dl->AddText(ImVec2(main_center.x - icon_size.x * 0.5f, main_center.y - icon_size.y * 0.5f),
+		IM_COL32(255, 255, 255, 255), main_icon);
+
+	// Picker panel animation
+	float picker_anim = iam_tween_float(ImGui::GetID("picker_anim"), ImHashStr("pa"),
+		picker_open ? 1.0f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+	if (picker_anim > 0.01f)
+	{
+		// Picker background
+		float picker_width = (5 * picker_btn_size + 6 * 8 * scale) * picker_anim;
+		float picker_height = (picker_btn_size + 16 * scale) * picker_anim;
+		ImVec2 picker_pos(main_btn_pos.x, main_btn_pos.y - picker_height - 10 * scale);
+
+		dl->AddRectFilled(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
+			IM_COL32(40, 45, 55, (int)(240 * picker_anim)), 20 * scale * picker_anim);
+		dl->AddRect(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
+			IM_COL32(80, 85, 95, (int)(200 * picker_anim)), 20 * scale * picker_anim, 0, 1.5f * scale);
+
+		// Draw reaction options
+		for (int i = 0; i < 5; i++)
 		{
-			tag_x = pos.x + 10 * scale;
-			tag_y += row_spacing;
+			float rx = picker_pos.x + 8 * scale + i * (picker_btn_size + 8 * scale);
+			float ry = picker_pos.y + 8 * scale;
+
+			ImGui::SetCursorScreenPos(ImVec2(rx, ry));
+			ImGui::PushID(i + 100);
+			ImGui::InvisibleButton("reaction", ImVec2(picker_btn_size, picker_btn_size));
+			bool r_hovered = ImGui::IsItemHovered();
+			bool r_clicked = ImGui::IsItemClicked();
+			ImGui::PopID();
+
+			// Individual reaction animation
+			float r_scale = iam_tween_float(ImGui::GetID("r_scale") + i, ImHashStr("rs") + i,
+				r_hovered ? 1.4f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_back), iam_policy_crossfade, dt);
+
+			// Floating animation when hovered
+			float float_y = 0.0f;
+			if (r_hovered)
+			{
+				float_y = iam_oscillate(ImGui::GetID("r_float") + i, 3.0f * scale, 3.0f, 0, 0.0f, dt);
+			}
+
+			ImVec2 r_center(rx + picker_btn_size * 0.5f, ry + picker_btn_size * 0.5f + float_y);
+			float r_r = picker_btn_size * 0.4f * r_scale * picker_anim;
+
+			dl->AddCircleFilled(r_center, r_r, reaction_colors[i]);
+			ImVec2 r_icon_size = ImGui::CalcTextSize(reaction_chars[i]);
+			dl->AddText(ImVec2(r_center.x - r_icon_size.x * 0.5f, r_center.y - r_icon_size.y * 0.5f),
+				IM_COL32(255, 255, 255, (int)(255 * picker_anim)), reaction_chars[i]);
+
+			// Label on hover
+			if (r_hovered && picker_anim > 0.9f)
+			{
+				ImVec2 label_size = ImGui::CalcTextSize(reaction_names[i]);
+				float label_x = r_center.x - label_size.x * 0.5f;
+				float label_y = r_center.y - r_r - 18 * scale;
+				dl->AddRectFilled(ImVec2(label_x - 4 * scale, label_y - 2 * scale),
+					ImVec2(label_x + label_size.x + 4 * scale, label_y + label_size.y + 2 * scale),
+					IM_COL32(30, 35, 45, 220), 4 * scale);
+				dl->AddText(ImVec2(label_x, label_y), IM_COL32(255, 255, 255, 255), reaction_names[i]);
+			}
+
+			if (r_clicked)
+			{
+				selected_reaction = i;
+				picker_open = false;
+				particle_times[i] = 1.0f;  // Trigger particles
+			}
 		}
 
-		if (tags[i].anim > 0.05f)
+		// Close picker when mouse leaves entire area
+		ImVec2 full_area_min(main_btn_pos.x - 10 * scale, picker_pos.y - 10 * scale);
+		ImVec2 full_area_max(main_btn_pos.x + picker_width + 10 * scale, main_btn_pos.y + btn_size + 10 * scale);
+		ImVec2 mouse = ImGui::GetMousePos();
+		if (mouse.x < full_area_min.x || mouse.x > full_area_max.x ||
+			mouse.y < full_area_min.y || mouse.y > full_area_max.y)
 		{
-			// Tag background
-			ImVec2 tag_pos(tag_x, tag_y);
-			float visible_width = tag_width;
-			float visible_height = tag_height * tags[i].anim;
-
-			ImU32 bg_col = tag_colors[i];
-			// Darken the background
-			bg_col = IM_COL32(
-				(int)(((bg_col >> 0) & 0xFF) * 0.3f),
-				(int)(((bg_col >> 8) & 0xFF) * 0.3f),
-				(int)(((bg_col >> 16) & 0xFF) * 0.3f), 255);
-			dl->AddRectFilled(tag_pos, ImVec2(tag_pos.x + visible_width, tag_pos.y + visible_height),
-				bg_col, visible_height * 0.5f);
-
-			// Tag border
-			dl->AddRect(tag_pos, ImVec2(tag_pos.x + visible_width, tag_pos.y + visible_height),
-				tag_colors[i], visible_height * 0.5f, 0, 1.5f * scale);
-
-			// Tag text (centered)
-			float alpha = tags[i].anim;
-			ImVec2 text_pos(tag_pos.x + 8 * scale, tag_pos.y + (visible_height - text_size.y) * 0.5f);
-			dl->AddText(text_pos, IM_COL32(255, 255, 255, (int)(255 * alpha)), tags[i].text);
-
-			// X button
-			ImVec2 x_pos(tag_pos.x + visible_width - 16 * scale, tag_pos.y + visible_height * 0.5f - 5 * scale);
-			dl->AddText(x_pos, IM_COL32(200, 200, 210, (int)(200 * alpha)), "x");
-
-			tag_x += visible_width + 6 * scale;
+			picker_open = false;
+			picker_time = 0.0f;
 		}
 	}
 
-	// Toggle buttons
-	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 5 * scale));
-	for (int i = 0; i < 5; i++)
+	// Particle effects for selected reaction
+	if (selected_reaction >= 0 && particle_times[selected_reaction] > 0.0f)
 	{
-		ImGui::PushID(i);
-		if (ImGui::SmallButton(tags[i].active ? "-" : "+"))
-			tags[i].active = !tags[i].active;
-		ImGui::PopID();
-		ImGui::SameLine();
+		particle_times[selected_reaction] -= dt * 2.0f;
+		float p = particle_times[selected_reaction];
+		if (p > 0.0f)
+		{
+			for (int j = 0; j < 8; j++)
+			{
+				float angle = j * (IM_PI * 2.0f / 8.0f);
+				float dist = (1.0f - p) * 30 * scale;
+				ImVec2 particle_pos(main_center.x + cosf(angle) * dist, main_center.y + sinf(angle) * dist);
+				dl->AddCircleFilled(particle_pos, 3 * scale * p, reaction_colors[selected_reaction]);
+			}
+		}
 	}
-	ImGui::NewLine();
+
+	// Label showing selected reaction
+	if (selected_reaction >= 0)
+	{
+		dl->AddText(ImVec2(main_btn_pos.x + btn_size + 10 * scale, main_btn_pos.y + (btn_size - ImGui::GetFontSize()) * 0.5f),
+			reaction_colors[selected_reaction], reaction_names[selected_reaction]);
+	}
+
+	// Reset button
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + 150 * scale, pos.y + (btn_size - 20 * scale) * 0.5f));
+	if (ImGui::SmallButton("Reset"))
+	{
+		selected_reaction = -1;
+		picker_open = false;
+		picker_time = 0.0f;
+	}
+
+	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + btn_size + 10 * scale));
 }
 
 // ============================================================
@@ -8280,11 +8713,11 @@ static void ShowUsecase_NotificationCard()
 }
 
 // ============================================================
-// USECASE: Product Card
+// USECASE: Music Player
 // ============================================================
 static void ShowUsecase_ProductCard()
 {
-	ImGui::TextWrapped("Music player card with animated progress, waveform, and controls.");
+	ImGui::TextWrapped("Music player with animated progress, waveform visualization, and playback controls.");
 
 	float dt = GetUsecaseDeltaTime();
 	float scale = ImGui::GetIO().FontGlobalScale;
@@ -8302,17 +8735,17 @@ static void ShowUsecase_ProductCard()
 	}
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 card_size(280 * scale, 120 * scale);
+	ImVec2 card_size(840 * scale, 360 * scale);  // 300% larger
 
 	// Card background with gradient effect
 	dl->AddRectFilled(pos, ImVec2(pos.x + card_size.x, pos.y + card_size.y),
-		IM_COL32(35, 40, 50, 255), 12 * scale);
+		IM_COL32(35, 40, 50, 255), 36 * scale);
 
 	// Album art placeholder
-	float art_size = 80 * scale;
-	ImVec2 art_pos(pos.x + 15 * scale, pos.y + 20 * scale);
+	float art_size = 240 * scale;
+	ImVec2 art_pos(pos.x + 45 * scale, pos.y + 60 * scale);
 	dl->AddRectFilled(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
-		IM_COL32(100, 80, 140, 255), 8 * scale);
+		IM_COL32(100, 80, 140, 255), 24 * scale);
 
 	// Album art pulse when playing
 	if (playing)
@@ -8320,84 +8753,84 @@ static void ShowUsecase_ProductCard()
 		float pulse = iam_oscillate(ImGui::GetID("pulse"), 1.0f, 1.0f, 0, 0.0f, dt);
 		pulse = pulse * 0.5f + 0.5f;  // Convert -1..1 to 0..1
 		dl->AddRect(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
-			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 8 * scale, 0, 2 * scale);
+			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 24 * scale, 0, 6 * scale);
 	}
 
 	// Song info
-	float info_x = art_pos.x + art_size + 15 * scale;
-	dl->AddText(ImVec2(info_x, pos.y + 20 * scale), IM_COL32(255, 255, 255, 255), "Track Title");
-	dl->AddText(ImVec2(info_x, pos.y + 40 * scale), IM_COL32(150, 150, 160, 255), "Artist Name");
+	float info_x = art_pos.x + art_size + 45 * scale;
+	dl->AddText(ImVec2(info_x, pos.y + 60 * scale), IM_COL32(255, 255, 255, 255), "Track Title");
+	dl->AddText(ImVec2(info_x, pos.y + 120 * scale), IM_COL32(150, 150, 160, 255), "Artist Name");
 
 	// Animated waveform when playing
-	float wave_y = pos.y + 60 * scale;
-	float wave_width = card_size.x - info_x + pos.x - 20 * scale;
-	for (int i = 0; i < 20; i++)
+	float wave_y = pos.y + 180 * scale;
+	float wave_width = card_size.x - info_x + pos.x - 60 * scale;
+	for (int i = 0; i < 40; i++)
 	{
-		float bar_x = info_x + i * (wave_width / 20);
+		float bar_x = info_x + i * (wave_width / 40);
 		float height_factor = playing ?
 			(sinf(wave_offset + i * 0.5f) * 0.5f + 0.5f) * 0.8f + 0.2f : 0.3f;
-		float bar_height = 15 * scale * height_factor;
+		float bar_height = 45 * scale * height_factor;
 		dl->AddRectFilled(
-			ImVec2(bar_x, wave_y + (15 * scale - bar_height) * 0.5f),
-			ImVec2(bar_x + 4 * scale, wave_y + (15 * scale + bar_height) * 0.5f),
-			IM_COL32(150, 120, 200, playing ? 255 : 100), 2 * scale);
+			ImVec2(bar_x, wave_y + (45 * scale - bar_height) * 0.5f),
+			ImVec2(bar_x + 8 * scale, wave_y + (45 * scale + bar_height) * 0.5f),
+			IM_COL32(150, 120, 200, playing ? 255 : 100), 4 * scale);
 	}
 
 	// Progress bar
-	float prog_y = pos.y + 85 * scale;
-	float prog_width = card_size.x - 30 * scale;
-	dl->AddRectFilled(ImVec2(pos.x + 15 * scale, prog_y),
-		ImVec2(pos.x + 15 * scale + prog_width, prog_y + 4 * scale),
-		IM_COL32(60, 65, 75, 255), 2 * scale);
+	float prog_y = pos.y + 255 * scale;
+	float prog_width = card_size.x - 90 * scale;
+	dl->AddRectFilled(ImVec2(pos.x + 45 * scale, prog_y),
+		ImVec2(pos.x + 45 * scale + prog_width, prog_y + 12 * scale),
+		IM_COL32(60, 65, 75, 255), 6 * scale);
 
 	// Animated progress fill
 	float animated_progress = iam_tween_float(ImGui::GetID("prog"), ImHashStr("pg"),
 		progress, 0.1f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
-	dl->AddRectFilled(ImVec2(pos.x + 15 * scale, prog_y),
-		ImVec2(pos.x + 15 * scale + prog_width * animated_progress, prog_y + 4 * scale),
-		IM_COL32(150, 120, 200, 255), 2 * scale);
+	dl->AddRectFilled(ImVec2(pos.x + 45 * scale, prog_y),
+		ImVec2(pos.x + 45 * scale + prog_width * animated_progress, prog_y + 12 * scale),
+		IM_COL32(150, 120, 200, 255), 6 * scale);
 
 	// Progress knob
-	float knob_x = pos.x + 15 * scale + prog_width * animated_progress;
-	dl->AddCircleFilled(ImVec2(knob_x, prog_y + 2 * scale), 6 * scale, IM_COL32(255, 255, 255, 255));
+	float knob_x = pos.x + 45 * scale + prog_width * animated_progress;
+	dl->AddCircleFilled(ImVec2(knob_x, prog_y + 6 * scale), 18 * scale, IM_COL32(255, 255, 255, 255));
 
-	// Time labels
+	// Time labels - aligned with waveform width
 	char time_cur[8], time_total[8];
 	int cur_sec = (int)(progress * 180);
 	snprintf(time_cur, sizeof(time_cur), "%d:%02d", cur_sec / 60, cur_sec % 60);
 	snprintf(time_total, sizeof(time_total), "3:00");
-	dl->AddText(ImVec2(pos.x + 15 * scale, prog_y + 8 * scale), IM_COL32(120, 120, 130, 255), time_cur);
+	dl->AddText(ImVec2(info_x, prog_y + 24 * scale), IM_COL32(120, 120, 130, 255), time_cur);
 	ImVec2 total_size = ImGui::CalcTextSize(time_total);
-	dl->AddText(ImVec2(pos.x + card_size.x - 15 * scale - total_size.x, prog_y + 8 * scale),
+	dl->AddText(ImVec2(info_x + wave_width - total_size.x, prog_y + 24 * scale),
 		IM_COL32(120, 120, 130, 255), time_total);
 
 	// Play button
-	ImGui::SetCursorScreenPos(ImVec2(pos.x + card_size.x - 45 * scale, pos.y + 15 * scale));
-	if (ImGui::InvisibleButton("play_btn", ImVec2(30 * scale, 30 * scale)))
+	ImGui::SetCursorScreenPos(ImVec2(pos.x + card_size.x - 135 * scale, pos.y + 45 * scale));
+	if (ImGui::InvisibleButton("play_btn", ImVec2(90 * scale, 90 * scale)))
 		playing = !playing;
 
 	// Animate play button
 	float btn_scale = iam_tween_float(ImGui::GetID("btn_s"), ImHashStr("bs"),
 		ImGui::IsItemHovered() ? 1.15f : 1.0f, 0.15f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
 
-	ImVec2 btn_center(pos.x + card_size.x - 30 * scale, pos.y + 30 * scale);
-	float btn_r = 12 * scale * btn_scale;
+	ImVec2 btn_center(pos.x + card_size.x - 90 * scale, pos.y + 90 * scale);
+	float btn_r = 36 * scale * btn_scale;
 	dl->AddCircleFilled(btn_center, btn_r, IM_COL32(150, 120, 200, 255));
 
 	if (playing)
 	{
 		// Pause icon
-		dl->AddRectFilled(ImVec2(btn_center.x - 4 * scale, btn_center.y - 5 * scale),
-			ImVec2(btn_center.x - 1 * scale, btn_center.y + 5 * scale), IM_COL32(255, 255, 255, 255));
-		dl->AddRectFilled(ImVec2(btn_center.x + 1 * scale, btn_center.y - 5 * scale),
-			ImVec2(btn_center.x + 4 * scale, btn_center.y + 5 * scale), IM_COL32(255, 255, 255, 255));
+		dl->AddRectFilled(ImVec2(btn_center.x - 12 * scale, btn_center.y - 15 * scale),
+			ImVec2(btn_center.x - 3 * scale, btn_center.y + 15 * scale), IM_COL32(255, 255, 255, 255));
+		dl->AddRectFilled(ImVec2(btn_center.x + 3 * scale, btn_center.y - 15 * scale),
+			ImVec2(btn_center.x + 12 * scale, btn_center.y + 15 * scale), IM_COL32(255, 255, 255, 255));
 	}
 	else
 	{
 		// Play icon (triangle)
-		ImVec2 p1(btn_center.x - 3 * scale, btn_center.y - 6 * scale);
-		ImVec2 p2(btn_center.x - 3 * scale, btn_center.y + 6 * scale);
-		ImVec2 p3(btn_center.x + 6 * scale, btn_center.y);
+		ImVec2 p1(btn_center.x - 9 * scale, btn_center.y - 18 * scale);
+		ImVec2 p2(btn_center.x - 9 * scale, btn_center.y + 18 * scale);
+		ImVec2 p3(btn_center.x + 18 * scale, btn_center.y);
 		dl->AddTriangleFilled(p1, p2, p3, IM_COL32(255, 255, 255, 255));
 	}
 
@@ -9255,7 +9688,7 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Popover Menu", ShowUsecase_PopoverMenu)
 		USECASE_ITEM("Alert Banner", ShowUsecase_AlertBanner)
 		USECASE_ITEM("Bottom Sheet", ShowUsecase_BottomSheet)
-		USECASE_ITEM("Snackbar", ShowUsecase_Snackbar)
+		USECASE_ITEM("Consent Banner", ShowUsecase_Snackbar)
 		USECASE_ITEM("Lightbox", ShowUsecase_Lightbox)
 		USECASE_ITEM("Command Palette", ShowUsecase_CommandPalette)
 		USECASE_ITEM("Inline Confirmation", ShowUsecase_InlineConfirmation)
@@ -9295,10 +9728,10 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Rating Stars", ShowUsecase_RatingStars)
 		USECASE_ITEM("Color Swatches", ShowUsecase_ColorSwatches)
 		USECASE_ITEM("Segmented Control", ShowUsecase_SegmentedControl)
-		USECASE_ITEM("Quantity Stepper", ShowUsecase_QuantityStepper)
-		USECASE_ITEM("Pin Input", ShowUsecase_PinInput)
-		USECASE_ITEM("Range Slider", ShowUsecase_RangeSlider)
-		USECASE_ITEM("Search Input", ShowUsecase_SearchInput)
+		USECASE_ITEM("Rotary Dial", ShowUsecase_QuantityStepper)
+		USECASE_ITEM("Strength Meter", ShowUsecase_StrengthMeter)
+		USECASE_ITEM("Joystick", ShowUsecase_RangeSlider)
+		USECASE_ITEM("Reaction Picker", ShowUsecase_SearchInput)
 		ImGui::Unindent();
 	}
 
@@ -9317,7 +9750,7 @@ void ImAnimUsecaseWindow()
 		USECASE_ITEM("Image Gallery Grid", ShowUsecase_ImageGalleryGrid)
 		USECASE_ITEM("Stacked Cards", ShowUsecase_StackedCards)
 		USECASE_ITEM("Notification Card", ShowUsecase_NotificationCard)
-		USECASE_ITEM("Product Card", ShowUsecase_ProductCard)
+		USECASE_ITEM("Music Player", ShowUsecase_ProductCard)
 		USECASE_ITEM("Timeline Card", ShowUsecase_TimelineCard)
 		ImGui::Unindent();
 	}
