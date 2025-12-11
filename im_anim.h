@@ -1,6 +1,7 @@
 // im_anim.h — Dear ImGui animation helpers.
 // Author: Soufiane KHIAT
 // License: MIT
+// Version: 1.0.0
 //
 // - Channels: float, vec2, vec4, int, color (sRGB/Linear/HSV/OKLAB/OKLCH blending).
 // - Easing: presets + cubicBezier/steps/back/elastic/bounce/spring.
@@ -8,6 +9,13 @@
 // - Resize helpers: relative targets, resolver callback, explicit rebase.
 
 #pragma once
+
+// Version information
+#define IMANIM_VERSION          "1.0.0"
+#define IMANIM_VERSION_NUM      10000   // 1.00.00
+#define IMANIM_VERSION_MAJOR    1
+#define IMANIM_VERSION_MINOR    0
+#define IMANIM_VERSION_PATCH    0
 #include "imgui.h"
 #include <stdint.h>
 #include <math.h>

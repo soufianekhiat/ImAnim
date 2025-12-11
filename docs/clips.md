@@ -150,6 +150,61 @@ if (inst_b.is_playing()) {
 }
 ```
 
+## Timeline Grouping
+
+Organize keyframes into sequential and parallel blocks.
+
+### Sequential Blocks
+
+Keyframes after `seq_end()` start after the sequential block completes:
+
+```cpp
+iam_clip::begin(ImHashStr("sequence"))
+    .seq_begin()
+        .key_float(CH_X, 0.0f, 0.0f, iam_ease_out_cubic)
+        .key_float(CH_X, 1.0f, 100.0f, iam_ease_out_cubic)  // X moves first
+    .seq_end()
+    .key_float(CH_Y, 0.0f, 0.0f, iam_ease_out_cubic)        // Y starts after X finishes
+    .key_float(CH_Y, 1.0f, 100.0f, iam_ease_out_cubic)
+    .end();
+```
+
+### Parallel Blocks
+
+Keyframes in `par_begin/end` play at the same time offset:
+
+```cpp
+iam_clip::begin(ImHashStr("parallel"))
+    .par_begin()
+        .key_float(CH_X, 0.0f, 0.0f, iam_ease_out_cubic)
+        .key_float(CH_X, 0.5f, 100.0f, iam_ease_out_cubic)
+        .key_float(CH_Y, 0.0f, 0.0f, iam_ease_out_cubic)
+        .key_float(CH_Y, 0.5f, 100.0f, iam_ease_out_cubic)
+    .par_end()  // X and Y animate together
+    .key_float(CH_ALPHA, 0.0f, 0.0f, iam_ease_linear)
+    .key_float(CH_ALPHA, 0.3f, 1.0f, iam_ease_linear)       // Alpha starts after par block
+    .end();
+```
+
+### Nested Blocks
+
+```cpp
+iam_clip::begin(ImHashStr("complex"))
+    .seq_begin()
+        .par_begin()
+            .key_float(CH_X, 0.0f, 0.0f)
+            .key_float(CH_X, 0.3f, 50.0f)
+            .key_float(CH_Y, 0.0f, 0.0f)
+            .key_float(CH_Y, 0.3f, 50.0f)
+        .par_end()  // X and Y move together
+        .key_float(CH_SCALE, 0.0f, 1.0f)
+        .key_float(CH_SCALE, 0.2f, 1.5f)  // Then scale
+    .seq_end()
+    .key_float(CH_ALPHA, 0.0f, 1.0f)  // Then fade
+    .key_float(CH_ALPHA, 0.3f, 0.0f)
+    .end();
+```
+
 ## Stagger Clips
 
 Cascading effects for multiple elements:

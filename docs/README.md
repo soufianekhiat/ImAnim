@@ -2,9 +2,16 @@
 
 **Animation Engine for [Dear ImGui](https://github.com/ocornut/imgui)**
 
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/soufianekhiat/ImAnim)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
+
 ![Image](https://github.com/user-attachments/assets/51fde8b3-6d55-4e71-b012-819cd97d728b)
 
 ImAnim brings modern animation capabilities to ImGui applications. Write smooth UI animations with minimal code.
+
+## Version 1.0.0 - First Official Release
+
+This is the first stable release of ImAnim, featuring a complete animation toolkit for Dear ImGui.
 
 ```cpp
 // Animate anything in one line
@@ -136,21 +143,44 @@ generate_projects.bat
 
 ## Documentation
 
+### Getting Started
 - [Integration Guide](integration.md) - Add ImAnim to your project
 - [Quick Start](quickstart.md) - Get running in 5 minutes
+
+### Core Animation
 - [Tweens](tweens.md) - Immediate-mode animation
 - [Clips](clips.md) - Timeline-based keyframe animation
 - [Easing](easing.md) - All 30+ easing functions
+
+### Motion & Paths
 - [Motion Paths](motion-paths.md) - Animate along curves
+- [Path Morphing](path-morphing.md) - Interpolate between paths
 - [Text Along Paths](text-along-paths.md) - Curved text rendering
+- [Transforms](transforms.md) - 2D transform animation
+
+### Effects
 - [Stagger](stagger.md) - Cascading element animations
+- [Text Stagger](text-stagger.md) - Per-character text effects
 - [Oscillators](oscillators.md) - Continuous periodic motion
 - [Shake & Wiggle](shake-wiggle.md) - Feedback and organic motion
 - [Noise](noise.md) - Perlin/Simplex procedural animation
-- [Text Stagger](text-stagger.md) - Per-character text effects
+
+### Colors & Styles
+- [Gradients](gradients.md) - Color gradient animation
 - [Style Interpolation](style-interpolation.md) - Animated theme transitions
+- [Per-Axis Easing](per-axis-easing.md) - Different easing per component
+
+### Advanced Features
+- [Variations](variations.md) - Per-loop parameter changes
+- [Layering](layering.md) - Blend multiple animations
+- [Resolved Tweens](resolved-tweens.md) - Dynamic target computation
 - [Anchors](anchors.md) - Resize-aware animation
+- [Drag Feedback](drag-feedback.md) - Animated drag operations
+- [Scroll Animation](scroll-animation.md) - Smooth scrolling
+
+### Tools & Debug
 - [Debug](debug.md) - Inspector and debugging tools
+- [Advanced](advanced.md) - Profiler, persistence, memory management
 
 ## Demo
 
