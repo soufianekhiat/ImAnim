@@ -518,6 +518,7 @@ static void ShowHeroAnimation()
 
 	// ================================================================
 	// "ImAnim" LOGO - Stays in center, shapes work around it
+	// Hoverable with scale animation after reveal
 	// ================================================================
 	{
 		const char* logo = "ImAnim";
@@ -525,6 +526,10 @@ static void ShowHeroAnimation()
 		float logo_scale = 3.2f;
 		float logo_alpha = 1.0f;
 		float logo_y = 0.0f;
+
+		// Hover animation state
+		static float hover_anim = 0.0f;
+		static bool was_hovered = false;
 
 		if (t < 0.15f) {
 			float e = t / 0.15f;
@@ -545,6 +550,33 @@ static void ShowHeroAnimation()
 			float total_w = text_size.x * logo_scale;
 			float start_x = cc.x - total_w * 0.5f;
 			float base_y = cc.y - font_size * 0.4f + logo_y;
+
+			// Check hover (only after reveal, t > 0.3)
+			bool is_hovered = false;
+			if (t > 0.3f && t < 9.5f) {
+				ImVec2 mouse = ImGui::GetMousePos();
+				float hover_pad = 10.0f;
+				ImVec2 logo_min = ImVec2(start_x - hover_pad, base_y - hover_pad);
+				ImVec2 logo_max = ImVec2(start_x + total_w + hover_pad, base_y + font_size + hover_pad);
+				is_hovered = mouse.x >= logo_min.x && mouse.x <= logo_max.x && mouse.y >= logo_min.y && mouse.y <= logo_max.y;
+			}
+
+			// Animate hover state
+			float hover_speed = 8.0f;
+			if (is_hovered) {
+				hover_anim += dt * hover_speed;
+				if (hover_anim > 1.0f) hover_anim = 1.0f;
+			} else {
+				hover_anim -= dt * hover_speed;
+				if (hover_anim < 0.0f) hover_anim = 0.0f;
+			}
+
+			// Apply hover scale with bounce easing
+			float hover_scale = 1.0f + 0.15f * iam_eval_preset(iam_ease_out_back, hover_anim);
+			logo_scale *= hover_scale;
+			font_size = base_size * logo_scale;
+			total_w = text_size.x * logo_scale;
+			start_x = cc.x - total_w * 0.5f;
 
 			float char_x = start_x;
 			for (int i = 0; i < 6; i++) {
@@ -702,7 +734,7 @@ static void ShowHeroAnimation()
 
 		// Draw the progress line as multiple segments
 		ImU32 prog_col = IM_COL32(255, 255, 255, 220);
-		float line_thick = 3.0f;
+		float line_thick = 1.0f;
 
 		// Draw completed segments
 		if (dist > 0) {
