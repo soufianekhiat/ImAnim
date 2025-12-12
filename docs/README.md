@@ -180,6 +180,8 @@ The `im_anim_demo.cpp` file provides a comprehensive playground for exploring al
 
 ### Use Cases
 
+![ImAnim_Usecases_optim](https://github.com/user-attachments/assets/e4430628-9d3a-43ce-b524-4d29c2f19df2)
+
 The demo showcases practical UI patterns you can adapt:
 
 - **Animated Buttons** - Hover scaling, press feedback, icon animations
