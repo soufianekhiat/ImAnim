@@ -690,45 +690,53 @@ static void ShowHeroAnimation()
 		// Progress 0-1 over the 10 second cycle
 		float progress = t / CYCLE;
 
+		// Border coordinates (inset by 1 pixel so line is visible within bounds)
+		float left = cp.x;
+		float right = cp.x + cs.x - 1.0f;
+		float top = cp.y;
+		float bottom = cp.y + cs.y - 1.0f;
+		float width = right - left;
+		float height = bottom - top;
+
 		// Calculate perimeter segments (anti-clockwise from mid-right):
-		// Segment 1: Right edge UP (mid -> top): cs.y/2
-		// Segment 2: Top edge LEFT (right -> left): cs.x
-		// Segment 3: Left edge DOWN (top -> bottom): cs.y
-		// Segment 4: Bottom edge RIGHT (left -> right): cs.x
-		// Segment 5: Right edge UP (bottom -> mid): cs.y/2
-		float perimeter = 2.0f * cs.x + 2.0f * cs.y;
-		float seg1 = cs.y * 0.5f;
-		float seg2 = seg1 + cs.x;
-		float seg3 = seg2 + cs.y;
-		float seg4 = seg3 + cs.x;
+		// Segment 1: Right edge UP (mid -> top): height/2
+		// Segment 2: Top edge LEFT (right -> left): width
+		// Segment 3: Left edge DOWN (top -> bottom): height
+		// Segment 4: Bottom edge RIGHT (left -> right): width
+		// Segment 5: Right edge UP (bottom -> mid): height/2
+		float perimeter = 2.0f * width + 2.0f * height;
+		float seg1 = height * 0.5f;
+		float seg2 = seg1 + width;
+		float seg3 = seg2 + height;
+		float seg4 = seg3 + width;
 		// seg5 ends at perimeter
 
 		float dist = progress * perimeter; // distance traveled
 
 		// Starting point: middle of right edge
-		ImVec2 start = ImVec2(cp.x + cs.x, cp.y + cs.y * 0.5f);
+		ImVec2 start = ImVec2(right, top + height * 0.5f);
 
 		// Helper to get point at distance along the path
 		auto get_point = [&](float d) -> ImVec2 {
 			if (d <= seg1) {
 				// Segment 1: going UP on right edge
-				return ImVec2(cp.x + cs.x, cp.y + cs.y * 0.5f - d);
+				return ImVec2(right, top + height * 0.5f - d);
 			} else if (d <= seg2) {
 				// Segment 2: going LEFT on top edge
 				float local = d - seg1;
-				return ImVec2(cp.x + cs.x - local, cp.y);
+				return ImVec2(right - local, top);
 			} else if (d <= seg3) {
 				// Segment 3: going DOWN on left edge
 				float local = d - seg2;
-				return ImVec2(cp.x, cp.y + local);
+				return ImVec2(left, top + local);
 			} else if (d <= seg4) {
 				// Segment 4: going RIGHT on bottom edge
 				float local = d - seg3;
-				return ImVec2(cp.x + local, cp.y + cs.y);
+				return ImVec2(left + local, bottom);
 			} else {
 				// Segment 5: going UP on right edge (bottom half)
 				float local = d - seg4;
-				return ImVec2(cp.x + cs.x, cp.y + cs.y - local);
+				return ImVec2(right, bottom - local);
 			}
 		};
 
