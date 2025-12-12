@@ -5,7 +5,7 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/soufianekhiat/ImAnim)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
 
-![ImAnimDemo_Hero_1 0 0](https://github.com/user-attachments/assets/628bd989-49ac-4252-80fa-c71394b2a379)
+![ImAnimDemo_Hero_1 0 0](https://github.com/user-attachments/assets/a9e7931c-7e31-4585-80dc-9ac93664ec3e)
 
 ImAnim brings modern animation capabilities to ImGui applications. Write smooth UI animations with minimal code.
 
