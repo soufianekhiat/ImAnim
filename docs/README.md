@@ -71,23 +71,13 @@ float scale = iam_tween_float(
 
 That's it. No build system changes, no external dependencies.
 
-## Repository Structure
+## Debug helper
 
-```
-ImAnim/
-├── im_anim.h              # Main header (include this)
-├── im_anim.cpp            # Implementation
-├── im_anim_demo.cpp       # Interactive demo (optional)
-├── LICENSE                # MIT License
-├── docs/                  # Documentation
-│   ├── README.md          # This file
-│   └── *.md               # Feature guides
-└── examples/              # Buildable examples
-    ├── ImAnim_vs2022_Win64.sln   # Visual Studio solution (Windows)
-    ├── glfw_opengl3/             # GLFW + OpenGL3 (with Makefile)
-    ├── sdl2_opengl3/             # SDL2 + OpenGL3 (with Makefile)
-    └── extern/                   # Dependencies (imgui, ImPlatform)
-```
+* Timeline for clips with tooltip helpers:
+![ImAnimDemo_XukMAvrwhw](https://github.com/user-attachments/assets/cb821e95-fba9-478d-90fe-ebfc710abf62)
+
+* Support for delayed start:
+![ImAnimDemo_2fQKeGBaLG](https://github.com/user-attachments/assets/452d3818-93f3-42e0-8683-9d963178c3f5)
 
 ## Building Examples
 
