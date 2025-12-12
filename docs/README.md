@@ -75,76 +75,51 @@ That's it. No build system changes, no external dependencies.
 
 ```
 ImAnim/
-├── im_anim.h                  # Main header (include this)
-├── im_anim.cpp                # Implementation
-├── im_anim_demo.cpp           # Interactive demo (optional)
-├── LICENSE                    # MIT License
-├── docs/                      # Documentation
-│   ├── README.md              # This file
-│   └── *.md                   # Feature documentation
-└── examples/                  # Buildable examples
-    ├── glfw_opengl3/          # GLFW + OpenGL3 example
-    ├── sdl2_opengl3/          # SDL2 + OpenGL3 example
-    ├── win32_directx11/       # Win32 + DirectX11 example
-    ├── implatform/            # ImPlatform abstraction example
-    ├── extern/                # Git submodules
-    │   ├── imgui/             # Dear ImGui
-    │   ├── ImPlatform/        # ImPlatform abstraction layer
-    │   └── Sharpmake/         # Sharpmake build generator
-    ├── sharpmake/             # Build configuration
-    ├── tools/                 # Build tools (populated by bootstrap)
-    ├── bootstrap.bat          # Windows: build Sharpmake & generate projects
-    ├── bootstrap.sh           # Linux/macOS: build Sharpmake & generate projects
-    ├── generate_projects.bat  # Windows: regenerate VS projects
-    └── generate_projects.sh   # Linux/macOS: regenerate projects
+├── im_anim.h              # Main header (include this)
+├── im_anim.cpp            # Implementation
+├── im_anim_demo.cpp       # Interactive demo (optional)
+├── LICENSE                # MIT License
+├── docs/                  # Documentation
+│   ├── README.md          # This file
+│   └── *.md               # Feature guides
+└── examples/              # Buildable examples
+    ├── ImAnim_vs2022_Win64.sln   # Visual Studio solution (Windows)
+    ├── glfw_opengl3/             # GLFW + OpenGL3 (with Makefile)
+    ├── sdl2_opengl3/             # SDL2 + OpenGL3 (with Makefile)
+    └── extern/                   # Dependencies (imgui, ImPlatform)
 ```
 
 ## Building Examples
 
-### Prerequisites
-
-- [.NET 6.0 SDK](https://dotnet.microsoft.com/download) or later (for Sharpmake)
-- Visual Studio 2022 (Windows)
-
 ### Windows
 
-```batch
-cd examples
-bootstrap.bat
-```
+Open `examples/ImAnim_vs2022_Win64.sln` in Visual Studio 2022 and select a configuration:
 
-This will:
-1. Initialize git submodules (imgui, ImPlatform, Sharpmake)
-2. Build Sharpmake
-3. Generate Visual Studio solution
+| Configuration | Backend |
+|---------------|---------|
+| `Release_Win32_DX11` | Win32 + DirectX11 |
+| `Release_GLFW_OpenGL3` | GLFW + OpenGL3 |
+| `Release_SDL2_OpenGL3` | SDL2 + OpenGL3 |
+| `Release_ImPlatform` | ImPlatform abstraction |
 
-Open `examples/ImAnim_vs2022_Win64.sln` and select a configuration:
-- `Debug_GLFW_OpenGL3` / `Release_GLFW_OpenGL3`
-- `Debug_SDL2_OpenGL3` / `Release_SDL2_OpenGL3`
-- `Debug_Win32_DX11` / `Release_Win32_DX11`
-- `Debug_ImPlatform` / `Release_ImPlatform`
+Debug configurations are also available for each backend.
 
 ### Linux / macOS
 
+Each backend has its own Makefile:
+
 ```bash
-cd examples
-chmod +x bootstrap.sh generate_projects.sh
-./bootstrap.sh
-```
+cd examples/glfw_opengl3
+make
 
-### Regenerating Projects
-
-After modifying Sharpmake configuration files:
-
-```batch
-# Windows
-generate_projects.bat
-
-# Linux/macOS
-./generate_projects.sh
+# or
+cd examples/sdl2_opengl3
+make
 ```
 
 ## Documentation
+
+Comprehensive guides for every ImAnim feature, organized by category. Each doc includes code examples and API references.
 
 ### Getting Started
 - [Integration Guide](integration.md) - Add ImAnim to your project
@@ -185,89 +160,101 @@ generate_projects.bat
 - [Debug](debug.md) - Inspector and debugging tools
 - [Advanced](advanced.md) - Profiler, persistence, memory management
 
-## Demo
+## Interactive Demo
 
-The `im_anim_demo.cpp` file (optional) provides a comprehensive demo showcasing all features:
+The `im_anim_demo.cpp` file provides a comprehensive playground for exploring all ImAnim features. Call `ImAnimDemoWindow()` to display it.
 
-- Interactive easing curve visualizer
-- Cubic bezier editor
-- Spring physics playground
-- All animation types with live controls
-- Performance benchmarks
+### Demo Categories
 
-Call `ImAnimDemoWindow()` in your ImGui frame to display the demo window.
+| Category | What You'll Find |
+|----------|-----------------|
+| **Easing & Tweens** | Easing gallery, custom bezier editor, spring physics, per-axis easing |
+| **Interactive Widgets** | Animated buttons, toggle switches, hover cards, progress indicators |
+| **Clip-Based Animations** | Timeline keyframes, looping, callbacks, chaining, layering system |
+| **Procedural Animations** | Oscillators, shake/wiggle effects, Perlin/Simplex noise |
+| **Motion Paths** | Bezier curves, Catmull-Rom splines, path morphing, text along paths |
+| **Advanced Interpolation** | Gradients, transforms, style interpolation, text stagger |
+| **Utilities** | ImDrawList animations, resize-aware helpers, scroll animation, drag feedback |
+| **Debug Tools** | Inspector, profiler, memory stats |
+| **Stress Test** | Performance benchmarks with thousands of concurrent animations |
 
-## Showcase:
+### Use Cases
 
-List Stagger:
+The demo showcases practical UI patterns you can adapt:
 
-![Image](https://github.com/user-attachments/assets/a59968c6-5cbf-405f-8e67-f12e15205512)
+- **Animated Buttons** - Hover scaling, press feedback, icon animations
+- **Toggle Switches** - Smooth state transitions with easing
+- **Hover Cards** - Expand/collapse with spring physics
+- **List Stagger** - Cascading item reveal animations
+- **Grid Reveal** - Wave-based grid animations
+- **Dropping Cards** - Physics-inspired card animations
+- **Health Bars** - Color gradient health indicators
+- **Loading Indicators** - Pulsing rings, spinning elements
+- **Error Feedback** - Shake effects for invalid input
+- **Scroll Navigation** - Smooth scroll-to-section animations
 
-Grid Stagger:
+## Showcase
 
-![Image](https://github.com/user-attachments/assets/6618002b-8326-45ec-aa16-11feed26b75f)
+Visual examples of ImAnim capabilities in action.
 
-Card Stagger:
+### Stagger Animations
 
-![Image](https://github.com/user-attachments/assets/ef29a857-c64c-45e0-bad2-3b67952da36d)
+| List Stagger | Grid Stagger | Card Stagger |
+|:------------:|:------------:|:------------:|
+| ![List](https://github.com/user-attachments/assets/a59968c6-5cbf-405f-8e67-f12e15205512) | ![Grid](https://github.com/user-attachments/assets/6618002b-8326-45ec-aa16-11feed26b75f) | ![Cards](https://github.com/user-attachments/assets/ef29a857-c64c-45e0-bad2-3b67952da36d) |
 
-Color Blending:
+### Easing & Curves
 
-![Image](https://github.com/user-attachments/assets/364e9fff-cc0f-46ab-97fd-e56a1e1618a9)
+| Easing Gallery | Custom Bezier | Wave Animations |
+|:-------------:|:-------------:|:---------------:|
+| ![Easing](https://github.com/user-attachments/assets/d918c4d9-6e22-4fa8-b591-68d6b3afec7e) | ![Bezier](https://github.com/user-attachments/assets/c9f35054-cd26-475e-bb49-7875922fa273) | ![Waves](https://github.com/user-attachments/assets/19c3fd48-10b7-4350-9eea-4cffc4ef4984) |
 
-Waves:
+### Colors & Transforms
 
-![Image](https://github.com/user-attachments/assets/19c3fd48-10b7-4350-9eea-4cffc4ef4984)
+| Color Blending | Gradient | Transforms |
+|:-------------:|:--------:|:----------:|
+| ![Color](https://github.com/user-attachments/assets/364e9fff-cc0f-46ab-97fd-e56a1e1618a9) | ![Gradient](https://github.com/user-attachments/assets/04d10e9f-1303-4fdc-acda-83dd18fbaf85) | ![Transform](https://github.com/user-attachments/assets/d93dd1f6-9204-4687-9e90-ee8d11312a8b) |
 
-![Image](https://github.com/user-attachments/assets/2a9aa767-6886-4737-8b90-9bee2792a225)
+### Paths & Text
 
-ImGui Integration:
+| Motion Path | Text Effects | Variations |
+|:-----------:|:------------:|:----------:|
+| ![Path](https://github.com/user-attachments/assets/aa2fc751-36fb-4c7b-aae7-e2bac04b5f45) | ![Text](https://github.com/user-attachments/assets/b389a9f3-89a6-4e5f-b632-74acc8dea3b6) | ![Variations](https://github.com/user-attachments/assets/d660b2a8-78a1-4d94-8bb8-8a9632127e64) |
 
-![Image](https://github.com/user-attachments/assets/f6cdb73f-2712-4b7e-8f27-5cbfb884b7ce)
+### Procedural & Integration
 
-Transforms:
+| Noise | ImGui Widgets | ImDrawList |
+|:-----:|:-------------:|:----------:|
+| ![Noise](https://github.com/user-attachments/assets/8a644f6a-4516-4246-9d80-41a2ee036ea5) | ![ImGui](https://github.com/user-attachments/assets/f6cdb73f-2712-4b7e-8f27-5cbfb884b7ce) | ![DrawList](https://github.com/user-attachments/assets/c22f0855-4853-474d-b0d7-e1191e9d4789) |
 
-![Image](https://github.com/user-attachments/assets/d93dd1f6-9204-4687-9e90-ee8d11312a8b)
+### Additional Examples
 
-![Image](https://github.com/user-attachments/assets/62f67980-94d5-48b4-ba01-483e960ada89)
-
-Gradient:
-
-![Image](https://github.com/user-attachments/assets/04d10e9f-1303-4fdc-acda-83dd18fbaf85)
-
-Custom Ease Functions:
-
-![Image](https://github.com/user-attachments/assets/c9f35054-cd26-475e-bb49-7875922fa273)
-
-Path:
-
-![Image](https://github.com/user-attachments/assets/aa2fc751-36fb-4c7b-aae7-e2bac04b5f45)
-
-Variations:
-
-![Image](https://github.com/user-attachments/assets/d660b2a8-78a1-4d94-8bb8-8a9632127e64)
-
-Text:
-
-![Image](https://github.com/user-attachments/assets/b389a9f3-89a6-4e5f-b632-74acc8dea3b6)
-
-Noise:
-
-![Image](https://github.com/user-attachments/assets/8a644f6a-4516-4246-9d80-41a2ee036ea5)
-
-Easing Functions:
-
-![Image](https://github.com/user-attachments/assets/d918c4d9-6e22-4fa8-b591-68d6b3afec7e)
-
-ImDrawList:
-
-![Image](https://github.com/user-attachments/assets/c22f0855-4853-474d-b0d7-e1191e9d4789)
+| Oscillator Waves | Transform Layers |
+|:----------------:|:----------------:|
+| ![Waves2](https://github.com/user-attachments/assets/2a9aa767-6886-4737-8b90-9bee2792a225) | ![Transform2](https://github.com/user-attachments/assets/62f67980-94d5-48b4-ba01-483e960ada89) |
 
 ## Contributing
 
 Development is supported through Patreon:
 
 [![Patreon](https://img.shields.io/badge/Patreon-Support%20Development-f96854?style=for-the-badge&logo=patreon)](https://www.patreon.com/SoufianeKHIAT)
+
+### For Contributors: Regenerating Projects
+
+The Visual Studio solution is generated using [Sharpmake](https://github.com/ubisoft/Sharpmake). To regenerate projects after modifying the build configuration:
+
+**Prerequisites:** [.NET 6.0 SDK](https://dotnet.microsoft.com/download) or later
+
+```batch
+# First time setup (builds Sharpmake)
+cd examples
+bootstrap.bat        # Windows
+./bootstrap.sh       # Linux/macOS
+
+# Regenerate projects
+generate_projects.bat    # Windows
+./generate_projects.sh   # Linux/macOS
+```
 
 ## License
 
