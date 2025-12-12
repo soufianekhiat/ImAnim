@@ -170,8 +170,6 @@ The `im_anim_demo.cpp` file provides a comprehensive playground for exploring al
 
 ### Use Cases
 
-![ImAnim_Usecases_optim](https://github.com/user-attachments/assets/e4430628-9d3a-43ce-b524-4d29c2f19df2)
-
 The demo showcases practical UI patterns you can adapt:
 
 - **Animated Buttons** - Hover scaling, press feedback, icon animations
@@ -184,6 +182,23 @@ The demo showcases practical UI patterns you can adapt:
 - **Loading Indicators** - Pulsing rings, spinning elements
 - **Error Feedback** - Shake effects for invalid input
 - **Scroll Navigation** - Smooth scroll-to-section animations
+
+| Animated Tag |
+|:------------:|
+| ![ImAnimDemo_a1h8amHeJp](https://github.com/user-attachments/assets/6ac30639-b737-47be-9c47-be4f4de48af3) |
+
+| Ripple Button |
+|:------------:|
+| ![ImAnimDemo_XVoOtKSf3G](https://github.com/user-attachments/assets/9f3cac6f-b1bf-4fd5-b746-16ef93bf8cc4) |
+
+| "Wait" Button |
+|:------------:|
+| ![ImAnimDemo_2RPgqEAHHm](https://github.com/user-attachments/assets/274de702-f79c-4589-acac-b61d8a91900b) |
+
+| Data Visualization |
+|:------------:|
+| ![ImAnimDemo_VnmpjDbMZh](https://github.com/user-attachments/assets/cd01aab9-6dd8-46a6-9614-92491f8f9b60) |
+| ![ImAnimDemo_zI6R85WazP](https://github.com/user-attachments/assets/7027587b-f2b7-4bfc-aa15-bbadccd87baa) |
 
 ## Showcase
 
