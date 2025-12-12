@@ -142,10 +142,19 @@ static void ShowHeroAnimation()
 			float dy = mouse.y - last_mouse.y;
 			float dist = ImSqrt(dx * dx + dy * dy);
 
+			// Skip if mouse teleported (e.g., screen capture tool, window switching)
+			if (dist > 200.0f) {
+				last_mouse = mouse;
+				spawn_accum = 0.0f;
+			}
+
 			spawn_accum += dist;
 			const float SPAWN_DIST = 15.0f; // spawn particle every N pixels of movement
+			int spawned = 0;
+			const int MAX_SPAWN_PER_FRAME = 4;
 
-			while (spawn_accum >= SPAWN_DIST) {
+			while (spawn_accum >= SPAWN_DIST && spawned < MAX_SPAWN_PER_FRAME) {
+				spawned++;
 				spawn_accum -= SPAWN_DIST;
 
 				// Find free slot (expired particle) or use oldest
