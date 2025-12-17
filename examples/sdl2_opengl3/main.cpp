@@ -15,8 +15,9 @@
 #include <SDL_opengl.h>
 #endif
 
-// From im_anim_demo.cpp
 extern void ImAnimDemoWindow();
+extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 int main(int, char**)
 {
@@ -104,7 +105,13 @@ int main(int, char**)
         iam_clip_update(io.DeltaTime);
 
         // Show demo
-        ImAnimDemoWindow();
+		ImAnimDemoWindow();
+
+		// Show Doc
+		ImAnimDocWindow();
+
+		// Show Usecases
+		ImAnimUsecaseWindow();
 
         // Render
         ImGui::Render();

@@ -30,13 +30,8 @@ static FontType* GetBakedFont(ImFont* font, float font_size) {
 #endif
 }
 
-// Two-pi constant
-#ifndef TWO_PI
-static const float TWO_PI = 6.28318530f;
-#endif // !TWO_PI
-#ifndef PI
-static const float PI = 3.14159265f;
-#endif // !PI
+ImU32 const ZimaBlue = IM_COL32( 91, 194, 231, 255 );
+ImU32 const AgedCopper = IM_COL32( 204, 120, 88, 255 );
 
 // ----------------------------------------------------
 // Internal: parameterized easing LUT cache (ImPool)
@@ -48,25 +43,25 @@ namespace iam_detail {
 // ----------------------------------------------------
 
 // Bounce easing constants (derived from Robert Penner's equations)
-static const float BOUNCE_N1 = 7.5625f;       // Bounce amplitude multiplier
-static const float BOUNCE_D1 = 2.75f;         // Bounce timing divisor
+static float const BOUNCE_N1 = 7.5625f;       // Bounce amplitude multiplier
+static float const BOUNCE_D1 = 2.75f;         // Bounce timing divisor
 
 // Back easing constants
-static const float BACK_OVERSHOOT = 1.70158f;           // Default overshoot amount (~10% overshoot)
-static const float BACK_OVERSHOOT_INOUT = 1.70158f * 1.525f;  // Scaled overshoot for in-out
+static float const BACK_OVERSHOOT = 1.70158f;           // Default overshoot amount (~10% overshoot)
+static float const BACK_OVERSHOOT_INOUT = 1.70158f * 1.525f;  // Scaled overshoot for in-out
 
 // Elastic easing defaults
-static const float ELASTIC_AMPLITUDE = 1.0f;  // Default amplitude
-static const float ELASTIC_PERIOD = 0.3f;     // Default period for in/out
-static const float ELASTIC_PERIOD_INOUT = 0.45f;  // Period for in-out variant
+static float const ELASTIC_AMPLITUDE = 1.0f;  // Default amplitude
+static float const ELASTIC_PERIOD = 0.3f;     // Default period for in/out
+static float const ELASTIC_PERIOD_INOUT = 0.45f;  // Period for in-out variant
 
 // Spring physics defaults
-static const float SPRING_MASS = 1.0f;        // Default mass
-static const float SPRING_STIFFNESS = 120.0f; // Default stiffness (k)
-static const float SPRING_DAMPING = 20.0f;    // Default damping (c)
+static float const SPRING_MASS = 1.0f;        // Default mass
+static float const SPRING_STIFFNESS = 120.0f; // Default stiffness (k)
+static float const SPRING_DAMPING = 20.0f;    // Default damping (c)
 
 // Floating point comparison epsilon
-static const float EASE_EPSILON = 1e-6f;
+static float const EASE_EPSILON = 1e-6f;
 
 struct ease_lut {
 	iam_ease_desc		desc;
@@ -94,8 +89,8 @@ struct ease_lut_pool {
 		if (t == 0.f || t == 1.f) return t;
 		float A = (a <= 0.f ? ELASTIC_AMPLITUDE : a);
 		float P = (p <= 0.f ? ELASTIC_PERIOD : p);
-		float s = (P / TWO_PI) * asinf(1.0f / A);
-		return -(A * ImPow(2.f, 10.f * (t - 1.f)) * ImSin((t - 1.f - s) * TWO_PI / P));
+		float s = (P / IAM_2PI) * asinf(1.0f / A);
+		return -(A * ImPow(2.f, 10.f * (t - 1.f)) * ImSin((t - 1.f - s) * IAM_2PI / P));
 	}
 
 	static float back_core(float t, float s) { return t * t * ((s + 1.f) * t - s); }
@@ -241,10 +236,10 @@ enum ease_family { ease_quad, ease_cubic, ease_quart, ease_quint, ease_sine, eas
 enum ease_variant { ease_in, ease_out, ease_in_out };
 
 // Derived constants for standalone easing functions
-static const float EASE_PI = 3.1415926535f;
-static const float BACK_C1 = BACK_OVERSHOOT;  // Alias for back easing formula
-static const float BACK_C3 = BACK_C1 + 1.f;   // Back easing cubic coefficient
-static const float ELASTIC_C4 = (2.f * EASE_PI) / 3.f;  // Elastic angular frequency
+static float const EASE_PI = 3.1415926535f;
+static float const BACK_C1 = BACK_OVERSHOOT;  // Alias for back easing formula
+static float const BACK_C3 = BACK_C1 + 1.f;   // Back easing cubic coefficient
+static float const ELASTIC_C4 = (2.f * EASE_PI) / 3.f;  // Elastic angular frequency
 
 // Base "in" easing functions - all others derived via transforms
 static float ease_in_quad(float t)    { return t * t; }
@@ -255,7 +250,7 @@ static float ease_in_sine(float t)    { return 1.f - ImCos((t * EASE_PI) / 2.f);
 static float ease_in_expo(float t)    { return (t == 0.f) ? 0.f : ImPow(2.f, 10.f * t - 10.f); }
 static float ease_in_circ(float t)    { return 1.f - ImSqrt(1.f - t * t); }
 static float ease_in_back(float t)    { return BACK_C3 * t * t * t - BACK_C1 * t * t; }
-static float ease_in_elastic(float t) { return (t == 0.f || t == 1.f) ? t : -ImPow(2.f, 10.f * t - 10.f) * sinf((t * 10.f - 10.75f) * ELASTIC_C4); }
+static float ease_in_elastic(float t) { return (t == 0.f || t == 1.f) ? t : -ImPow(2.f, 10.f * t - 10.f) * ImSin((t * 10.f - 10.75f) * ELASTIC_C4); }
 
 // Bounce is naturally defined as "out" - special case
 static float ease_out_bounce(float t) {
@@ -506,7 +501,7 @@ static ImGuiID make_key(ImGuiID id, ImGuiID ch) {
 static double g_global_time = 0.0;
 
 // Minimum duration to avoid division by zero
-static const float MIN_DURATION = 1e-6f;
+static float const MIN_DURATION = 1e-6f;
 
 // ----------------------------------------------------
 // Channel interpolation traits - define how each type lerps
@@ -706,9 +701,9 @@ static bool g_lazy_init_enabled = true;
 // ----------------------------------------------------
 // Profiler data structures
 // ----------------------------------------------------
-static const int PROFILER_MAX_SECTIONS = 64;
-static const int PROFILER_MAX_STACK = 16;
-static const int PROFILER_HISTORY_SIZE = 120; // 2 seconds at 60fps
+static int const PROFILER_MAX_SECTIONS = 64;
+static int const PROFILER_MAX_STACK = 16;
+static int const PROFILER_HISTORY_SIZE = 120; // 2 seconds at 60fps
 
 struct profiler_section {
 	char name[64];
@@ -741,7 +736,7 @@ struct profiler_state {
 		for (int i = 0; i < PROFILER_HISTORY_SIZE; i++) frame_history[i] = 0.0f;
 	}
 
-	int find_or_create_section(const char* name) {
+	int find_or_create_section(char const* name) {
 		// Find existing section
 		for (int i = 0; i < section_count; i++) {
 			if (strcmp(sections[i].name, name) == 0) return i;
@@ -886,7 +881,7 @@ void iam_profiler_end_frame() {
 	}
 }
 
-void iam_profiler_begin(const char* name) {
+void iam_profiler_begin(char const* name) {
 	if (!iam_detail::g_profiler.enabled) return;
 	int idx = iam_detail::g_profiler.find_or_create_section(name);
 	if (idx < 0) return;
@@ -1626,7 +1621,7 @@ static float compute_var_float(iam_variation_float const& var, int loop_index, u
 			break;
 		case iam_var_multiply:
 			// For multiply, return the multiplier (to be applied differently)
-			return powf(var.amount, (float)loop_index);
+			return ImPow(var.amount, (float)loop_index);
 		case iam_var_random:
 			delta = var_rand_signed(&rng) * var.amount;
 			if (var.seed == 0) *rng_state = rng;
@@ -1676,7 +1671,7 @@ static int apply_var_int(int base, iam_variation_int const& var, int loop_index,
 			delta = -var.amount * loop_index;
 			break;
 		case iam_var_multiply:
-			return var_clampi((int)(base * powf((float)var.amount, (float)loop_index)), var.min_clamp, var.max_clamp);
+			return var_clampi((int)(base * ImPow((float)var.amount, (float)loop_index)), var.min_clamp, var.max_clamp);
 		case iam_var_random:
 			delta = (int)(var_rand_signed(&rng) * (float)var.amount);
 			if (var.seed == 0) *rng_state = rng;
@@ -1731,9 +1726,9 @@ static ImVec2 apply_var_vec2(ImVec2 base, iam_variation_vec2 const& var, int loo
 			result.y -= var.amount.y * (float)loop_index;
 			break;
 		case iam_var_multiply: {
-			float mult = powf(var.amount.x, (float)loop_index);
+			float mult = ImPow(var.amount.x, (float)loop_index);
 			result.x *= mult;
-			result.y *= powf(var.amount.y, (float)loop_index);
+			result.y *= ImPow(var.amount.y, (float)loop_index);
 			break;
 		}
 		case iam_var_random:
@@ -1806,10 +1801,10 @@ static ImVec4 apply_var_vec4(ImVec4 base, iam_variation_vec4 const& var, int loo
 			result.w -= var.amount.w * (float)loop_index;
 			break;
 		case iam_var_multiply:
-			result.x *= powf(var.amount.x, (float)loop_index);
-			result.y *= powf(var.amount.y, (float)loop_index);
-			result.z *= powf(var.amount.z, (float)loop_index);
-			result.w *= powf(var.amount.w, (float)loop_index);
+			result.x *= ImPow(var.amount.x, (float)loop_index);
+			result.y *= ImPow(var.amount.y, (float)loop_index);
+			result.z *= ImPow(var.amount.z, (float)loop_index);
+			result.w *= ImPow(var.amount.w, (float)loop_index);
 			break;
 		case iam_var_random:
 			result.x += var_rand_signed(&rng) * var.amount.x;
@@ -1897,10 +1892,10 @@ static ImVec4 apply_var_color(ImVec4 base_srgb, iam_variation_color const& var, 
 			result.w -= var.amount.w * (float)loop_index;
 			break;
 		case iam_var_multiply:
-			result.x *= powf(var.amount.x, (float)loop_index);
-			result.y *= powf(var.amount.y, (float)loop_index);
-			result.z *= powf(var.amount.z, (float)loop_index);
-			result.w *= powf(var.amount.w, (float)loop_index);
+			result.x *= ImPow(var.amount.x, (float)loop_index);
+			result.y *= ImPow(var.amount.y, (float)loop_index);
+			result.z *= ImPow(var.amount.z, (float)loop_index);
+			result.w *= ImPow(var.amount.w, (float)loop_index);
 			break;
 		case iam_var_random:
 			result.x += var_rand_signed(&rng) * var.amount.x;
@@ -3496,7 +3491,6 @@ void iam_layer_begin(ImGuiID instance_id) {
 
 void iam_layer_add(iam_instance inst, float weight) {
 	using namespace iam_clip_detail;
-	
 	if (!inst.valid() || weight <= 0.0f) return;
 
 	iam_instance_data* src = find_instance(inst.id());
@@ -3678,8 +3672,8 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Clip data: duration, delay, loop_count, direction, stagger params
 // Tracks: count + for each: channel, type, num_keys, keys...
 
-static const char IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static const int IAM_CLIP_VERSION = 1;
+static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
+static int const IAM_CLIP_VERSION = 3;
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	using namespace iam_clip_detail;
@@ -3721,10 +3715,16 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 			keyframe& kf = trk.keys[k];
 			fwrite(&kf.time, sizeof(float), 1, f);
 			fwrite(&kf.ease_type, sizeof(int), 1, f);
-			fwrite(&kf.has_bezier, sizeof(bool), 1, f);
+			// Write bools as int to avoid size/alignment issues
+			int has_bezier_i = kf.has_bezier ? 1 : 0;
+			int is_spring_i = kf.is_spring ? 1 : 0;
+			fwrite(&has_bezier_i, sizeof(int), 1, f);
 			fwrite(kf.bezier, sizeof(float), 4, f);
-			fwrite(&kf.is_spring, sizeof(bool), 1, f);
-			fwrite(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fwrite(&is_spring_i, sizeof(int), 1, f);
+			fwrite(&kf.spring.mass, sizeof(float), 1, f);
+			fwrite(&kf.spring.stiffness, sizeof(float), 1, f);
+			fwrite(&kf.spring.damping, sizeof(float), 1, f);
+			fwrite(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fwrite(kf.value, sizeof(float), 4, f);
 		}
 	}
@@ -3794,7 +3794,10 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	}
 
 	for (int t = 0; t < track_count; ++t) {
-		iam_track trk;
+		// Add track to clip first, then work with it directly to avoid ImVector copy issues
+		clip->iam_tracks.push_back(iam_track());
+		iam_track& trk = clip->iam_tracks.back();
+
 		fread(&trk.channel, sizeof(ImGuiID), 1, f);
 		fread(&trk.type, sizeof(int), 1, f);
 
@@ -3805,17 +3808,22 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 			keyframe kf;
 			fread(&kf.time, sizeof(float), 1, f);
 			fread(&kf.ease_type, sizeof(int), 1, f);
-			fread(&kf.has_bezier, sizeof(bool), 1, f);
+			// Read bools as int to match save format
+			int has_bezier_i, is_spring_i;
+			fread(&has_bezier_i, sizeof(int), 1, f);
 			fread(kf.bezier, sizeof(float), 4, f);
-			fread(&kf.is_spring, sizeof(bool), 1, f);
-			fread(&kf.spring, sizeof(iam_spring_params), 1, f);
+			fread(&is_spring_i, sizeof(int), 1, f);
+			fread(&kf.spring.mass, sizeof(float), 1, f);
+			fread(&kf.spring.stiffness, sizeof(float), 1, f);
+			fread(&kf.spring.damping, sizeof(float), 1, f);
+			fread(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fread(kf.value, sizeof(float), 4, f);
+			kf.has_bezier = (has_bezier_i != 0);
+			kf.is_spring = (is_spring_i != 0);
 			kf.channel = trk.channel;
 			kf.type = trk.type;
 			trk.keys.push_back(kf);
 		}
-
-		clip->iam_tracks.push_back(trk);
 	}
 
 	fclose(f);
@@ -3850,7 +3858,7 @@ static float eval_wave(int wave_type, float t) {
 	t = t - ImFloor(t); // wrap to [0, 1)
 	switch (wave_type) {
 		case iam_wave_sine:
-			return sinf(t * 2.0f * IM_PI);
+			return ImSin(t * 2.0f * IM_PI);
 		case iam_wave_triangle:
 			return (t < 0.5f) ? (4.0f * t - 1.0f) : (3.0f - 4.0f * t);
 		case iam_wave_sawtooth:
@@ -3858,7 +3866,7 @@ static float eval_wave(int wave_type, float t) {
 		case iam_wave_square:
 			return (t < 0.5f) ? 1.0f : -1.0f;
 		default:
-			return sinf(t * 2.0f * IM_PI);
+			return ImSin(t * 2.0f * IM_PI);
 	}
 }
 
@@ -5314,14 +5322,14 @@ void iam_make_glyph_quad(ImVec2* quad, ImVec2 pos, float angle_rad, float glyph_
 // Text along motion paths
 // ----------------------------------------------------
 
-float iam_text_path_width(const char* text, iam_text_path_opts const& opts) {
+float iam_text_path_width(char const* text, iam_text_path_opts const& opts) {
 	ImFont* font = opts.font ? opts.font : ImGui::GetFont();
 	float font_size = ImGui::GetFontSize() * opts.font_scale;
-	FontType* baked = GetBakedFont(font,font_size);
+	FontType* baked = GetBakedFont(font, font_size);
 	if (!baked) return 0.0f;
 
 	float total_width = 0;
-	const char* p = text;
+	char const* p = text;
 	while (*p) {
 		unsigned int c = 0;
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
@@ -5341,7 +5349,7 @@ float iam_text_path_width(const char* text, iam_text_path_opts const& opts) {
 	return total_width;
 }
 
-void iam_text_path(ImGuiID path_id, const char* text, iam_text_path_opts const& opts) {
+void iam_text_path(ImGuiID path_id, char const* text, iam_text_path_opts const& opts) {
 	iam_path_detail::path_data* path = iam_path_detail::get_path(path_id);
 	if (!path || path->segments.Size == 0 || !text || !*text) return;
 
@@ -5353,7 +5361,7 @@ void iam_text_path(ImGuiID path_id, const char* text, iam_text_path_opts const& 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	ImFont* font = opts.font ? opts.font : ImGui::GetFont();
 	float font_size = ImGui::GetFontSize() * opts.font_scale;
-	FontType* baked = GetBakedFont(font, font_size);;
+	FontType* baked = GetBakedFont(font, font_size);
 	if (!baked) return;
 
 	// Calculate text width and starting offset
@@ -5374,7 +5382,7 @@ void iam_text_path(ImGuiID path_id, const char* text, iam_text_path_opts const& 
 
 	// Render each character
 	float current_dist = start_offset;
-	const char* p = text;
+	char const* p = text;
 
 	while (*p) {
 		unsigned int c = 0;
@@ -5451,7 +5459,7 @@ void iam_text_path(ImGuiID path_id, const char* text, iam_text_path_opts const& 
 	}
 }
 
-void iam_text_path_animated(ImGuiID path_id, const char* text, float progress, iam_text_path_opts const& opts) {
+void iam_text_path_animated(ImGuiID path_id, char const* text, float progress, iam_text_path_opts const& opts) {
 	iam_path_detail::path_data* path = iam_path_detail::get_path(path_id);
 	if (!path || path->segments.Size == 0 || !text || !*text) return;
 
@@ -5488,7 +5496,7 @@ void iam_text_path_animated(ImGuiID path_id, const char* text, float progress, i
 
 	// Count characters for progress calculation
 	int char_count = 0;
-	const char* p = text;
+	char const* p = text;
 	while (*p) {
 		unsigned int c = 0;
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
@@ -5586,13 +5594,13 @@ void iam_text_path_animated(ImGuiID path_id, const char* text, float progress, i
 // TEXT STAGGER - Per-character animation effects
 // ============================================================
 
-float iam_text_stagger_width(const char* text, iam_text_stagger_opts const& opts) {
+float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts) {
 	ImFont* font = opts.font ? opts.font : ImGui::GetFont();
 	float font_size = ImGui::GetFontSize() * opts.font_scale;
 	FontType* baked = GetBakedFont(font, font_size);
 
 	float width = 0.0f;
-	const char* p = text;
+	char const* p = text;
 	int char_count = 0;
 
 	while (*p) {
@@ -5600,7 +5608,7 @@ float iam_text_stagger_width(const char* text, iam_text_stagger_opts const& opts
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (glyph) {
 			width += glyph->AdvanceX;
 			if (*(p + char_len)) {
@@ -5614,9 +5622,9 @@ float iam_text_stagger_width(const char* text, iam_text_stagger_opts const& opts
 	return width;
 }
 
-float iam_text_stagger_duration(const char* text, iam_text_stagger_opts const& opts) {
+float iam_text_stagger_duration(char const* text, iam_text_stagger_opts const& opts) {
 	int char_count = 0;
-	const char* p = text;
+	char const* p = text;
 	while (*p) {
 		unsigned int c;
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
@@ -5629,7 +5637,7 @@ float iam_text_stagger_duration(const char* text, iam_text_stagger_opts const& o
 	return (char_count - 1) * opts.char_delay + opts.char_duration;
 }
 
-void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_stagger_opts const& opts) {
+void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_stagger_opts const& opts) {
 	if (!text || !*text) return;
 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -5639,7 +5647,7 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 
 	// Count characters
 	int char_count = 0;
-	const char* p = text;
+	char const* p = text;
 	while (*p) {
 		unsigned int c;
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
@@ -5663,7 +5671,7 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
 			char_idx++;
@@ -5752,7 +5760,7 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 				// Continuous wave effect based on time and character index
 				float wave_offset = char_idx * 0.3f;
 				float wave_time = progress * 6.28318f + wave_offset;
-				offset_y = sinf(wave_time) * opts.effect_intensity * 0.5f;
+				offset_y = ImSin(wave_time) * opts.effect_intensity * 0.5f;
 				alpha = 1.0f;
 				break;
 			}
@@ -5798,8 +5806,8 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 			// Rotated quad
 			float center_x = glyph_x + glyph_width * 0.5f;
 			float center_y = glyph_y + glyph_height * 0.5f;
-			float cos_r = cosf(rotation);
-			float sin_r = sinf(rotation);
+			float cos_r = ImCos(rotation);
+			float sin_r = ImSin(rotation);
 
 			ImVec2 corners[4];
 			float hw = glyph_width * 0.5f;
@@ -5835,7 +5843,7 @@ void iam_text_stagger(ImGuiID id, const char* text, float progress, iam_text_sta
 namespace iam_noise_detail {
 
 // Permutation table for noise
-static const int perm[512] = {
+static int const perm[512] = {
 	151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
 	190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,
 	125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,
@@ -5876,7 +5884,7 @@ inline float grad2d(int hash, float x, float y) {
 
 // Simplex-specific gradient (returns values in [-1, 1] range)
 inline float grad2d_simplex(int hash, float x, float y) {
-	static const float grad2[][2] = {
+	static float const grad2[][2] = {
 		{1, 0}, {-1, 0}, {0, 1}, {0, -1},
 		{0.7071067811865476f, 0.7071067811865476f},
 		{-0.7071067811865476f, 0.7071067811865476f},
@@ -5958,8 +5966,8 @@ float perlin_3d(float x, float y, float z, int seed) {
 
 // Simplex noise 2D
 float simplex_2d(float x, float y, int seed) {
-	const float F2 = 0.366025403f; // (sqrt(3) - 1) / 2
-	const float G2 = 0.211324865f; // (3 - sqrt(3)) / 6
+	float const F2 = 0.366025403f; // (sqrt(3) - 1) / 2
+	float const G2 = 0.211324865f; // (3 - sqrt(3)) / 6
 
 	x += seed * 12.9898f;
 	y += seed * 78.233f;
@@ -6205,7 +6213,7 @@ ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt
 }
 
 // ============================================================
-ImVec4 iam_smooth_noise_vec4(ImGuiID id, ImVec4 amplitude, float speed, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_vec4(id, ImVec4(speed, speed, speed, speed), amplitude, opts, dt);}ImVec4 iam_noise_channel_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt) {	ImVec4 noise = iam_noise_channel_vec4(id, ImVec4(frequency, frequency, frequency, frequency), amplitude, opts, dt);	ImVec4 working;	switch (color_space) {		case iam_col_srgb_linear:			working = iam_detail::color::srgb_to_linear(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::linear_to_srgb(working);		case iam_col_hsv:			working = iam_detail::color::srgb_to_hsv(base_color);			working.x = fmodf(working.x + noise.x + 1.0f, 1.0f);			working.y = ImClamp(working.y + noise.y, 0.0f, 1.0f);			working.z = ImClamp(working.z + noise.z, 0.0f, 1.0f);			working.w = ImClamp(working.w + noise.w, 0.0f, 1.0f);			return iam_detail::color::hsv_to_srgb(working);		case iam_col_oklab:			working = iam_detail::color::srgb_to_oklab(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::oklab_to_srgb(working);		case iam_col_oklch:			working = iam_detail::color::srgb_to_oklch(base_color);			working.x += noise.x; working.y += noise.y;			working.z = fmodf(working.z + noise.z + 360.0f, 360.0f);			working.w += noise.w;			return iam_detail::color::oklch_to_srgb(working);		default:			return ImVec4(ImClamp(base_color.x + noise.x, 0.0f, 1.0f), ImClamp(base_color.y + noise.y, 0.0f, 1.0f), ImClamp(base_color.z + noise.z, 0.0f, 1.0f), ImClamp(base_color.w + noise.w, 0.0f, 1.0f));	}}ImVec4 iam_smooth_noise_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_color(id, base_color, amplitude, speed, opts, color_space, dt);}
+ImVec4 iam_smooth_noise_vec4(ImGuiID id, ImVec4 amplitude, float speed, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_vec4(id, ImVec4(speed, speed, speed, speed), amplitude, opts, dt);}ImVec4 iam_noise_channel_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt) {	ImVec4 noise = iam_noise_channel_vec4(id, ImVec4(frequency, frequency, frequency, frequency), amplitude, opts, dt);	ImVec4 working;	switch (color_space) {		case iam_col_srgb_linear:			working = iam_detail::color::srgb_to_linear(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::linear_to_srgb(working);		case iam_col_hsv:			working = iam_detail::color::srgb_to_hsv(base_color);			working.x = ImFmod(working.x + noise.x + 1.0f, 1.0f);			working.y = ImClamp(working.y + noise.y, 0.0f, 1.0f);			working.z = ImClamp(working.z + noise.z, 0.0f, 1.0f);			working.w = ImClamp(working.w + noise.w, 0.0f, 1.0f);			return iam_detail::color::hsv_to_srgb(working);		case iam_col_oklab:			working = iam_detail::color::srgb_to_oklab(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::oklab_to_srgb(working);		case iam_col_oklch:			working = iam_detail::color::srgb_to_oklch(base_color);			working.x += noise.x; working.y += noise.y;			working.z = ImFmod(working.z + noise.z + 360.0f, 360.0f);			working.w += noise.w;			return iam_detail::color::oklch_to_srgb(working);		default:			return ImVec4(ImClamp(base_color.x + noise.x, 0.0f, 1.0f), ImClamp(base_color.y + noise.y, 0.0f, 1.0f), ImClamp(base_color.z + noise.z, 0.0f, 1.0f), ImClamp(base_color.w + noise.w, 0.0f, 1.0f));	}}ImVec4 iam_smooth_noise_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_color(id, base_color, amplitude, speed, opts, color_space, dt);}
 // STYLE INTERPOLATION - Animate between ImGuiStyle themes
 // ============================================================
 
@@ -6584,8 +6592,8 @@ iam_transform iam_transform::operator*(iam_transform const& other) const {
 	result.rotation = rotation + other.rotation;
 
 	// Apply this transform to other's position
-	float c = cosf(rotation);
-	float s = sinf(rotation);
+	float c = ImCos(rotation);
+	float s = ImSin(rotation);
 	result.position.x = position.x + (other.position.x * c - other.position.y * s) * scale.x;
 	result.position.y = position.y + (other.position.x * s + other.position.y * c) * scale.y;
 
@@ -6594,8 +6602,8 @@ iam_transform iam_transform::operator*(iam_transform const& other) const {
 
 ImVec2 iam_transform::apply(ImVec2 point) const {
 	// Apply scale, then rotation, then translation
-	float c = cosf(rotation);
-	float s = sinf(rotation);
+	float c = ImCos(rotation);
+	float s = ImSin(rotation);
 	float sx = point.x * scale.x;
 	float sy = point.y * scale.y;
 	return ImVec2(
@@ -6617,47 +6625,45 @@ iam_transform iam_transform::inverse() const {
 	result.rotation = -rotation;
 
 	// Inverse translation (apply inverse rotation and scale to negated position)
-	float c = cosf(-rotation);
-	float s = sinf(-rotation);
+	float c = ImCos(-rotation);
+	float s = ImSin(-rotation);
 	result.position.x = (-position.x * c + position.y * s) * result.scale.x;
 	result.position.y = (-position.x * s - position.y * c) * result.scale.y;
 
 	return result;
 }
 
-
-
 // Calculate rotation difference based on mode
 static float angle_diff_mode(float from, float to, int mode) {
 	// Normalize angles to [0, 2pi)
-	float from_n = fmodf(from, TWO_PI);
-	if (from_n < 0) from_n += TWO_PI;
-	float to_n = fmodf(to, TWO_PI);
-	if (to_n < 0) to_n += TWO_PI;
+	float from_n = ImFmod(from, IAM_2PI);
+	if (from_n < 0) from_n += IAM_2PI;
+	float to_n = ImFmod(to, IAM_2PI);
+	if (to_n < 0) to_n += IAM_2PI;
 
 	float diff = to_n - from_n;
 
 	switch (mode) {
 	case iam_rotation_shortest:
-		// Shortest path: wrap to [-pi, pi]
-		if (diff > PI) diff -= TWO_PI;
-		else if (diff < -PI) diff += TWO_PI;
+		// Shortest path: wrap to [-IAM_PI, IAM_PI]
+		if (diff > IAM_PI) diff -= IAM_2PI;
+		else if (diff < -IAM_PI) diff += IAM_2PI;
 		break;
 
 	case iam_rotation_longest:
 		// Longest path: take the long way around
-		if (diff > 0 && diff < PI) diff -= TWO_PI;
-		else if (diff < 0 && diff > -PI) diff += TWO_PI;
+		if (diff > 0 && diff < IAM_PI) diff -= IAM_2PI;
+		else if (diff < 0 && diff > -IAM_PI) diff += IAM_2PI;
 		break;
 
 	case iam_rotation_cw:
 		// Clockwise (positive): ensure diff is positive
-		if (diff < 0) diff += TWO_PI;
+		if (diff < 0) diff += IAM_2PI;
 		break;
 
 	case iam_rotation_ccw:
 		// Counter-clockwise (negative): ensure diff is negative
-		if (diff > 0) diff -= TWO_PI;
+		if (diff > 0) diff -= IAM_2PI;
 		break;
 
 	case iam_rotation_direct:
@@ -6679,12 +6685,14 @@ iam_transform iam_transform_lerp(iam_transform const& a, iam_transform const& b,
 	iam_transform result;
 
 	// Lerp position linearly
-	result.position.x = a.position.x + (b.position.x - a.position.x) * t;
-	result.position.y = a.position.y + (b.position.y - a.position.y) * t;
+	float pos_x = a.position.x + (b.position.x - a.position.x) * t;
+	float pos_y = a.position.y + (b.position.y - a.position.y) * t;
+	result.position = ImVec2(pos_x, pos_y);
 
 	// Lerp scale linearly
-	result.scale.x = a.scale.x + (b.scale.x - a.scale.x) * t;
-	result.scale.y = a.scale.y + (b.scale.y - a.scale.y) * t;
+	float scale_x = a.scale.x + (b.scale.x - a.scale.x) * t;
+	float scale_y = a.scale.y + (b.scale.y - a.scale.y) * t;
+	result.scale = ImVec2(scale_x, scale_y);
 
 	// Lerp rotation using specified mode
 	float diff = angle_diff_mode(a.rotation, b.rotation, rotation_mode);
@@ -6714,8 +6722,8 @@ iam_transform iam_transform_from_matrix(float m00, float m01, float m10, float m
 }
 
 void iam_transform_to_matrix(iam_transform const& t, float* out_matrix) {
-	float c = cosf(t.rotation);
-	float s = sinf(t.rotation);
+	float c = ImCos(t.rotation);
+	float s = ImSin(t.rotation);
 
 	// Row-major: [m00 m01 tx; m10 m11 ty]
 	out_matrix[0] = c * t.scale.x;  // m00
@@ -6739,7 +6747,7 @@ struct transform_chan {
 	unsigned last_seen_frame;
 	unsigned sleeping;
 
-	transform_chan() {
+	transform_chan() : current(), start(), target() {
 		dur = 1e-6f; t = 1.0f; start_time = 0;
 		ez = { iam_ease_out_cubic, 0, 0, 0, 0 };
 		policy = iam_policy_crossfade;
@@ -6789,7 +6797,24 @@ iam_transform iam_tween_transform(ImGuiID id, ImGuiID channel_id, iam_transform 
 
 	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
-	transform_chan* c = g_transform_pool.GetOrAddByKey(key);
+
+	// Check if channel exists first
+	transform_chan* c = g_transform_pool.GetByKey(key);
+	bool is_new = (c == nullptr);
+	if (is_new) {
+		c = g_transform_pool.GetOrAddByKey(key);
+		// Explicitly initialize new channel
+		c->current = target;  // Start at target position (no animation on first frame)
+		c->start = target;
+		c->target = target;
+		c->dur = 1e-6f;
+		c->t = 1.0f;
+		c->start_time = iam_detail::g_global_time;
+		c->ez = ez;
+		c->policy = policy;
+		c->rotation_mode = rotation_mode;
+		c->sleeping = 1;
+	}
 	c->last_seen_frame = g_transform_frame;
 
 	// Fast path: sleeping and target unchanged
@@ -7168,6 +7193,379 @@ void iam_drag_cancel(ImGuiID id) {
 	if (state) {
 		state->is_dragging = false;
 		state->is_snapping = false;
+	}
+}
+
+// ============================================================
+// DEBUG TIMELINE VISUALIZATION
+// ============================================================
+
+void iam_show_debug_timeline(ImGuiID instance_id) {
+	using namespace iam_clip_detail;
+
+	// Brand colors
+	ImU32 const C1 = ZimaBlue;
+	ImU32 const C2 = AgedCopper;
+	ImU32 const C1_dim = IM_COL32(91, 194, 231, 80);
+	ImU32 const C2_dim = IM_COL32(204, 120, 88, 80);
+	ImU32 const C1_highlight = IM_COL32(120, 210, 240, 255);
+	ImU32 const C2_highlight = IM_COL32(230, 140, 110, 255);
+	ImU32 const BG_color = IM_COL32(30, 32, 40, 255);
+	ImU32 const BG_track = IM_COL32(40, 44, 55, 255);
+	ImU32 const grid_color = IM_COL32(60, 65, 80, 255);
+	ImU32 const text_color = IM_COL32(180, 185, 195, 255);
+	ImU32 const playhead_color = IM_COL32(255, 255, 255, 220);
+
+	// Find instance
+	iam_instance_data* inst = find_instance(instance_id);
+	if (!inst) {
+		ImGui::TextDisabled("Instance 0x%08X not found", instance_id);
+		return;
+	}
+
+	// Find clip
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (!clip) {
+		ImGui::TextDisabled("Clip 0x%08X not found", inst->clip_id);
+		return;
+	}
+
+	// Layout constants
+	float const track_height = 20.0f;
+	float const track_spacing = 2.0f;
+	float const header_height = 22.0f;
+	float const time_ruler_height = 36.0f;
+	float const margin = 4.0f;
+	float const label_width = ImGui::CalcTextSize("float").x + 8.0f;
+
+	// Calculate widget dimensions
+	ImVec2 avail = ImGui::GetContentRegionAvail();
+	int num_tracks = clip->iam_tracks.Size;
+	if (num_tracks == 0) num_tracks = 1;  // At least show something
+	float const progress_bar_height = 24.0f;  // Space for progress bar at bottom
+	float total_height = header_height + time_ruler_height + (track_height + track_spacing) * num_tracks + progress_bar_height + margin * 2;
+	float timeline_width = avail.x - label_width - margin * 2;
+	if (timeline_width < 100.0f) timeline_width = 100.0f;
+
+	// Duration, delay, and current time
+	float clip_delay = clip->delay;
+	float duration = clip->duration;
+	if (duration <= 0.0f) duration = 1.0f;
+	float total_duration = clip_delay + duration;  // Total timeline length including delay
+	float current_time = inst->time;
+	float delay_left = inst->delay_left;
+
+	// Get draw list and cursor position
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 cp = ImGui::GetCursorScreenPos();
+
+	// Reserve space
+	ImGui::Dummy(ImVec2(avail.x, total_height));
+
+	// Background
+	dl->AddRectFilled(cp, ImVec2(cp.x + avail.x, cp.y + total_height), BG_color, 4.0f);
+
+	// Header - instance info
+	{
+		char header_text[128];
+		if (delay_left > 0) {
+			snprintf(header_text, sizeof(header_text), "Clip 0x%08X | Delay: %.2fs | %s",
+				inst->clip_id, delay_left,
+				inst->paused ? "PAUSED" : (inst->playing ? "WAITING" : "STOPPED"));
+		} else {
+			snprintf(header_text, sizeof(header_text), "Clip 0x%08X | %.2fs / %.2fs | %s",
+				inst->clip_id, current_time, duration,
+				inst->paused ? "PAUSED" : (inst->playing ? "PLAYING" : "STOPPED"));
+		}
+
+		ImVec2 text_pos = ImVec2(cp.x + margin, cp.y + margin);
+		dl->AddText(text_pos, inst->playing ? C1 : text_color, header_text);
+	}
+
+	// Timeline area origin (after header, tracks start immediately)
+	float timeline_y = cp.y + header_height * 2.0f;
+	float timeline_x = cp.x + label_width + margin;
+
+	// Draw tracks
+	for (int i = 0; i < clip->iam_tracks.Size; i++) {
+		iam_track& track = clip->iam_tracks[i];
+		float track_y = timeline_y + (track_height + track_spacing) * i;
+
+		// Track background
+		dl->AddRectFilled(
+			ImVec2(timeline_x, track_y),
+			ImVec2(timeline_x + timeline_width, track_y + track_height),
+			BG_track, 2.0f
+		);
+
+		// Track label
+		{
+			char const* type_names[] = { "float", "vec2", "vec4", "int", "color", "float_rel", "vec2_rel", "vec4_rel", "color_rel" };
+			char const* type_name = (track.type >= 0 && track.type < 9) ? type_names[track.type] : "?";
+			char label[64];
+			snprintf(label, sizeof(label), "%s", type_name);
+			ImVec2 label_pos = ImVec2(cp.x + margin, track_y + (track_height - ImGui::GetTextLineHeight()) / 2);
+			dl->AddText(label_pos, text_color, label);
+		}
+
+		// Draw keyframe segments
+		bool use_coral = (i % 2 == 1);  // Alternate colors
+		ImU32 segment_color = use_coral ? C2_dim : C1_dim;
+		ImU32 segment_active = use_coral ? C2 : C1;
+		ImU32 segment_highlight = use_coral ? C2_highlight : C1_highlight;
+		ImU32 delay_color = IM_COL32(50, 55, 70, 255);  // Dim color for delay zone
+
+		// Draw delay zone if clip has delay
+		if (clip_delay > 0) {
+			float delay_end_x = timeline_x + (clip_delay / total_duration) * timeline_width;
+			float seg_y1 = track_y + 2;
+			float seg_y2 = track_y + track_height - 2;
+			dl->AddRectFilled(ImVec2(timeline_x, seg_y1), ImVec2(delay_end_x, seg_y2), delay_color, 2.0f);
+			// Draw dashed pattern to indicate waiting period
+			for (float dx = timeline_x + 4; dx < delay_end_x - 4; dx += 12) {
+				dl->AddLine(ImVec2(dx, seg_y1 + 2), ImVec2(dx + 6, seg_y2 - 2), IM_COL32(70, 75, 90, 255), 1.0f);
+			}
+		}
+
+		for (int k = 0; k < track.keys.Size; k++) {
+			keyframe& key = track.keys[k];
+			float key_time = key.time;
+
+			// Find next keyframe time (or end of clip)
+			float next_time = duration;
+			if (k + 1 < track.keys.Size) {
+				next_time = track.keys[k + 1].time;
+			}
+
+			// Segment positions (offset by clip_delay)
+			float x1 = timeline_x + ((clip_delay + key_time) / total_duration) * timeline_width;
+			float x2 = timeline_x + ((clip_delay + next_time) / total_duration) * timeline_width;
+			float seg_y1 = track_y + 2;
+			float seg_y2 = track_y + track_height - 2;
+
+			// Check if current time is within this segment
+			bool is_active = (current_time >= key_time && current_time < next_time) && delay_left <= 0;
+
+			// Draw segment
+			ImU32 seg_col = is_active ? segment_active : segment_color;
+			if (is_active) {
+				// Glow effect for active segment
+				dl->AddRectFilled(
+					ImVec2(x1 - 1, seg_y1 - 1),
+					ImVec2(x2 + 1, seg_y2 + 1),
+					segment_highlight, 3.0f
+				);
+			}
+			dl->AddRectFilled(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), seg_col, 2.0f);
+
+			// Draw keyframe marker (diamond/dot at start)
+			float marker_size = 8.0f;
+			ImVec2 marker_center = ImVec2(x1, track_y + track_height / 2);
+			dl->AddCircleFilled(marker_center, marker_size, is_active ? playhead_color : segment_active);
+
+			// Hover detection - keyframe has priority over segment
+			ImVec2 mouse = ImGui::GetMousePos();
+			float hover_radius = 8.0f;  // Larger hover region for keyframe
+			float dx = mouse.x - marker_center.x;
+			float dy = mouse.y - marker_center.y;
+			bool keyframe_hovered = (dx * dx + dy * dy <= hover_radius * hover_radius);
+
+			if (keyframe_hovered) {
+				// Highlight hovered keyframe
+				dl->AddCircle(marker_center, marker_size + 3.0f, playhead_color, 0, 2.0f);
+
+				ImGui::BeginTooltip();
+				ImGui::Text("Time: %.3fs", key.time);
+
+				// Display value based on type with color preview
+				switch (key.type) {
+					case iam_chan_float:
+						ImGui::Text("Value: %.4f", key.value[0]);
+						// Show as grayscale color
+						{
+							float v = ImClamp(key.value[0], 0.0f, 1.0f);
+							ImVec4 col(v, v, v, 1.0f);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_vec2:
+						ImGui::Text("Value: (%.3f, %.3f)", key.value[0], key.value[1]);
+						// Show XY as RG color
+						{
+							float r = ImClamp(key.value[0], 0.0f, 1.0f);
+							float g = ImClamp(key.value[1], 0.0f, 1.0f);
+							ImVec4 col(r, g, 0.5f, 1.0f);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_vec4:
+						ImGui::Text("Value: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
+						{
+							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+						}
+						break;
+					case iam_chan_int:
+						ImGui::Text("Value: %d", *(int*)&key.value[0]);
+						break;
+					case iam_chan_color:
+						ImGui::Text("Color: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
+						{
+							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							char const* space_names[] = { "sRGB", "Linear", "HSV", "OKLAB", "OKLCH" };
+							if (key.color_space >= 0 && key.color_space < 5) {
+								ImGui::SameLine();
+								ImGui::Text("(%s)", space_names[key.color_space]);
+							}
+						}
+						break;
+					default:
+						ImGui::Text("Value: %.4f", key.value[0]);
+						break;
+				}
+
+				// Easing info
+				char const* ease_names[] = {
+					"linear", "in_quad", "out_quad", "in_out_quad",
+					"in_cubic", "out_cubic", "in_out_cubic",
+					"in_quart", "out_quart", "in_out_quart",
+					"in_quint", "out_quint", "in_out_quint",
+					"in_sine", "out_sine", "in_out_sine",
+					"in_expo", "out_expo", "in_out_expo",
+					"in_circ", "out_circ", "in_out_circ",
+					"in_back", "out_back", "in_out_back",
+					"in_elastic", "out_elastic", "in_out_elastic",
+					"in_bounce", "out_bounce", "in_out_bounce",
+					"steps", "cubic_bezier", "spring", "custom"
+				};
+				if (key.ease_type >= 0 && key.ease_type < IM_ARRAYSIZE(ease_names))
+					ImGui::Text("Ease: %s", ease_names[key.ease_type]);
+
+				ImGui::EndTooltip();
+			}
+			else if (mouse.x >= x1 && mouse.x <= x2 && mouse.y >= seg_y1 && mouse.y <= seg_y2) {
+				// Segment hover tooltip (for easing between keyframes)
+				// Highlight hovered segment
+				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 0, 2.0f);
+
+				ImGui::BeginTooltip();
+				ImGui::Text("Segment: %.2fs - %.2fs", key_time, next_time);
+
+				// Show easing applied from this keyframe to next
+				char const* ease_names[] = {
+					"linear", "in_quad", "out_quad", "in_out_quad",
+					"in_cubic", "out_cubic", "in_out_cubic",
+					"in_quart", "out_quart", "in_out_quart",
+					"in_quint", "out_quint", "in_out_quint",
+					"in_sine", "out_sine", "in_out_sine",
+					"in_expo", "out_expo", "in_out_expo",
+					"in_circ", "out_circ", "in_out_circ",
+					"in_back", "out_back", "in_out_back",
+					"in_elastic", "out_elastic", "in_out_elastic",
+					"in_bounce", "out_bounce", "in_out_bounce",
+					"steps", "cubic_bezier", "spring", "custom"
+				};
+				if (key.ease_type >= 0 && key.ease_type < IM_ARRAYSIZE(ease_names))
+					ImGui::Text("Easing: %s", ease_names[key.ease_type]);
+				else
+					ImGui::Text("Easing: linear");
+
+				if (key.has_bezier)
+					ImGui::Text("Bezier: (%.2f, %.2f, %.2f, %.2f)", key.bezier[0], key.bezier[1], key.bezier[2], key.bezier[3]);
+
+				if (key.is_spring)
+					ImGui::Text("Spring: m=%.1f k=%.1f c=%.1f", key.spring.mass, key.spring.stiffness, key.spring.damping);
+
+				ImGui::EndTooltip();
+			}
+		}
+
+		// Grid lines (every 0.5s or so)
+		float grid_step = 0.5f;
+		if (duration > 10.0f) grid_step = 2.0f;
+		else if (duration > 5.0f) grid_step = 1.0f;
+		for (float t = grid_step; t < duration; t += grid_step) {
+			float x = timeline_x + (t / duration) * timeline_width;
+			dl->AddLine(ImVec2(x, track_y), ImVec2(x, track_y + track_height), grid_color, 0.5f);
+		}
+	}
+
+	// If no tracks, show placeholder
+	if (clip->iam_tracks.Size == 0) {
+		float track_y = timeline_y;
+		dl->AddRectFilled(
+			ImVec2(timeline_x, track_y),
+			ImVec2(timeline_x + timeline_width, track_y + track_height),
+			BG_track, 2.0f
+		);
+		ImVec2 text_pos = ImVec2(timeline_x + 10, track_y + (track_height - ImGui::GetTextLineHeight()) / 2);
+		dl->AddText(text_pos, text_color, "No tracks");
+	}
+
+	// Calculate tracks bottom position
+	float tracks_bottom = timeline_y + (track_height + track_spacing) * ImMax(1, clip->iam_tracks.Size);
+
+	// Time ruler (below tracks)
+	float ruler_y = tracks_bottom + 2;
+	{
+		// Ruler background
+		dl->AddRectFilled(
+			ImVec2(timeline_x, ruler_y),
+			ImVec2(timeline_x + timeline_width, ruler_y + time_ruler_height),
+			BG_track
+		);
+
+		// Time markers (use total_duration to include delay)
+		float time_step = 0.5f;  // Default step
+		if (total_duration > 10.0f) time_step = 2.0f;
+		else if (total_duration > 5.0f) time_step = 1.0f;
+		else if (total_duration < 1.0f) time_step = 0.1f;
+
+		for (float t = 0.0f; t <= total_duration + 0.001f; t += time_step) {
+			float x = timeline_x + (t / total_duration) * timeline_width;
+			dl->AddLine(ImVec2(x, ruler_y), ImVec2(x, ruler_y + 6), grid_color, 1.0f);
+
+			char time_str[16];
+			snprintf(time_str, sizeof(time_str), "%.1fs", t);
+			ImVec2 text_size = ImGui::CalcTextSize(time_str);
+			if (x + text_size.x / 2 < timeline_x + timeline_width) {
+				dl->AddText(ImVec2(x - text_size.x / 2, ruler_y + 6), text_color, time_str);
+			}
+		}
+
+		// Draw delay/animation boundary marker if delay exists
+		if (clip_delay > 0) {
+			float delay_x = timeline_x + (clip_delay / total_duration) * timeline_width;
+			dl->AddLine(ImVec2(delay_x, ruler_y), ImVec2(delay_x, ruler_y + time_ruler_height), C1_dim, 2.0f);
+			ImVec2 text_pos = ImVec2(delay_x + 2, ruler_y + 2);
+			dl->AddText(text_pos, C1_dim, "Delay End");
+		}
+	}
+
+	// Draw playhead (account for delay)
+	{
+		float effective_time;
+		if (delay_left > 0) {
+			// During delay: position within the delay zone
+			effective_time = clip_delay - delay_left;
+		} else {
+			// After delay: position within the animation zone
+			effective_time = clip_delay + current_time;
+		}
+
+		if (effective_time >= 0.0f && effective_time <= total_duration) {
+			float playhead_x = timeline_x + (effective_time / total_duration) * timeline_width;
+			dl->AddLine(ImVec2(playhead_x, timeline_y), ImVec2(playhead_x, ruler_y + time_ruler_height), playhead_color, 2.0f);
+
+			// Playhead triangle at top
+			ImVec2 tri[3] = {
+				ImVec2(playhead_x, timeline_y),
+				ImVec2(playhead_x - 5, timeline_y - 8),
+				ImVec2(playhead_x + 5, timeline_y - 8)
+			};
+			dl->AddTriangleFilled(tri[0], tri[1], tri[2], playhead_color);
+		}
 	}
 }
 

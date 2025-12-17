@@ -1,6 +1,7 @@
 // im_anim.h — Dear ImGui animation helpers.
 // Author: Soufiane KHIAT
 // License: MIT
+// Version: 1.0.0
 //
 // - Channels: float, vec2, vec4, int, color (sRGB/Linear/HSV/OKLAB/OKLCH blending).
 // - Easing: presets + cubicBezier/steps/back/elastic/bounce/spring.
@@ -8,6 +9,13 @@
 // - Resize helpers: relative targets, resolver callback, explicit rebase.
 
 #pragma once
+
+// Version information
+#define IMANIM_VERSION          "1.0.0"
+#define IMANIM_VERSION_NUM      10000   // 1.00.00
+#define IMANIM_VERSION_MAJOR    1
+#define IMANIM_VERSION_MINOR    0
+#define IMANIM_VERSION_PATCH    0
 #include "imgui.h"
 #include <stdint.h>
 #include <math.h>
@@ -18,6 +26,14 @@
 #if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM < 19200 //ImFontBaked and global ImGuiStoragePair were introduced in v19200.
 #define IM_ANIM_PRE_19200_COMPATIBILITY
 #endif
+// PI constants
+#ifndef IAM_PI
+static float const IAM_PI = 3.1415926535897932384626433832795f;
+#endif // !IAM_PI
+#ifndef IAM_2PI
+static float const IAM_2PI = IAM_PI * 2.0f;
+#endif // !IAM_2PI
+
 // ----------------------------------------------------
 // Public enums & descriptors (C-style)
 // ----------------------------------------------------
@@ -93,6 +109,7 @@ iam_ease_fn iam_get_custom_ease(int slot);                                      
 
 // Debug UI
 void iam_show_unified_inspector(bool* p_open = nullptr);                            // Show unified inspector (merges debug window + animation inspector).
+void iam_show_debug_timeline(ImGuiID instance_id);                                  // Show debug timeline for a clip instance.
 
 // Performance Profiler
 void iam_profiler_enable(bool enable);                                              // Enable/disable the performance profiler.
@@ -558,9 +575,9 @@ struct iam_transform {
 	ImVec2 scale;                // Scale (1,1 = identity)
 	float rotation;              // Rotation in radians
 
-	iam_transform() : position(0, 0), rotation(0), scale(1, 1) {}
+	iam_transform() : position(0, 0), scale(1, 1), rotation(0) {}
 	iam_transform(ImVec2 pos, float rot = 0, ImVec2 scl = ImVec2(1, 1))
-		: position(pos), rotation(rot), scale(scl) {}
+		: position(pos), scale(scl), rotation(rot) {}
 
 	// Create identity transform
 	static iam_transform identity() { return iam_transform(); }

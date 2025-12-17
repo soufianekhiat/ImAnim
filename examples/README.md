@@ -1,4 +1,4 @@
-# ImAnim Examples
+# ImAnim Examples (v1.0.0)
 
 Buildable examples demonstrating ImAnim integration with Dear ImGui.
 

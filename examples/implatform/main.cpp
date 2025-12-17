@@ -27,21 +27,17 @@ extern "C" {
 #include <ImPlatform.h>
 
 #include <stdio.h>
+#include "im_anim.h"
 
-// Forward declaration of demo window
-void ImAnimDemoWindow();
+extern void ImAnimDemoWindow();
+extern void ImAnimDocWindow();
+extern void ImAnimUsecaseWindow();
 
 int main()
 {
 	bool bGood;
 
-	// Get DPI scale before creating window (Win32 specific)
-	float dpi_scale = 1.0f;
-#if defined(IM_CURRENT_PLATFORM) && (IM_CURRENT_PLATFORM == IM_PLATFORM_WIN32)
-	dpi_scale = ImPlatform_App_GetDpiScale_Win32();
-#endif
-
-	bGood = ImPlatform_CreateWindow("ImAnim Demo", ImVec2(100, 100), (int)(1280 * dpi_scale), (int)(720 * dpi_scale));
+	bGood = ImPlatform_CreateWindow("ImAnim Demo", ImVec2(100, 100), 1280, 720);
 	if (!bGood)
 	{
 		fprintf(stderr, "ImPlatform: Cannot create window.\n");
@@ -82,9 +78,13 @@ int main()
 
 	ImGui::StyleColorsDark();
 
+	// Setup DPI scaling (Win32 only) - must be after window creation
 	ImGuiStyle& style = ImGui::GetStyle();
+#if defined(IM_CURRENT_PLATFORM) && (IM_CURRENT_PLATFORM == IM_PLATFORM_WIN32)
+	float dpi_scale = ImPlatform_App_GetDpiScale_Win32();
 	style.ScaleAllSizes(dpi_scale);
 	style.FontScaleDpi = dpi_scale;
+#endif
 
 #ifdef IMGUI_HAS_VIEWPORT
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -121,8 +121,18 @@ int main()
 		ImPlatform_PlatformNewFrame();
 		ImGui::NewFrame();
 
+		// >>> ImAnim frame setup (required every frame) <<<
+		iam_update_begin_frame();
+		iam_clip_update(ImGui::GetIO().DeltaTime);
+
 		// Show ImAnim demo window
 		ImAnimDemoWindow();
+
+		// Show Doc
+		ImAnimDocWindow();
+
+		// Show Usecases
+		ImAnimUsecaseWindow();
 
 		// Show ImGui demo window for reference
 		static bool show_imgui_demo = true;
