@@ -5335,7 +5335,7 @@ float iam_text_path_width(char const* text, iam_text_path_opts const& opts) {
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (glyph) {
 			total_width += glyph->AdvanceX;
 			total_width += opts.letter_spacing;
@@ -5389,7 +5389,7 @@ void iam_text_path(ImGuiID path_id, char const* text, iam_text_path_opts const& 
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
 			continue;
@@ -5520,7 +5520,7 @@ void iam_text_path_animated(ImGuiID path_id, char const* text, float progress, i
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
 			char_idx++;
