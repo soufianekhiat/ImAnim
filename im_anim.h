@@ -176,11 +176,12 @@ void   iam_trigger_shake(ImGuiID id);                                           
 float iam_eval_preset(int type, float t);                                           // Evaluate a preset easing function at time t (0-1).
 
 // Tween API - smoothly interpolate values over time
-float  iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate a float value.
-ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate a 2D vector.
-ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate a 4D vector.
-int    iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt);       // Animate an integer value.
-ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt); // Animate a color in specified color space.
+float  iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt, float init_value = 0.0f);	   // Animate a float value.
+ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt, ImVec2 init_value = {0,0});	   // Animate a 2D vector.
+ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt, ImVec4 init_value = {0,0,0,0}); // Animate a 4D vector.
+int    iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt , int init_value = 0);			   // Animate an integer value.
+ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt, ImVec4 init_value = ImVec4(1, 1, 1, 1)); // Animate a color in specified color space.
+ImU32  iam_tween_color(ImGuiID id, ImGuiID channel_id, ImU32 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt, ImU32 init_value = ImU32(4294967295)); // Animate a color in specified color space.
 
 // Resize-friendly helpers
 ImVec2 iam_anchor_size(int space); // Get dimensions of anchor space (window, viewport, etc.).
