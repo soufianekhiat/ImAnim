@@ -11,23 +11,22 @@
 #include <windows.h>
 #endif
 
-#define IMGUI_VERSION_BAKEDFONT 19200 //The version number where ImFontBaked and global ImGuiStoragePair were introduced
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= IMGUI_VERSION_BAKEDFONT
-	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
-#define IMGUI_STORAGE_PAIR ImGuiStoragePair
-typedef ImFontBaked FontType;
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	// ImGuiStoragePair is nested in ImGuiStorage in Pre-1.92.0 versions
 #define IMGUI_STORAGE_PAIR ImGuiStorage::ImGuiStoragePair
 typedef ImFont FontType;
+#else
+	// ImGuiStoragePair is in the global namespace since ImGui version 1.92.0 (19200)
+#define IMGUI_STORAGE_PAIR ImGuiStoragePair
+typedef ImFontBaked FontType;
 #endif
 
 static FontType* GetBakedFont(ImFont* font, float font_size) {
-#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= IMGUI_VERSION_BAKEDFONT
-	return font->GetFontBaked(font_size);
-#else
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	(void)font_size; // suppress unused warning
 	return font;
+#else
+	return font->GetFontBaked(font_size);
 #endif
 }
 
@@ -5336,7 +5335,7 @@ float iam_text_path_width(char const* text, iam_text_path_opts const& opts) {
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
 		if (glyph) {
 			total_width += glyph->AdvanceX;
 			total_width += opts.letter_spacing;
@@ -5390,7 +5389,7 @@ void iam_text_path(ImGuiID path_id, char const* text, iam_text_path_opts const& 
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
 			continue;
@@ -5521,7 +5520,7 @@ void iam_text_path_animated(ImGuiID path_id, char const* text, float progress, i
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
+		const ImFontGlyph* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
 			char_idx++;

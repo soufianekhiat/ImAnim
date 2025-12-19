@@ -22,6 +22,10 @@
 #include <limits.h>
 #include <float.h>
 
+
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM < 19200 //ImFontBaked and global ImGuiStoragePair were introduced in v19200.
+#define IM_ANIM_PRE_19200_COMPATIBILITY
+#endif
 // PI constants
 #ifndef IAM_PI
 static float const IAM_PI = 3.1415926535897932384626433832795f;
