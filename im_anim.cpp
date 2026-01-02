@@ -800,6 +800,15 @@ void iam_gc(unsigned int max_age_frames) {
 	iam_detail::g_color.gc(max_age_frames);
 }
 
+void iam_clear() {
+	// Clean up all pools
+	iam_detail::g_float.pool.Clear();
+	iam_detail::g_vec2.pool.Clear();
+	iam_detail::g_vec4.pool.Clear();
+	iam_detail::g_int.pool.Clear();
+	iam_detail::g_color.pool.Clear();
+}
+
 void iam_reserve(int cap_float, int cap_vec2, int cap_vec4, int cap_int, int cap_color) {
 	if (cap_float  > 0) iam_detail::g_float.pool.Reserve(cap_float);
 	if (cap_vec2   > 0) iam_detail::g_vec2.pool.Reserve(cap_vec2);
