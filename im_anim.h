@@ -92,7 +92,7 @@ typedef float (*iam_ease_fn)(float t);
 // Frame management
 void iam_update_begin_frame();                                                      // Call once per frame before any tweens.
 void iam_gc(unsigned int max_age_frames = 600);                                     // Remove stale tween entries older than max_age_frames.
-void iam_clear();																	// Manually cleanup pools.
+void iam_clear();																	// Manually clean up pools.
 void iam_reserve(int cap_float, int cap_vec2, int cap_vec4, int cap_int, int cap_color); // Pre-allocate pool capacity.
 void iam_set_ease_lut_samples(int count);                                           // Set LUT resolution for parametric easings (default: 256).
 
