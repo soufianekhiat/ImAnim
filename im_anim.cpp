@@ -800,7 +800,7 @@ void iam_gc(unsigned int max_age_frames) {
 	iam_detail::g_color.gc(max_age_frames);
 }
 
-void iam_clear() {
+void iam_pool_clear() {
 	// Clean up all pools
 	iam_detail::g_float.pool.Clear();
 	iam_detail::g_vec2.pool.Clear();

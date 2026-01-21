@@ -182,6 +182,9 @@ iam_reserve(1000, 500, 200, 100, 300);  // float, vec2, vec4, int, color
 
 // Garbage collect stale entries periodically
 iam_gc(600);  // Remove entries older than 600 frames
+
+// Clear all pools immediately (useful for scene transitions, level resets)
+iam_pool_clear();
 ```
 
 ## See Also

@@ -3198,7 +3198,10 @@ static void DocSection_FrameManagement()
 			"\n"
 			"// Garbage collection\n"
 			"iam_gc(600);       // Remove after 600 frames (~10s at 60fps)\n"
-			"iam_clip_gc(600);");
+			"iam_clip_gc(600);\n"
+			"\n"
+			"// Clear all pools (scene transitions, level resets)\n"
+			"iam_pool_clear();");
 
 		ImGui::TreePop();
 	}
