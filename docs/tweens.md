@@ -9,11 +9,11 @@ Tweens are the simplest way to animate in ImAnim. Call a tween function each fra
 ## Channel Types
 
 ```cpp
-float  iam_tween_float(id, channel, target, duration, ease, policy, dt);
-ImVec2 iam_tween_vec2(id, channel, target, duration, ease, policy, dt);
-ImVec4 iam_tween_vec4(id, channel, target, duration, ease, policy, dt);
-int    iam_tween_int(id, channel, target, duration, ease, policy, dt);
-ImVec4 iam_tween_color(id, channel, target_srgb, duration, ease, policy, color_space, dt);
+float  iam_tween_float(id, channel, target, duration, ease, policy, dt, init_value = 0.0f);
+ImVec2 iam_tween_vec2(id, channel, target, duration, ease, policy, dt, init_value = ImVec2(0, 0));
+ImVec4 iam_tween_vec4(id, channel, target, duration, ease, policy, dt, init_value = ImVec4(0, 0, 0, 0));
+int    iam_tween_int(id, channel, target, duration, ease, policy, dt, init_value = 0);
+ImVec4 iam_tween_color(id, channel, target_srgb, duration, ease, policy, color_space, dt, init_value = ImVec4(1, 1, 1, 1));
 ```
 
 ## Parameters
@@ -27,6 +27,7 @@ ImVec4 iam_tween_color(id, channel, target_srgb, duration, ease, policy, color_s
 | `ease` | Easing function (see [Easing](easing.md)) |
 | `policy` | How to handle target changes mid-animation |
 | `dt` | Delta time, usually `ImGui::GetIO().DeltaTime` |
+| `init_value` | Initial value when channel is first created (optional) |
 
 ## Tween Policies
 
@@ -59,6 +60,50 @@ float alpha_queue = iam_tween_float(id, ImHashStr("c"),
     iam_ease_preset(iam_ease_out_cubic),
     iam_policy_queue, dt);
 ```
+
+## Initial Values
+
+By default, tween channels start at 0 (or white for colors). This can cause unwanted animations when the first target differs from the default.
+
+### The Problem
+
+```cpp
+// Toggle button that starts enabled (deserialised state)
+bool enabled = true;  // Loaded from settings
+
+// First frame: animates from 0 -> 600, causing a visual flash!
+float knob_x = iam_tween_float(id, ImHashStr("knob"),
+    enabled ? 600.f : 500.f, 0.5f,
+    ease, iam_policy_crossfade, dt);
+```
+
+### The Solution
+
+Use `init_value` to set the starting value when the channel is first created:
+
+```cpp
+// No unwanted animation - channel starts at the correct position
+float knob_x = iam_tween_float(id, ImHashStr("knob"),
+    enabled ? 600.f : 500.f, 0.5f,
+    ease, iam_policy_crossfade, dt,
+    enabled ? 600.f : 500.f);  // init_value matches initial target
+
+// Same for colors - avoid flash from white
+ImVec4 bg_color = iam_tween_color(id, ImHashStr("bg"),
+    enabled ? green : gray, 0.3f,
+    ease, iam_policy_crossfade, iam_col_oklab, dt,
+    enabled ? green : gray);  // init_value matches initial target
+```
+
+### Default Values
+
+| Type | Default `init_value` |
+|------|---------------------|
+| `float` | `0.0f` |
+| `ImVec2` | `(0, 0)` |
+| `ImVec4` | `(0, 0, 0, 0)` |
+| `int` | `0` |
+| `color` | `(1, 1, 1, 1)` (white) |
 
 ## Color Tweening
 

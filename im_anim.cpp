@@ -923,19 +923,21 @@ float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
 }
 
-float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, float init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
-	// Lazy init: if channel doesn't exist and target is default (0), skip channel creation
-	if (g_lazy_init_enabled) {
-		float_chan* existing = g_float.try_get(key);
-		if (!existing && fabsf(target) <= 1e-6f) {
+	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
+	float_chan* c = g_float.try_get(key);
+	bool const is_new = (c == nullptr);
+
+	if (is_new) {
+		if (g_lazy_init_enabled && fabsf(target - init_value) <= 1e-6f) {
 			return target;
 		}
+		c = g_float.get(key);
+		c->current = c->start = c->target = init_value;
 	}
-
-	float_chan* c = g_float.get(key);
 
 	// Fast path: sleeping and target unchanged
 	if (c->sleeping && fabsf(c->target - target) <= 1e-6f && !c->has_pending) {
@@ -965,18 +967,21 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 	return c->evaluate();
 }
 
-ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, ImVec2 init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
-	if (g_lazy_init_enabled) {
-		vec2_chan* existing = g_vec2.try_get(key);
-		if (!existing && fabsf(target.x) + fabsf(target.y) <= 1e-6f) {
+	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
+	vec2_chan* c = g_vec2.try_get(key);
+	bool const is_new = (c == nullptr);
+
+	if (is_new) {
+		if (g_lazy_init_enabled && fabsf(target.x - init_value.x) + fabsf(target.y - init_value.y) <= 1e-6f) {
 			return target;
 		}
+		c = g_vec2.get(key);
+		c->current = c->start = c->target = init_value;
 	}
-
-	vec2_chan* c = g_vec2.get(key);
 
 	if (c->sleeping && fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) <= 1e-6f && !c->has_pending) {
 		return c->current;
@@ -997,18 +1002,21 @@ ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, 
 	return c->evaluate();
 }
 
-ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, ImVec4 init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
-	if (g_lazy_init_enabled) {
-		vec4_chan* existing = g_vec4.try_get(key);
-		if (!existing && fabsf(target.x)+fabsf(target.y)+fabsf(target.z)+fabsf(target.w) <= 1e-6f) {
+	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
+	vec4_chan* c = g_vec4.try_get(key);
+	bool const is_new = (c == nullptr);
+
+	if (is_new) {
+		if (g_lazy_init_enabled && fabsf(target.x - init_value.x) + fabsf(target.y - init_value.y) + fabsf(target.z - init_value.z) + fabsf(target.w - init_value.w) <= 1e-6f) {
 			return target;
 		}
+		c = g_vec4.get(key);
+		c->current = c->start = c->target = init_value;
 	}
-
-	vec4_chan* c = g_vec4.get(key);
 
 	if (c->sleeping && fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) <= 1e-6f && !c->has_pending) {
 		return c->current;
@@ -1029,18 +1037,21 @@ ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, 
 	return c->evaluate();
 }
 
-int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/) {
+int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, int init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
-	if (g_lazy_init_enabled) {
-		int_chan* existing = g_int.try_get(key);
-		if (!existing && target == 0) {
+	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
+	int_chan* c = g_int.try_get(key);
+	bool const is_new = (c == nullptr);
+
+	if (is_new) {
+		if (g_lazy_init_enabled && target == init_value) {
 			return target;
 		}
+		c = g_int.get(key);
+		c->current = c->start = c->target = init_value;
 	}
-
-	int_chan* c = g_int.get(key);
 
 	if (c->sleeping && c->target == target && !c->has_pending) { return c->current; }
 
@@ -1059,18 +1070,21 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	return c->evaluate();
 }
 
-ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float /*dt*/) {
+ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float /*dt*/, ImVec4 init_value) {
 	using namespace iam_detail;
 	ImGuiID key = make_key(id, channel_id);
 
-	if (g_lazy_init_enabled) {
-		color_chan* existing = g_color.try_get(key);
-		if (!existing && fabsf(target_srgb.x)+fabsf(target_srgb.y)+fabsf(target_srgb.z)+fabsf(target_srgb.w) <= 1e-6f) {
+	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
+	color_chan* c = g_color.try_get(key);
+	bool const is_new = (c == nullptr);
+
+	if (is_new) {
+		if (g_lazy_init_enabled && fabsf(target_srgb.x - init_value.x) + fabsf(target_srgb.y - init_value.y) + fabsf(target_srgb.z - init_value.z) + fabsf(target_srgb.w - init_value.w) <= 1e-6f) {
 			return target_srgb;
 		}
+		c = g_color.get(key);
+		c->current = c->start = c->target = init_value;
 	}
-
-	color_chan* c = g_color.get(key);
 
 	if (c->sleeping && (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w)) <= 1e-6f) { return c->current; }
 
