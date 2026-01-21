@@ -162,7 +162,8 @@ static void DocSection_TweenTypes()
 			"    duration,     // float - seconds to reach target\n"
 			"    ease,         // iam_ease_desc - easing curve\n"
 			"    policy,       // int - iam_policy_crossfade/cut/queue\n"
-			"    dt            // float - delta time\n"
+			"    dt,           // float - delta time\n"
+			"    init_value    // float - initial value (default: 0)\n"
 			");");
 
 		ImGui::Separator();
@@ -201,7 +202,8 @@ static void DocSection_TweenTypes()
 			"ImVec2 pos = iam_tween_vec2(\n"
 			"    id, channel_id,\n"
 			"    ImVec2(target_x, target_y),\n"
-			"    duration, ease, policy, dt\n"
+			"    duration, ease, policy, dt,\n"
+			"    init_value  // ImVec2 - initial value (default: 0,0)\n"
 			");");
 
 		ImGui::Separator();
@@ -257,7 +259,8 @@ static void DocSection_TweenTypes()
 			"ImVec4 rect = iam_tween_vec4(\n"
 			"    id, channel_id,\n"
 			"    ImVec4(x, y, w, h),\n"
-			"    duration, ease, policy, dt\n"
+			"    duration, ease, policy, dt,\n"
+			"    init_value  // ImVec4 - initial value (default: 0,0,0,0)\n"
 			");");
 
 		ImGui::Separator();
@@ -311,7 +314,8 @@ static void DocSection_TweenTypes()
 			"int count = iam_tween_int(\n"
 			"    id, channel_id,\n"
 			"    target_int,\n"
-			"    duration, ease, policy, dt\n"
+			"    duration, ease, policy, dt,\n"
+			"    init_value  // int - initial value (default: 0)\n"
 			");");
 
 		ImGui::Separator();
@@ -355,7 +359,8 @@ static void DocSection_TweenTypes()
 			"    target_color,     // ImVec4 in sRGB\n"
 			"    duration, ease, policy,\n"
 			"    color_space,      // iam_col_srgb/oklab/hsv/etc\n"
-			"    dt\n"
+			"    dt,\n"
+			"    init_value        // ImVec4 - initial value (default: white)\n"
 			");");
 
 		ImGui::Separator();
