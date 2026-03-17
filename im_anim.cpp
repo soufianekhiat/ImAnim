@@ -1474,6 +1474,7 @@ struct iam_clip_data {
 	int						stagger_count;
 	float					stagger_delay;
 	float					stagger_center_bias;
+	int						stagger_ease;		// iam_ease_type for delay distribution
 
 	// Timing variation per loop iteration
 	bool					has_duration_var;
@@ -2281,6 +2282,7 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	clip->stagger_count = 0;
 	clip->stagger_delay = 0;
 	clip->stagger_center_bias = 0;
+	clip->stagger_ease = iam_ease_linear;
 
 	// Reset timing variation
 	clip->has_duration_var = false;
@@ -2681,6 +2683,13 @@ iam_clip& iam_clip::set_stagger(int count, float each_delay, float from_center_b
 	clip->stagger_count = count > 0 ? count : 1;
 	clip->stagger_delay = each_delay;
 	clip->stagger_center_bias = ImClamp(from_center_bias, 0.0f, 1.0f);
+	return *this;
+}
+
+iam_clip& iam_clip::set_stagger_ease(int ease_type) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->stagger_ease = ease_type;
 	return *this;
 }
 
@@ -3444,13 +3453,14 @@ float iam_stagger_delay(ImGuiID clip_id, int index) {
 	float delay = clip->stagger_delay;
 	float bias = clip->stagger_center_bias;
 
-	// Calculate delay based on index and center bias
+	// Calculate raw delay based on index and center bias
 	// bias = 0: start from beginning (index 0 has 0 delay)
 	// bias = 1: start from center (center indices have 0 delay, edges have max delay)
 	// bias = 0.5: mixed
+	float raw_delay = 0.0f;
 	if (bias <= 0.0f) {
 		// Simple linear stagger from start
-		return (float)index * delay;
+		raw_delay = (float)index * delay;
 	} else {
 		// Stagger from center
 		float center = (float)(count - 1) * 0.5f;
@@ -3459,10 +3469,22 @@ float iam_stagger_delay(ImGuiID clip_id, int index) {
 		if (max_dist > 0.0f) {
 			float linear_delay = (float)index * delay;
 			float center_delay = dist_from_center * delay * 2.0f / (float)count * (float)(count - 1);
-			return linear_delay * (1.0f - bias) + center_delay * bias;
+			raw_delay = linear_delay * (1.0f - bias) + center_delay * bias;
 		}
 	}
-	return 0.0f;
+
+	// Apply stagger easing to the delay distribution
+	if (clip->stagger_ease != iam_ease_linear && count > 1) {
+		float max_delay = (float)(count - 1) * delay;
+		if (max_delay > 0.0f) {
+			float t = raw_delay / max_delay;
+			iam_ease_desc ez = { clip->stagger_ease, 0, 0, 0, 0 };
+			t = iam_detail::eval(ez, t);
+			raw_delay = t * max_delay;
+		}
+	}
+
+	return raw_delay;
 }
 
 iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
@@ -3479,6 +3501,113 @@ iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
 		if (inst_data) {
 			inst_data->delay_left = clip->delay + iam_stagger_delay(clip_id, index);
 		}
+	}
+	return inst;
+}
+
+// Grid stagger - 2D grid-based delay distribution
+float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts const& opts) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	int rows = opts.rows > 0 ? opts.rows : 1;
+	int total = cols * rows;
+	if (total <= 1) return opts.start_delay;
+
+	// Determine origin position
+	float origin_col = 0.0f, origin_row = 0.0f;
+	switch (opts.from) {
+		case iam_stagger_first:
+			origin_col = 0.0f;
+			origin_row = 0.0f;
+			break;
+		case iam_stagger_last:
+			origin_col = (float)(cols - 1);
+			origin_row = (float)(rows - 1);
+			break;
+		case iam_stagger_center:
+			origin_col = (float)(cols - 1) * 0.5f;
+			origin_row = (float)(rows - 1) * 0.5f;
+			break;
+		case iam_stagger_index: {
+			int idx = ImClamp(opts.from_index, 0, total - 1);
+			origin_col = (float)(idx % cols);
+			origin_row = (float)(idx / cols);
+			break;
+		}
+		default:
+			break;
+	}
+
+	// Calculate distance based on axis constraint
+	float dist = 0.0f;
+	switch (opts.axis) {
+		case iam_stagger_x:
+			dist = fabsf((float)col - origin_col);
+			break;
+		case iam_stagger_y:
+			dist = fabsf((float)row - origin_row);
+			break;
+		case iam_stagger_both:
+		default:
+			// Euclidean distance for radial effect
+			float dx = (float)col - origin_col;
+			float dy = (float)row - origin_row;
+			dist = ImSqrt(dx * dx + dy * dy);
+			break;
+	}
+
+	// Calculate max possible distance for normalization
+	float max_dist = 0.0f;
+	for (int r = 0; r < rows; r++) {
+		for (int c = 0; c < cols; c++) {
+			float d = 0.0f;
+			switch (opts.axis) {
+				case iam_stagger_x:
+					d = fabsf((float)c - origin_col);
+					break;
+				case iam_stagger_y:
+					d = fabsf((float)r - origin_row);
+					break;
+				case iam_stagger_both:
+				default: {
+					float ddx = (float)c - origin_col;
+					float ddy = (float)r - origin_row;
+					d = ImSqrt(ddx * ddx + ddy * ddy);
+					break;
+				}
+			}
+			if (d > max_dist) max_dist = d;
+		}
+	}
+
+	// Normalize and apply easing
+	float t = (max_dist > 0.0f) ? (dist / max_dist) : 0.0f;
+	if (opts.ease != iam_ease_linear) {
+		iam_ease_desc ez = { opts.ease, 0, 0, 0, 0 };
+		t = iam_detail::eval(ez, t);
+	}
+
+	return opts.start_delay + t * opts.delay * (float)(total - 1);
+}
+
+float iam_stagger_grid_delay_index(int index, iam_stagger_grid_opts const& opts) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	int col = index % cols;
+	int row = index / cols;
+	return iam_stagger_grid_delay(col, row, opts);
+}
+
+iam_instance iam_play_with_delay(ImGuiID clip_id, ImGuiID instance_id, float delay) {
+	using namespace iam_clip_detail;
+	if (!g_clip_sys.initialized) iam_clip_init();
+
+	iam_clip_data* clip = find_clip(clip_id);
+	if (!clip) return iam_instance(0);
+
+	iam_instance inst = iam_play(clip_id, instance_id);
+	if (inst.valid()) {
+		iam_instance_data* inst_data = find_instance(instance_id);
+		if (inst_data)
+			inst_data->delay_left = delay;
 	}
 	return inst;
 }

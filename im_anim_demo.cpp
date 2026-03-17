@@ -2256,6 +2256,8 @@ static const ImGuiID CLIP_VAR_COLOR = 0x1012;
 static const ImGuiID CLIP_VAR_TIMING = 0x1013;
 static const ImGuiID CLIP_VAR_PARTICLES = 0x1014;
 static const ImGuiID CLIP_VAR_RACE = 0x1015;
+static const ImGuiID CLIP_STAGGER_GRID_ADV = 0x1016;
+static const ImGuiID CLIP_STAGGER_EASED = 0x1017;
 
 // Channel IDs for clips
 static const ImGuiID CLIP_CH_ALPHA = 0x2001;
@@ -2431,6 +2433,26 @@ static void InitDemoClips()
 		.key_float(CLIP_CH_SCALE, 0.0f, 0.8f, iam_ease_out_cubic)
 		.key_float(CLIP_CH_SCALE, 0.4f, 1.0f, iam_ease_out_cubic)
 		.set_stagger(5, 0.12f, 0.0f)
+		.end();
+
+	// Clip 14: Grid stagger (advanced) - uses iam_stagger_grid_delay externally
+	iam_clip::begin(CLIP_STAGGER_GRID_ADV)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_SCALE, 0.4f, 1.0f, iam_ease_out_back)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.2f, 1.0f, iam_ease_out_quad)
+		.end();
+
+	// Clip 15: Stagger with eased delays
+	iam_clip::begin(CLIP_STAGGER_EASED)
+		.key_float(CLIP_CH_POS_Y, 0.0f, 30.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_POS_Y, 0.4f, 0.0f, iam_ease_out_cubic)
+		.key_float(CLIP_CH_ALPHA, 0.0f, 0.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_ALPHA, 0.3f, 1.0f, iam_ease_out_quad)
+		.key_float(CLIP_CH_SCALE, 0.0f, 0.5f, iam_ease_out_back)
+		.key_float(CLIP_CH_SCALE, 0.4f, 1.0f, iam_ease_out_back)
+		.set_stagger(10, 0.08f, 0.0f)
+		.set_stagger_ease(iam_ease_in_quad)
 		.end();
 
 	// Color keyframe clips - demonstrating different color spaces
@@ -3275,6 +3297,186 @@ static void ShowClipSystemDemo()
 		}
 
 		ImGui::Dummy(ImVec2(cards_canvas_w, cards_canvas_h));
+		ImGui::TreePop();
+	}
+
+	// Grid stagger (advanced) demo with from/axis controls
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Stagger: Grid (From/Axis)")) {
+		ImGui::TextWrapped(
+			"Grid stagger with origin, axis constraint, and easing options. "
+			"Uses iam_stagger_grid_delay() for 2D distance-based delays.");
+
+		static const int ADV_GRID_COLS = 6;
+		static const int ADV_GRID_ROWS = 4;
+		static const int ADV_GRID_TOTAL = ADV_GRID_COLS * ADV_GRID_ROWS;
+		static ImGuiID adv_grid_inst_ids[ADV_GRID_TOTAL];
+		static bool adv_grid_initialized = false;
+		if (!adv_grid_initialized) {
+			for (int i = 0; i < ADV_GRID_TOTAL; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "adv_grid_%d", i);
+				adv_grid_inst_ids[i] = ImHashStr(buf);
+			}
+			adv_grid_initialized = true;
+		}
+
+		static iam_stagger_grid_opts grid_opts;
+		static bool grid_opts_init = false;
+		if (!grid_opts_init) {
+			grid_opts.cols = ADV_GRID_COLS;
+			grid_opts.rows = ADV_GRID_ROWS;
+			grid_opts.delay = 0.04f;
+			grid_opts_init = true;
+		}
+
+		// Controls
+		ImGui::Combo("From##adv_grid", &grid_opts.from, "First\0Last\0Center\0Index\0");
+		if (grid_opts.from == iam_stagger_index)
+			ImGui::SliderInt("From Index##adv_grid", &grid_opts.from_index, 0, ADV_GRID_TOTAL - 1);
+		ImGui::Combo("Axis##adv_grid", &grid_opts.axis, "Both\0X Only\0Y Only\0");
+
+		static const char* ease_names = "Linear\0In Quad\0Out Quad\0In Out Quad\0In Cubic\0Out Cubic\0In Out Cubic\0";
+		static int ease_values[] = {
+			iam_ease_linear, iam_ease_in_quad, iam_ease_out_quad, iam_ease_in_out_quad,
+			iam_ease_in_cubic, iam_ease_out_cubic, iam_ease_in_out_cubic
+		};
+		static int ease_combo_idx = 0;
+		if (ImGui::Combo("Delay Easing##adv_grid", &ease_combo_idx, ease_names))
+			grid_opts.ease = ease_values[ease_combo_idx];
+
+		ImGui::SliderFloat("Delay##adv_grid", &grid_opts.delay, 0.01f, 0.15f, "%.3f s");
+
+		if (ImGui::Button("Play Grid##adv")) {
+			for (int i = 0; i < ADV_GRID_TOTAL; i++) {
+				float d = iam_stagger_grid_delay_index(i, grid_opts);
+				iam_play_with_delay(CLIP_STAGGER_GRID_ADV, adv_grid_inst_ids[i], d);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##adv_grid")) {
+			for (int i = 0; i < ADV_GRID_TOTAL; i++) {
+				iam_instance inst = iam_get_instance(adv_grid_inst_ids[i]);
+				if (inst.valid()) inst.destroy();
+			}
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 adv_canvas_pos = ImGui::GetCursorScreenPos();
+		float const adv_cell = 40.0f;
+		float const adv_gap = 6.0f;
+		float const adv_w = ADV_GRID_COLS * (adv_cell + adv_gap) + adv_gap;
+		float const adv_h = ADV_GRID_ROWS * (adv_cell + adv_gap) + adv_gap;
+		ImDrawList* adv_dl = ImGui::GetWindowDrawList();
+
+		adv_dl->AddRectFilled(adv_canvas_pos,
+			ImVec2(adv_canvas_pos.x + adv_w, adv_canvas_pos.y + adv_h),
+			IM_COL32(25, 28, 35, 255), 8.0f);
+
+		for (int r = 0; r < ADV_GRID_ROWS; r++) {
+			for (int c = 0; c < ADV_GRID_COLS; c++) {
+				int idx = r * ADV_GRID_COLS + c;
+				iam_instance inst = iam_get_instance(adv_grid_inst_ids[idx]);
+				float alpha = 0.0f, scale = 0.0f;
+				if (inst.valid()) {
+					inst.get_float(CLIP_CH_ALPHA, &alpha);
+					inst.get_float(CLIP_CH_SCALE, &scale);
+				}
+
+				float cx = adv_canvas_pos.x + adv_gap + c * (adv_cell + adv_gap) + adv_cell * 0.5f;
+				float cy = adv_canvas_pos.y + adv_gap + r * (adv_cell + adv_gap) + adv_cell * 0.5f;
+				float half = adv_cell * 0.5f * scale;
+
+				float hue = (float)idx / ADV_GRID_TOTAL;
+				ImVec4 col_rgb;
+				ImGui::ColorConvertHSVtoRGB(hue, 0.6f, 0.9f, col_rgb.x, col_rgb.y, col_rgb.z);
+				int a = (int)(alpha * 255);
+
+				if (scale > 0.01f) {
+					adv_dl->AddRectFilled(
+						ImVec2(cx - half, cy - half), ImVec2(cx + half, cy + half),
+						IM_COL32((int)(col_rgb.x*255), (int)(col_rgb.y*255), (int)(col_rgb.z*255), a),
+						6.0f);
+				}
+			}
+		}
+
+		ImGui::Dummy(ImVec2(adv_w, adv_h));
+		ImGui::TreePop();
+	}
+
+	// Stagger easing demo
+	ApplyOpenAll();
+	if (ImGui::TreeNode("Stagger: Eased Delays")) {
+		ImGui::TextWrapped(
+			"set_stagger_ease() applies an easing curve to the delay distribution. "
+			"Elements near the start appear quickly, then the gaps widen.");
+
+		static const int NUM_EASED = 10;
+		static ImGuiID eased_inst_ids[NUM_EASED];
+		static bool eased_initialized = false;
+		if (!eased_initialized) {
+			for (int i = 0; i < NUM_EASED; i++) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "stagger_eased_%d", i);
+				eased_inst_ids[i] = ImHashStr(buf);
+			}
+			eased_initialized = true;
+		}
+
+		if (ImGui::Button("Play Eased")) {
+			for (int i = 0; i < NUM_EASED; i++) {
+				iam_play_stagger(CLIP_STAGGER_EASED, eased_inst_ids[i], i);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##eased")) {
+			for (int i = 0; i < NUM_EASED; i++) {
+				iam_instance inst = iam_get_instance(eased_inst_ids[i]);
+				if (inst.valid()) inst.destroy();
+			}
+		}
+
+		ImGui::Spacing();
+
+		ImVec2 eased_canvas_pos = ImGui::GetCursorScreenPos();
+		float const eased_canvas_w = 400.0f;
+		float const eased_canvas_h = 60.0f;
+		ImDrawList* eased_dl = ImGui::GetWindowDrawList();
+
+		eased_dl->AddRectFilled(eased_canvas_pos,
+			ImVec2(eased_canvas_pos.x + eased_canvas_w, eased_canvas_pos.y + eased_canvas_h),
+			IM_COL32(25, 25, 30, 255), 8.0f);
+
+		float eased_spacing = eased_canvas_w / (NUM_EASED + 1);
+		float eased_base_y = eased_canvas_pos.y + eased_canvas_h * 0.5f;
+
+		for (int i = 0; i < NUM_EASED; i++) {
+			iam_instance inst = iam_get_instance(eased_inst_ids[i]);
+			float alpha = 0.0f, pos_y = 30.0f, scale = 0.5f;
+			if (inst.valid()) {
+				inst.get_float(CLIP_CH_ALPHA, &alpha);
+				inst.get_float(CLIP_CH_POS_Y, &pos_y);
+				inst.get_float(CLIP_CH_SCALE, &scale);
+			}
+
+			float x = eased_canvas_pos.x + eased_spacing * (i + 1);
+			float y = eased_base_y + pos_y;
+			float radius = 10.0f * scale;
+
+			float hue = 0.55f + 0.15f * (float)i / NUM_EASED; // Blue-to-cyan range
+			ImVec4 col_rgb;
+			ImGui::ColorConvertHSVtoRGB(hue, 0.7f, 0.9f, col_rgb.x, col_rgb.y, col_rgb.z);
+			int a = (int)(alpha * 255);
+
+			if (radius > 0.5f) {
+				eased_dl->AddCircleFilled(ImVec2(x, y), radius,
+					IM_COL32((int)(col_rgb.x*255), (int)(col_rgb.y*255), (int)(col_rgb.z*255), a));
+			}
+		}
+
+		ImGui::Dummy(ImVec2(eased_canvas_w, eased_canvas_h));
 		ImGui::TreePop();
 	}
 
