@@ -4243,6 +4243,8 @@ static void ShowLayeringDemo()
 		float const vis_width = 250.0f;
 		float const text_width = 120.0f;
 		float const row_height = 35.0f;
+		float const margin = 10.0f;
+		float const map = (vis_width - 2 * margin) / 200.0f; // map 0-200 to fill canvas
 		ImVec2 canvas_size(vis_width, row_height * 4 + 20.0f);
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
@@ -4255,20 +4257,20 @@ static void ShowLayeringDemo()
 
 		// Draw individual positions (faded) with labels on right
 		float y_row = canvas_pos.y + row_height * 0.5f + 10.0f;
-		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + 25 + x_a * 0.5f, y_row), 8.0f, IM_COL32(255, 100, 100, 100));
+		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + margin + x_a * map, y_row), 8.0f, IM_COL32(255, 100, 100, 100));
 		draw_list->AddText(ImVec2(canvas_pos.x + vis_width + 10, y_row - 6), IM_COL32(255, 100, 100, 200), "A (right)");
 
 		y_row = canvas_pos.y + row_height * 1.5f + 10.0f;
-		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + 25 + x_b * 0.5f, y_row), 8.0f, IM_COL32(100, 100, 255, 100));
+		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + margin + x_b * map, y_row), 8.0f, IM_COL32(100, 100, 255, 100));
 		draw_list->AddText(ImVec2(canvas_pos.x + vis_width + 10, y_row - 6), IM_COL32(100, 100, 255, 200), "B (left)");
 
 		y_row = canvas_pos.y + row_height * 2.5f + 10.0f;
-		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + 25 + x_c * 0.5f, y_row), 8.0f, IM_COL32(255, 200, 100, 100));
+		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + margin + x_c * map, y_row), 8.0f, IM_COL32(255, 200, 100, 100));
 		draw_list->AddText(ImVec2(canvas_pos.x + vis_width + 10, y_row - 6), IM_COL32(255, 200, 100, 200), "C (bouncy)");
 
 		// Draw blended position (solid)
 		y_row = canvas_pos.y + row_height * 3.5f + 10.0f;
-		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + 25 + blended_x * 0.5f, y_row), 10.0f, IM_COL32(100, 255, 100, 255));
+		draw_list->AddCircleFilled(ImVec2(canvas_pos.x + margin + blended_x * map, y_row), 10.0f, IM_COL32(100, 255, 100, 255));
 		draw_list->AddText(ImVec2(canvas_pos.x + vis_width + 10, y_row - 6), IM_COL32(100, 255, 100, 255), "Blended");
 
 		ImGui::Dummy(ImVec2(vis_width + text_width, canvas_size.y));
@@ -4309,6 +4311,8 @@ static void ShowLayeringDemo()
 
 		ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImVec2 canvas_size(300, 50);
+		float const w_margin = 10.0f;
+		float const w_map = (canvas_size.x - 2 * w_margin) / 200.0f; // map 0-200 to fill canvas
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
 		draw_list->AddRectFilled(canvas_pos,
@@ -4317,12 +4321,12 @@ static void ShowLayeringDemo()
 
 		// Original position
 		draw_list->AddCircle(
-			ImVec2(canvas_pos.x + 50 + x * 0.5f, canvas_pos.y + 25),
+			ImVec2(canvas_pos.x + w_margin + x * w_map, canvas_pos.y + 25),
 			10.0f, IM_COL32(255, 255, 255, 100), 12, 1.0f);
 
 		// Weighted position
 		draw_list->AddCircleFilled(
-			ImVec2(canvas_pos.x + 50 + weighted_x * 0.5f, canvas_pos.y + 25),
+			ImVec2(canvas_pos.x + w_margin + weighted_x * w_map, canvas_pos.y + 25),
 			8.0f, IM_COL32(255, 200, 100, 255));
 
 		ImGui::Dummy(canvas_size);
