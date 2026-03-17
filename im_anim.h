@@ -58,7 +58,9 @@ enum iam_ease_type {
 enum iam_policy {
 	iam_policy_crossfade = 0,	// smooth into new target
 	iam_policy_cut,				// snap to target
-	iam_policy_queue			// queue one pending target
+	iam_policy_queue,			// queue one pending target
+	iam_policy_additive,		// add animated delta to current value
+	iam_policy_multiply			// multiply current value by animated factor
 };
 
 enum iam_color_space {
@@ -921,6 +923,9 @@ struct iam_instance_data;
 // Callback types (use instance ID instead of pointer for safety)
 typedef void (*iam_clip_callback)(ImGuiID inst_id, void* user_data);
 
+// Loop callback (includes the 0-based loop index)
+typedef void (*iam_loop_callback)(ImGuiID inst_id, int loop_index, void* user_data);
+
 // Marker callback (includes marker name/id for identification)
 typedef void (*iam_marker_callback)(ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user_data);
 
@@ -967,6 +972,7 @@ public:
 
 	// Clip options
 	iam_clip& set_loop(bool loop, int direction = iam_dir_normal, int loop_count = -1);
+	iam_clip& set_loop_delay(float delay_seconds);  // Delay between loop iterations
 	iam_clip& set_delay(float delay_seconds);
 	iam_clip& set_stagger(int count, float each_delay, float from_center_bias = 0.0f);
 	iam_clip& set_stagger_ease(int ease_type);  // Ease the delay distribution (default: linear)
@@ -980,6 +986,8 @@ public:
 	iam_clip& on_begin(iam_clip_callback cb, void* user = nullptr);
 	iam_clip& on_update(iam_clip_callback cb, void* user = nullptr);
 	iam_clip& on_complete(iam_clip_callback cb, void* user = nullptr);
+	iam_clip& on_loop(iam_loop_callback cb, void* user = nullptr);    // Callback per loop iteration
+	iam_clip& on_pause(iam_clip_callback cb, void* user = nullptr);   // Callback when paused
 
 	// Finalize the clip
 	void end();
@@ -1004,6 +1012,9 @@ public:
 	void pause();
 	void resume();
 	void stop();
+	void restart();  // Reset to t=0 and start playing (equivalent to stop + play on same clip)
+	void reset();    // Reset to t=0 and re-evaluate tracks, but do not start playing
+	void refresh();  // Re-evaluate all tracks at the current time (re-read current values)
 	void destroy();  // Remove instance from system (valid() will return false after this)
 	void seek(float time);
 	void set_time_scale(float scale);
