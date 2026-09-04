@@ -38,6 +38,10 @@ jobs:
             ninja-build \
             libgl1-mesa-dev \
             libglu1-mesa-dev \
+            libglfw3-dev \
+            libx11-dev \
+            libxfixes-dev \
+            libxss-dev \
             libxrandr-dev \
             libxinerama-dev \
             libxcursor-dev \
@@ -45,6 +49,8 @@ jobs:
             libxext-dev \
             libxtst-dev \
             libwayland-dev \
+            wayland-protocols \
+            libdecor-0-dev \
             libxkbcommon-dev \
             libvulkan-dev \
             vulkan-validationlayers \

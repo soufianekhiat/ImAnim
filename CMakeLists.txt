@@ -14,6 +14,21 @@ project(ImAnim VERSION 2.0.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Apple builds compile the entry point as Objective-C++ (see below). Enabling
+# the language inside the ImPlatform subdirectory does not reach this scope, so
+# it has to happen here or CMAKE_OBJCXX_COMPILE_OBJECT is missing at generate.
+if(APPLE)
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+endif()
+
+# Dear ImGui's GLFW backend calls X11 directly for multi-viewport support.
+# Those symbols are used from an object inside the static ImPlatform library,
+# so they must be resolved again at the executable link line.
+if(UNIX AND NOT APPLE)
+    find_package(X11)
+endif()
+
 option(IMANIM_BUILD_DEMOS "Build the ImAnim demo executables" ON)
 
 # -----------------------------------------------------------------------------
@@ -78,6 +93,10 @@ function(imanim_add_demo TARGET_NAME IMPLATFORM_LIB)
         )
         # Console subsystem: CI needs stderr from the ImPlatform init failures.
         set_target_properties(${TARGET_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+    endif()
+
+    if(UNIX AND NOT APPLE AND X11_FOUND)
+        target_link_libraries(${TARGET_NAME} PRIVATE X11::X11)
     endif()
 
     set_target_properties(${TARGET_NAME} PROPERTIES
