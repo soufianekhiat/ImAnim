@@ -272,6 +272,28 @@ SOURCES += im_anim.cpp
 INCLUDES += -Ipath/to/im_anim
 ```
 
+### Shared library (DLL / .so)
+
+ImAnim links statically by default. To build it as a shared library, define
+`IM_ANIM_API` when compiling the library and again when compiling its users.
+
+```cmake
+add_library(imanim SHARED path/to/im_anim.cpp)
+target_include_directories(imanim PUBLIC path/to/im_anim)
+target_compile_definitions(imanim
+    PRIVATE   "IM_ANIM_API=__declspec(dllexport)"   # building the DLL
+    INTERFACE "IM_ANIM_API=__declspec(dllimport)")  # consuming it
+```
+
+On GCC or Clang built with `-fvisibility=hidden`, use
+`IM_ANIM_API=__attribute__((visibility("default")))` for both sides.
+
+ImAnim keeps its animation pools in globals. Linking it statically into several
+modules gives each module its own independent state, so a tween started in one
+module is invisible to the others. Building it once as a shared library gives
+every module a single shared state, which is usually what a plugin architecture
+wants.
+
 ## Next Steps
 
 - [Quick Start](quickstart.md) - More animation examples
