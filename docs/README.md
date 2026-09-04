@@ -5,6 +5,10 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/soufianekhiat/ImAnim)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
 
+[![Windows](https://github.com/soufianekhiat/ImAnim/actions/workflows/windows.yml/badge.svg)](https://github.com/soufianekhiat/ImAnim/actions/workflows/windows.yml)
+[![Linux](https://github.com/soufianekhiat/ImAnim/actions/workflows/linux.yml/badge.svg)](https://github.com/soufianekhiat/ImAnim/actions/workflows/linux.yml)
+[![macOS](https://github.com/soufianekhiat/ImAnim/actions/workflows/macos.yml/badge.svg)](https://github.com/soufianekhiat/ImAnim/actions/workflows/macos.yml)
+
 ![ImAnimDemo_Hero_1 0 0](https://github.com/user-attachments/assets/a9e7931c-7e31-4585-80dc-9ac93664ec3e)
 
 ImAnim brings modern animation capabilities to ImGui applications. Write smooth UI animations with minimal code.
@@ -106,6 +110,40 @@ make
 cd examples/sdl2_opengl3
 make
 ```
+
+### Cross-platform (CMake)
+
+The CMake build compiles the demo against every backend permutation ImPlatform
+supports, and is what CI runs. It builds ImPlatform from the submodule, so no
+system Dear ImGui is needed.
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target ImAnimDemo_GLFW_Vulkan --parallel
+```
+
+Binaries land in `build/bin/`. Configurations whose dependencies are missing are
+skipped at configure time with a message, so a partial toolchain still builds
+whatever it can.
+
+| Configuration | Windows | Linux | macOS |
+|---------------|:-------:|:-----:|:-----:|
+| `Win32_DX11`    | yes | - | - |
+| `Win32_DX12`    | yes | - | - |
+| `SDL3_DX11`     | yes | - | - |
+| `GLFW_Vulkan`   | yes | yes | yes |
+| `SDL3_Vulkan`   | yes | yes | yes |
+| `GLFW_Metal`    | -   | -   | yes |
+| `SDL3_Metal`    | -   | -   | yes |
+| `Win32_OpenGL3` | yes | -   | -   |
+| `GLFW_OpenGL3`  | -   | yes | yes |
+| `SDL3_OpenGL3`  | -   | yes | -   |
+
+GLFW is deliberately absent from the DirectX rows: it exposes no native window
+handle, so the DirectX backends cannot obtain an `HWND` from it. Vulkan on macOS
+runs through MoltenVK. The Metal configurations currently compile but do not
+run, because `ImPlatform_InitGfxAPI` in ImPlatform's Metal backend still returns
+false pending an `NSWindow` accessor on the GLFW and SDL3 backends.
 
 ## Documentation
 

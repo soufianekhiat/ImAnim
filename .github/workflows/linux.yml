@@ -1,0 +1,84 @@
+name: Linux
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.config }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          # Vulkan is the only API from the requested matrix available on Linux.
+          # DirectX is Windows only, Metal is Apple only.
+          - GLFW_Vulkan
+          - SDL3_Vulkan
+          # OpenGL3 (optional, remove with the matching CMake block)
+          - GLFW_OpenGL3
+          - SDL3_OpenGL3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libxtst-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libvulkan-dev \
+            vulkan-validationlayers \
+            libasound2-dev \
+            libpulse-dev \
+            libudev-dev \
+            libdbus-1-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libegl1-mesa-dev
+
+      - name: Install SDL3
+        if: startsWith(matrix.config, 'SDL3')
+        run: |
+          git clone --depth 1 https://github.com/libsdl-org/SDL.git sdl3-src
+          cmake -S sdl3-src -B sdl3-src/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF
+          cmake --build sdl3-src/build -j"$(nproc)"
+          sudo cmake --install sdl3-src/build
+          sudo ldconfig
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build ${{ matrix.config }}
+        run: cmake --build build --target ImAnimDemo_${{ matrix.config }} --parallel "$(nproc)"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: ImAnimDemo-Linux-${{ matrix.config }}
+          path: build/bin/
+          retention-days: 7
+          if-no-files-found: warn

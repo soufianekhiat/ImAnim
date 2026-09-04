@@ -1,0 +1,90 @@
+name: Windows
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    name: ${{ matrix.config }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          # DirectX. GLFW is absent by design: it exposes no HWND.
+          - Win32_DX11
+          - Win32_DX12
+          - SDL3_DX11
+          # Vulkan
+          - GLFW_Vulkan
+          - SDL3_Vulkan
+          # OpenGL3 (optional, remove with the matching CMake block)
+          - Win32_OpenGL3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install SDL3
+        if: startsWith(matrix.config, 'SDL3')
+        shell: powershell
+        run: |
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $vcpkgRoot) { $vcpkgRoot = "C:\vcpkg" }
+          & "$vcpkgRoot\vcpkg.exe" install sdl3:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg failed to install SDL3" }
+          # CMake reads CMAKE_PREFIX_PATH from the environment, so find_package(SDL3)
+          # picks this up without extra configure arguments.
+          echo "CMAKE_PREFIX_PATH=$vcpkgRoot\installed\x64-windows" >> $env:GITHUB_ENV
+          echo "SDL3_RUNTIME_DLL=$vcpkgRoot\installed\x64-windows\bin\SDL3.dll" >> $env:GITHUB_ENV
+
+      - name: Install Vulkan SDK
+        if: contains(matrix.config, 'Vulkan')
+        shell: powershell
+        run: |
+          $vulkanUrl = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan_sdk.exe?Human=true"
+          for ($i = 1; $i -le 3; $i++) {
+            try {
+              Write-Host "Downloading Vulkan SDK (attempt $i/3)..."
+              Invoke-WebRequest -Uri $vulkanUrl -OutFile VulkanSDK-Installer.exe -TimeoutSec 120
+              break
+            } catch {
+              Write-Host "Download failed: $_"
+              if ($i -eq 3) { throw "Failed to download Vulkan SDK" }
+              Start-Sleep -Seconds 5
+            }
+          }
+          Start-Process -FilePath .\VulkanSDK-Installer.exe `
+            -ArgumentList "--accept-licenses --default-answer --confirm-command install" `
+            -Wait -NoNewWindow
+          $vulkanPath = (Get-ChildItem "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          echo "VULKAN_SDK=$vulkanPath" >> $env:GITHUB_ENV
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build ${{ matrix.config }}
+        run: cmake --build build --config Release --target ImAnimDemo_${{ matrix.config }} --parallel
+
+      - name: Stage runtime dependencies
+        if: startsWith(matrix.config, 'SDL3')
+        shell: powershell
+        run: |
+          if (Test-Path $env:SDL3_RUNTIME_DLL) {
+            Copy-Item $env:SDL3_RUNTIME_DLL "build/bin/Release/" -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: ImAnimDemo-Windows-${{ matrix.config }}
+          path: build/bin/
+          retention-days: 7
+          if-no-files-found: warn

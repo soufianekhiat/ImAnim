@@ -1,0 +1,70 @@
+name: macOS
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    name: ${{ matrix.config }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          # Metal. These compile but do not yet run: ImPlatform_InitGfxAPI in
+          # the Metal backend returns false pending an NSWindow accessor on the
+          # GLFW and SDL3 backends. Compile coverage only, for now.
+          - GLFW_Metal
+          - SDL3_Metal
+          # Vulkan, through MoltenVK.
+          - GLFW_Vulkan
+          - SDL3_Vulkan
+          # OpenGL3 (optional, remove with the matching CMake block)
+          - GLFW_OpenGL3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install glfw ninja
+
+      - name: Install Vulkan (MoltenVK)
+        if: contains(matrix.config, 'Vulkan')
+        run: |
+          brew install molten-vk vulkan-headers vulkan-loader
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
+
+      - name: Install SDL3
+        if: startsWith(matrix.config, 'SDL3')
+        run: |
+          git clone --depth 1 https://github.com/libsdl-org/SDL.git sdl3-src
+          cmake -S sdl3-src -B sdl3-src/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF
+          cmake --build sdl3-src/build -j"$(sysctl -n hw.ncpu)"
+          sudo cmake --install sdl3-src/build
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build ${{ matrix.config }}
+        run: cmake --build build --target ImAnimDemo_${{ matrix.config }} --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: ImAnimDemo-macOS-${{ matrix.config }}
+          path: build/bin/
+          retention-days: 7
+          if-no-files-found: warn

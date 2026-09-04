@@ -20,8 +20,15 @@ extern "C" {
 #define IM_CONFIG_GFX IM_GFX_DIRECTX11
 #endif
 
+// A build system may already pin these on the command line (the CMake build
+// does, one target per configuration). Only fall back to IM_CONFIG_* here.
+#ifndef IM_CURRENT_PLATFORM
 #define IM_CURRENT_PLATFORM IM_CONFIG_PLATFORM
+#endif
+
+#ifndef IM_CURRENT_GFX
 #define IM_CURRENT_GFX IM_CONFIG_GFX
+#endif
 
 #define IMPLATFORM_IMPLEMENTATION
 #include <ImPlatform.h>
