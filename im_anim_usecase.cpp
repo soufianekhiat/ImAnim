@@ -120,8 +120,13 @@ static void ShowUsecase_AnimatedButton()
 		ImU32 fill_color = IM_COL32(91, 194, 231, (int)(fill_alpha * 255));
 		dl->AddRectFilled(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
 			fill_color, 8.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
 			border_color, 8.0f, 0, border);
+#else
+		dl->AddRect(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
+			border_color, 8.0f, border);
+#endif
 
 		const char* label = "Ghost";
 		ImVec2 text_size = ImGui::CalcTextSize(label);
@@ -556,8 +561,13 @@ static void ShowUsecase_CardHover()
 		// Draw card background
 		dl->AddRectFilled(drawn_pos, ImVec2(drawn_pos.x + card_size.x, drawn_pos.y + card_size.y),
 			IM_COL32(45, 48, 58, 255), 8.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(drawn_pos, ImVec2(drawn_pos.x + card_size.x, drawn_pos.y + card_size.y),
 			ImGui::ColorConvertFloat4ToU32(border_color), 8.0f, 0, 1.5f);
+#else
+		dl->AddRect(drawn_pos, ImVec2(drawn_pos.x + card_size.x, drawn_pos.y + card_size.y),
+			ImGui::ColorConvertFloat4ToU32(border_color), 8.0f, 1.5f);
+#endif
 
 		// Draw title
 		ImVec2 title_pos(drawn_pos.x + 16.0f, drawn_pos.y + 20.0f);
@@ -2320,10 +2330,17 @@ static void ShowUsecase_FlipCard()
 
 			// Pattern on back
 			float pattern_offset = half_width * 0.3f;
+#if IMGUI_VERSION_NUM < 19276
 			dl->AddRect(
 				ImVec2(card_min.x + pattern_offset, card_min.y + 20),
 				ImVec2(card_max.x - pattern_offset, card_max.y - 20),
 				IM_COL32(255, 255, 255, 100), 4.0f, 0, 2.0f);
+#else
+			dl->AddRect(
+				ImVec2(card_min.x + pattern_offset, card_min.y + 20),
+				ImVec2(card_max.x - pattern_offset, card_max.y - 20),
+				IM_COL32(255, 255, 255, 100), 4.0f, 2.0f);
+#endif
 
 			// Back text
 			const char* back_text = "SECRET!";
@@ -2668,8 +2685,13 @@ static void ShowUsecase_SearchExpand()
 	// Draw search bar background
 	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + width, bar_pos.y + bar_height),
 		IM_COL32(45, 48, 60, 255), bar_height * 0.5f);
+#if IMGUI_VERSION_NUM < 19276
 	dl->AddRect(bar_pos, ImVec2(bar_pos.x + width, bar_pos.y + bar_height),
 		expanded ? IM_COL32(91, 194, 231, 255) : IM_COL32(70, 75, 90, 255), bar_height * 0.5f, 0, 1.5f);
+#else
+	dl->AddRect(bar_pos, ImVec2(bar_pos.x + width, bar_pos.y + bar_height),
+		expanded ? IM_COL32(91, 194, 231, 255) : IM_COL32(70, 75, 90, 255), bar_height * 0.5f, 1.5f);
+#endif
 
 	// Search icon
 	ImVec2 icon_center(bar_pos.x + 20, bar_pos.y + bar_height * 0.5f);
@@ -2875,7 +2897,11 @@ static void ShowUsecase_CircularProgress()
 
 		// Background ring
 		dl->PathArcTo(center, ring_radius, 0.0f, IM_PI * 2.0f, 32);
+#if IMGUI_VERSION_NUM < 19276
 		dl->PathStroke(IM_COL32(45, 48, 58, 255), 0, ring_thickness);
+#else
+		dl->PathStroke(IM_COL32(45, 48, 58, 255), ring_thickness);
+#endif
 
 		// Progress arc (starting from top, going clockwise)
 		float start_angle = -IM_PI * 0.5f;
@@ -2883,7 +2909,11 @@ static void ShowUsecase_CircularProgress()
 		if (progress_values[i] > 0.01f)
 		{
 			dl->PathArcTo(center, ring_radius, start_angle, end_angle, 32);
+#if IMGUI_VERSION_NUM < 19276
 			dl->PathStroke(colors[i], 0, ring_thickness);
+#else
+			dl->PathStroke(colors[i], ring_thickness);
+#endif
 		}
 
 		// Percentage text
@@ -6172,18 +6202,31 @@ static void ShowUsecase_GlowingBorder()
 	{
 		float layer_size = glow_size * (1.0f + i * 0.3f);
 		float layer_alpha = glow_alpha * (1.0f - i * 0.25f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(
 			ImVec2(pos.x - layer_size, pos.y - layer_size),
 			ImVec2(pos.x + box_size.x + layer_size, pos.y + box_size.y + layer_size),
 			IM_COL32(100, 180, 255, (int)(layer_alpha * 255)),
 			12 * scale + i * 2 * scale, 0, 2.0f + i);
+#else
+		dl->AddRect(
+			ImVec2(pos.x - layer_size, pos.y - layer_size),
+			ImVec2(pos.x + box_size.x + layer_size, pos.y + box_size.y + layer_size),
+			IM_COL32(100, 180, 255, (int)(layer_alpha * 255)),
+			12 * scale + i * 2 * scale, 2.0f + i);
+#endif
 	}
 
 	// Main box
 	dl->AddRectFilled(pos, ImVec2(pos.x + box_size.x, pos.y + box_size.y),
 		IM_COL32(40, 45, 55, 255), 8 * scale);
+#if IMGUI_VERSION_NUM < 19276
 	dl->AddRect(pos, ImVec2(pos.x + box_size.x, pos.y + box_size.y),
 		IM_COL32(100, 180, 255, 255), 8 * scale, 0, 2.0f);
+#else
+	dl->AddRect(pos, ImVec2(pos.x + box_size.x, pos.y + box_size.y),
+		IM_COL32(100, 180, 255, 255), 8 * scale, 2.0f);
+#endif
 
 	// Content
 	const char* text = "Featured Item";
@@ -6296,10 +6339,17 @@ static void ShowUsecase_AnimatedGraphNode()
 			ImVec2(node_pos.x - offset.x, node_pos.y - offset.y),
 			ImVec2(node_pos.x - offset.x + scaled_size.x, node_pos.y - offset.y + scaled_size.y),
 			IM_COL32(50, 55, 65, 255), 6 * scale);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(
 			ImVec2(node_pos.x - offset.x, node_pos.y - offset.y),
 			ImVec2(node_pos.x - offset.x + scaled_size.x, node_pos.y - offset.y + scaled_size.y),
 			nodes[i].color, 6 * scale, 0, 2.0f);
+#else
+		dl->AddRect(
+			ImVec2(node_pos.x - offset.x, node_pos.y - offset.y),
+			ImVec2(node_pos.x - offset.x + scaled_size.x, node_pos.y - offset.y + scaled_size.y),
+			nodes[i].color, 6 * scale, 2.0f);
+#endif
 
 		// Label
 		ImVec2 text_size = ImGui::CalcTextSize(nodes[i].label);
@@ -6743,7 +6793,11 @@ static void ShowUsecase_DownloadProgressButton()
 		float start_angle = -3.14159f * 0.5f;
 		float end_angle = start_angle + progress * 3.14159f * 2.0f;
 		dl->PathArcTo(center, 15 * scale, start_angle, end_angle, 32);
+#if IMGUI_VERSION_NUM < 19276
 		dl->PathStroke(IM_COL32(255, 255, 255, 255), 0, 3 * scale);
+#else
+		dl->PathStroke(IM_COL32(255, 255, 255, 255), 3 * scale);
+#endif
 
 		char pct[8];
 		snprintf(pct, sizeof(pct), "%.0f%%", progress * 100);
@@ -6820,7 +6874,11 @@ static void ShowUsecase_SubmitButtonStates()
 		// Spinner
 		float r = 10 * scale;
 		dl->PathArcTo(center, r, spinner_angle, spinner_angle + 4.0f, 16);
+#if IMGUI_VERSION_NUM < 19276
 		dl->PathStroke(IM_COL32(255, 255, 255, 255), 0, 2 * scale);
+#else
+		dl->PathStroke(IM_COL32(255, 255, 255, 255), 2 * scale);
+#endif
 	}
 	else
 	{
@@ -7819,7 +7877,11 @@ static void ShowUsecase_PullToRefresh()
 		{
 			// Spinning
 			dl->PathArcTo(ind_center, 10 * scale, refresh_angle, refresh_angle + 4.0f, 16);
+#if IMGUI_VERSION_NUM < 19276
 			dl->PathStroke(IM_COL32(100, 150, 255, 255), 0, 2 * scale);
+#else
+			dl->PathStroke(IM_COL32(100, 150, 255, 255), 2 * scale);
+#endif
 		}
 		else
 		{
@@ -7888,7 +7950,11 @@ static void ShowUsecase_DataFetchStates()
 	{
 		// Spinner
 		dl->PathArcTo(center, 15 * scale, spinner_angle, spinner_angle + 4.0f, 16);
+#if IMGUI_VERSION_NUM < 19276
 		dl->PathStroke(IM_COL32(100, 150, 255, 255), 0, 3 * scale);
+#else
+		dl->PathStroke(IM_COL32(100, 150, 255, 255), 3 * scale);
+#endif
 		dl->AddText(ImVec2(center.x - 30 * scale, center.y + 25 * scale), IM_COL32(150, 150, 160, 255), "Loading...");
 	}
 	else
@@ -8515,8 +8581,13 @@ static void ShowUsecase_SearchInput()
 
 		dl->AddRectFilled(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
 			IM_COL32(40, 45, 55, (int)(240 * picker_anim)), 20 * scale * picker_anim);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
 			IM_COL32(80, 85, 95, (int)(200 * picker_anim)), 20 * scale * picker_anim, 0, 1.5f * scale);
+#else
+		dl->AddRect(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
+			IM_COL32(80, 85, 95, (int)(200 * picker_anim)), 20 * scale * picker_anim, 1.5f * scale);
+#endif
 
 		// Draw reaction options
 		for (int i = 0; i < 5; i++)
@@ -8752,8 +8823,13 @@ static void ShowUsecase_ProductCard()
 	{
 		float pulse = iam_oscillate(ImGui::GetID("pulse"), 1.0f, 1.0f, 0, 0.0f, dt);
 		pulse = pulse * 0.5f + 0.5f;  // Convert -1..1 to 0..1
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
 			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 24 * scale, 0, 6 * scale);
+#else
+		dl->AddRect(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
+			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 24 * scale, 6 * scale);
+#endif
 	}
 
 	// Song info

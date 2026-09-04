@@ -3492,10 +3492,17 @@ static void DocSection_PerAxisEasing()
 			ImVec2(canvas_pos.x + swatch_margin, canvas_pos.y + swatch_margin),
 			ImVec2(canvas_pos.x + swatch_margin + swatch_size, canvas_pos.y + swatch_margin + swatch_size),
 			swatch_col, 8.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(
 			ImVec2(canvas_pos.x + swatch_margin, canvas_pos.y + swatch_margin),
 			ImVec2(canvas_pos.x + swatch_margin + swatch_size, canvas_pos.y + swatch_margin + swatch_size),
 			IM_COL32(255, 255, 255, 100), 8.0f, 0, 2.0f);
+#else
+		dl->AddRect(
+			ImVec2(canvas_pos.x + swatch_margin, canvas_pos.y + swatch_margin),
+			ImVec2(canvas_pos.x + swatch_margin + swatch_size, canvas_pos.y + swatch_margin + swatch_size),
+			IM_COL32(255, 255, 255, 100), 8.0f, 2.0f);
+#endif
 
 		// Draw individual channel bars (scaled up)
 		float bar_x = canvas_pos.x + swatch_margin + swatch_size + 30.0f;
@@ -4175,7 +4182,11 @@ static void DocSection_ClipCallbacks()
 		// Begin box
 		ImU32 col_begin = IM_COL32(100 + (int)(155 * cb_state.begin_flash), 60, 60, 255);
 		dl->AddRectFilled(box_begin, ImVec2(box_begin.x + box_w, box_begin.y + box_h), col_begin, 6.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(box_begin, ImVec2(box_begin.x + box_w, box_begin.y + box_h), IM_COL32(200, 100, 100, 255), 6.0f, 0, 2.0f);
+#else
+		dl->AddRect(box_begin, ImVec2(box_begin.x + box_w, box_begin.y + box_h), IM_COL32(200, 100, 100, 255), 6.0f, 2.0f);
+#endif
 		dl->AddText(font, font_size * 1.1f, ImVec2(box_begin.x + 20, box_begin.y + 14), IM_COL32_WHITE, "on_begin");
 		char buf[32];
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.begin_count);
@@ -4184,7 +4195,11 @@ static void DocSection_ClipCallbacks()
 		// Update box
 		ImU32 col_update = IM_COL32(60, 100 + (int)(155 * cb_state.update_flash), 60, 255);
 		dl->AddRectFilled(box_update, ImVec2(box_update.x + box_w, box_update.y + box_h), col_update, 6.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(box_update, ImVec2(box_update.x + box_w, box_update.y + box_h), IM_COL32(100, 200, 100, 255), 6.0f, 0, 2.0f);
+#else
+		dl->AddRect(box_update, ImVec2(box_update.x + box_w, box_update.y + box_h), IM_COL32(100, 200, 100, 255), 6.0f, 2.0f);
+#endif
 		dl->AddText(font, font_size * 1.1f, ImVec2(box_update.x + 20, box_update.y + 14), IM_COL32_WHITE, "on_update");
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.update_count);
 		dl->AddText(font, font_size, ImVec2(box_update.x + 20, box_update.y + 42), IM_COL32(220, 220, 220, 255), buf);
@@ -4192,7 +4207,11 @@ static void DocSection_ClipCallbacks()
 		// Complete box
 		ImU32 col_complete = IM_COL32(60, 60, 100 + (int)(155 * cb_state.complete_flash), 255);
 		dl->AddRectFilled(box_complete, ImVec2(box_complete.x + box_w, box_complete.y + box_h), col_complete, 6.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(box_complete, ImVec2(box_complete.x + box_w, box_complete.y + box_h), IM_COL32(100, 100, 200, 255), 6.0f, 0, 2.0f);
+#else
+		dl->AddRect(box_complete, ImVec2(box_complete.x + box_w, box_complete.y + box_h), IM_COL32(100, 100, 200, 255), 6.0f, 2.0f);
+#endif
 		dl->AddText(font, font_size * 1.1f, ImVec2(box_complete.x + 20, box_complete.y + 14), IM_COL32_WHITE, "on_complete");
 		snprintf(buf, sizeof(buf), "Count: %d", cb_state.complete_count);
 		dl->AddText(font, font_size, ImVec2(box_complete.x + 20, box_complete.y + 42), IM_COL32(220, 220, 220, 255), buf);
@@ -5786,9 +5805,15 @@ static void DocSection_TransformMatrix()
 
 		// Draw original unit square (before transform)
 		float half = 30.0f;
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(ImVec2(center.x - half, center.y - half),
 			ImVec2(center.x + half, center.y + half),
 			IM_COL32(100, 100, 100, 128), 0.0f, 0, 1.0f);
+#else
+		dl->AddRect(ImVec2(center.x - half, center.y - half),
+			ImVec2(center.x + half, center.y + half),
+			IM_COL32(100, 100, 100, 128), 0.0f, 1.0f);
+#endif
 
 		// Draw transformed square
 		ImVec2 corners[4] = {

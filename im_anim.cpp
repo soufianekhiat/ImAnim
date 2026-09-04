@@ -7470,7 +7470,11 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 			else if (mouse.x >= x1 && mouse.x <= x2 && mouse.y >= seg_y1 && mouse.y <= seg_y2) {
 				// Segment hover tooltip (for easing between keyframes)
 				// Highlight hovered segment
+#if IMGUI_VERSION_NUM < 19276
 				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 0, 2.0f);
+#else
+				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 2.0f);
+#endif
 
 				ImGui::BeginTooltip();
 				ImGui::Text("Segment: %.2fs - %.2fs", key_time, next_time);

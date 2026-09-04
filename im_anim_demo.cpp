@@ -65,7 +65,11 @@ static void DrawRotatedRect(ImDrawList* dl, ImVec2 ctr, ImVec2 size, float angle
 	}
 	dl->AddConvexPolyFilled(pts, 4, fill);
 	if ((border & IM_COL32_A_MASK) > 0)
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddPolyline(pts, 4, border, ImDrawFlags_Closed, 1.5f);
+#else
+		dl->AddPolyline(pts, 4, border, 1.5f, ImDrawFlags_Closed);
+#endif
 }
 
 // Helper: Draw a rotated ellipse
@@ -3261,10 +3265,17 @@ static void ShowClipSystemDemo()
 					IM_COL32(250, 250, 245, a), 6.0f);
 
 				// Card border
+#if IMGUI_VERSION_NUM < 19276
 				cards_draw_list->AddRect(
 					ImVec2(x + offset_x, y + offset_y),
 					ImVec2(x + offset_x + scaled_w, y + offset_y + scaled_h),
 					IM_COL32(180, 180, 175, a), 6.0f, 0, 1.5f);
+#else
+				cards_draw_list->AddRect(
+					ImVec2(x + offset_x, y + offset_y),
+					ImVec2(x + offset_x + scaled_w, y + offset_y + scaled_h),
+					IM_COL32(180, 180, 175, a), 6.0f, 1.5f);
+#endif
 
 				// Suit text
 				ImU32 text_col = (card_colors[i] & 0x00FFFFFF) | ((a & 0xFF) << 24);
@@ -4746,13 +4757,23 @@ static void ShowDrawListDemo()
 		// Glow effect
 		for (int g = 3; g >= 1; --g) {
 			int glow_alpha = (int)(pulse * 30.0f / g);
+#if IMGUI_VERSION_NUM < 19276
 			draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 50, 80, glow_alpha),
 				ImDrawFlags_Closed, 2.0f + g * 3.0f);
+#else
+			draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 50, 80, glow_alpha),
+				2.0f + g * 3.0f, ImDrawFlags_Closed);
+#endif
 		}
 
 		draw_list->AddConvexPolyFilled(heart_points, HEART_SEGMENTS, IM_COL32(180, 30, 60, heart_alpha));
+#if IMGUI_VERSION_NUM < 19276
 		draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 80, 100, 255),
 			ImDrawFlags_Closed, 2.0f);
+#else
+		draw_list->AddPolyline(heart_points, HEART_SEGMENTS, IM_COL32(255, 80, 100, 255),
+			2.0f, ImDrawFlags_Closed);
+#endif
 
 		// ECG Line (right side)
 		float ecg_left = canvas_pos.x + 160.0f;
@@ -4794,7 +4815,11 @@ static void ShowDrawListDemo()
 			ecg_pts[i] = ImVec2(ecg_left + x_norm * ecg_width, ecg_center_y - y);
 		}
 
+#if IMGUI_VERSION_NUM < 19276
 		draw_list->AddPolyline(ecg_pts, ECG_POINTS, IM_COL32(80, 255, 80, 255), 0, 2.0f);
+#else
+		draw_list->AddPolyline(ecg_pts, ECG_POINTS, IM_COL32(80, 255, 80, 255), 2.0f);
+#endif
 
 		// Scanning dot
 		float dot_x = ecg_left + beat_phase * ecg_width;
@@ -7371,7 +7396,11 @@ static void ShowStressTestDemo()
 						int g = (int)(ImClamp(val.y, 0.0f, 1.0f) * 255);
 						int b = (int)(ImClamp(val.z, 0.0f, 1.0f) * 255);
 						dl->AddRectFilled(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(r, g, b, 255));
+#if IMGUI_VERSION_NUM < 19276
 						dl->AddRect(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(255, 255, 255, 100), 0.0f, 0, 1.0f);
+#else
+						dl->AddRect(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(255, 255, 255, 100), 0.0f, 1.0f);
+#endif
 						break;
 					}
 					case 4: // Mixed - different visualization per cell type
