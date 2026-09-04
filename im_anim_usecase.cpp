@@ -7497,10 +7497,13 @@ static void ShowUsecase_InlineConfirmation()
 	float cancel_btn_width = cancel_size.x + padding * 2;
 	float expanded_total = confirm_btn_width + gap + cancel_btn_width;
 
-	// Width animation
+	// Width animation.
+	// Seed the channel with the collapsed width. Without an init_value the tween
+	// starts from 0 on the first frame, and InvisibleButton asserts on a zero size.
 	float target_width = confirming ? expanded_total : collapsed_width;
 	float animated_width = iam_tween_float(ImGui::GetID("conf_w"), ImHashStr("cw"),
-		target_width, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
+		target_width, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt,
+		collapsed_width);
 
 	// Background
 	ImU32 bg_col = confirming ? IM_COL32(180, 60, 60, 255) : IM_COL32(60, 65, 75, 255);
