@@ -967,6 +967,14 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 		else if (policy == iam_policy_cut) {
 			c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1;
 		}
+		else if (policy == iam_policy_additive) {
+			c->evaluate();
+			c->set(c->current + target, dur, ez, policy);
+		}
+		else if (policy == iam_policy_multiply) {
+			c->evaluate();
+			c->set(c->current * target, dur, ez, policy);
+		}
 		else {
 			c->evaluate();  // Update current before setting new target
 			c->set(target, dur, ez, policy);
@@ -1005,6 +1013,8 @@ ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, 
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else if (policy == iam_policy_additive) { c->evaluate(); c->set(ImVec2(c->current.x + target.x, c->current.y + target.y), dur, ez, policy); }
+		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(ImVec2(c->current.x * target.x, c->current.y * target.y), dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1040,6 +1050,8 @@ ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, 
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else if (policy == iam_policy_additive) { c->evaluate(); c->set(ImVec4(c->current.x+target.x, c->current.y+target.y, c->current.z+target.z, c->current.w+target.w), dur, ez, policy); }
+		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(ImVec4(c->current.x*target.x, c->current.y*target.y, c->current.z*target.z, c->current.w*target.w), dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1073,6 +1085,8 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
+		else if (policy == iam_policy_additive) { c->evaluate(); c->set(c->current + target, dur, ez, policy); }
+		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(c->current * target, dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1105,6 +1119,16 @@ ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float
 	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || anim_complete;
 	if (change) {
 		if (policy == iam_policy_cut) { c->current = c->start = c->target = target_srgb; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->space = color_space; c->sleeping = 1; }
+		else if (policy == iam_policy_additive) {
+			c->evaluate();
+			ImVec4 add_target(c->current.x+target_srgb.x, c->current.y+target_srgb.y, c->current.z+target_srgb.z, c->current.w+target_srgb.w);
+			c->set(add_target, dur, ez, policy, color_space);
+		}
+		else if (policy == iam_policy_multiply) {
+			c->evaluate();
+			ImVec4 mul_target(c->current.x*target_srgb.x, c->current.y*target_srgb.y, c->current.z*target_srgb.z, c->current.w*target_srgb.w);
+			c->set(mul_target, dur, ez, policy, color_space);
+		}
 		else { c->evaluate(); c->set(target_srgb, dur, ez, policy, color_space); }
 	}
 	return c->evaluate();
@@ -1450,13 +1474,20 @@ struct iam_clip_data {
 	// Timeline markers
 	ImVector<iam_clip_detail::iam_marker>	markers;
 
+	// Loop delay
+	float					loop_delay;		// Delay between loop iterations (seconds)
+
 	// Callbacks
 	iam_clip_callback		cb_begin;
 	iam_clip_callback		cb_update;
 	iam_clip_callback		cb_complete;
+	iam_clip_callback		cb_pause;
+	iam_loop_callback		cb_loop;
 	void*					cb_begin_user;
 	void*					cb_update_user;
 	void*					cb_complete_user;
+	void*					cb_pause_user;
+	void*					cb_loop_user;
 
 	// Build-time state
 	ImVector<iam_clip_detail::keyframe>	build_keys;
@@ -1474,6 +1505,7 @@ struct iam_clip_data {
 	int						stagger_count;
 	float					stagger_delay;
 	float					stagger_center_bias;
+	int						stagger_ease;		// iam_ease_type for delay distribution
 
 	// Timing variation per loop iteration
 	bool					has_duration_var;
@@ -1484,8 +1516,10 @@ struct iam_clip_data {
 	iam_variation_float		timescale_var;
 
 	iam_clip_data() : id(0), delay(0), duration(0), loop_count(0), direction(iam_dir_normal),
-		cb_begin(nullptr), cb_update(nullptr), cb_complete(nullptr),
+		loop_delay(0),
+		cb_begin(nullptr), cb_update(nullptr), cb_complete(nullptr), cb_pause(nullptr), cb_loop(nullptr),
 		cb_begin_user(nullptr), cb_update_user(nullptr), cb_complete_user(nullptr),
+		cb_pause_user(nullptr), cb_loop_user(nullptr),
 		build_time_offset(0), stagger_count(0), stagger_delay(0), stagger_center_bias(0),
 		has_duration_var(false), has_delay_var(false), has_timescale_var(false) {
 		memset(&duration_var, 0, sizeof(duration_var));
@@ -2281,6 +2315,13 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	clip->stagger_count = 0;
 	clip->stagger_delay = 0;
 	clip->stagger_center_bias = 0;
+	clip->stagger_ease = iam_ease_linear;
+	clip->loop_delay = 0;
+	clip->cb_begin = nullptr;  clip->cb_begin_user = nullptr;
+	clip->cb_update = nullptr; clip->cb_update_user = nullptr;
+	clip->cb_complete = nullptr; clip->cb_complete_user = nullptr;
+	clip->cb_loop = nullptr;   clip->cb_loop_user = nullptr;
+	clip->cb_pause = nullptr;  clip->cb_pause_user = nullptr;
 
 	// Reset timing variation
 	clip->has_duration_var = false;
@@ -2684,6 +2725,13 @@ iam_clip& iam_clip::set_stagger(int count, float each_delay, float from_center_b
 	return *this;
 }
 
+iam_clip& iam_clip::set_stagger_ease(int ease_type) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->stagger_ease = ease_type;
+	return *this;
+}
+
 iam_clip& iam_clip::set_duration_var(iam_variation_float const& var) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
@@ -2729,6 +2777,29 @@ iam_clip& iam_clip::on_complete(iam_clip_callback cb, void* user) {
 	if (!clip) return *this;
 	clip->cb_complete = cb;
 	clip->cb_complete_user = user;
+	return *this;
+}
+
+iam_clip& iam_clip::on_loop(iam_loop_callback cb, void* user) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->cb_loop = cb;
+	clip->cb_loop_user = user;
+	return *this;
+}
+
+iam_clip& iam_clip::on_pause(iam_clip_callback cb, void* user) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->cb_pause = cb;
+	clip->cb_pause_user = user;
+	return *this;
+}
+
+iam_clip& iam_clip::set_loop_delay(float delay_seconds) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	clip->loop_delay = delay_seconds;
 	return *this;
 }
 
@@ -2849,8 +2920,13 @@ bool iam_instance::valid() const {
 }
 
 void iam_instance::pause() {
+	using namespace iam_clip_detail;
 	iam_instance_data* inst = get_instance_data(m_inst_id);
-	if (inst) inst->paused = true;
+	if (!inst) return;
+	inst->paused = true;
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (clip && clip->cb_pause)
+		clip->cb_pause(inst->inst_id, clip->cb_pause_user);
 }
 
 void iam_instance::resume() {
@@ -2861,6 +2937,64 @@ void iam_instance::resume() {
 void iam_instance::stop() {
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (inst) { inst->playing = false; inst->time = 0; }
+}
+
+void iam_instance::restart() {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return;
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (!clip) return;
+
+	inst->time = 0.0f;
+	inst->delay_left = clip->delay;
+	inst->playing = true;
+	inst->paused = false;
+	inst->begin_called = false;
+	inst->dir_sign = (clip->direction == iam_dir_reverse) ? -1 : 1;
+	inst->loops_left = clip->loop_count;
+	inst->last_seen_frame = g_clip_sys.frame_counter;
+	inst->prev_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
+	inst->markers_triggered.resize(clip->markers.Size);
+	for (int m = 0; m < inst->markers_triggered.Size; m++)
+		inst->markers_triggered[m] = false;
+	inst->chain_next_clip_id = 0;
+	inst->chain_next_inst_id = 0;
+	inst->chain_delay = 0;
+	inst->current_loop = 0;
+	inst->var_rng_state = 12345 + m_inst_id;
+
+	float initial_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
+	for (int tr = 0; tr < clip->iam_tracks.Size; ++tr)
+		eval_iam_track(clip->iam_tracks[tr], initial_time, inst);
+}
+
+void iam_instance::reset() {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return;
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (!clip) return;
+
+	float initial_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
+	inst->time = 0.0f;
+	inst->playing = false;
+	inst->paused = false;
+	inst->delay_left = 0.0f;
+
+	for (int tr = 0; tr < clip->iam_tracks.Size; ++tr)
+		eval_iam_track(clip->iam_tracks[tr], initial_time, inst);
+}
+
+void iam_instance::refresh() {
+	using namespace iam_clip_detail;
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return;
+	iam_clip_data* clip = find_clip(inst->clip_id);
+	if (!clip) return;
+
+	for (int tr = 0; tr < clip->iam_tracks.Size; ++tr)
+		eval_iam_track(clip->iam_tracks[tr], inst->time, inst);
 }
 
 void iam_instance::destroy() {
@@ -3256,15 +3390,25 @@ void iam_clip_update(float dt) {
 			// Reset prev_time to avoid triggering all markers at once after loop
 			inst->prev_time = (inst->dir_sign > 0) ? 0.0f : dur;
 
+			// Fire on_loop callback
+			if (clip->cb_loop) {
+				clip->cb_loop(inst->inst_id, inst->current_loop, clip->cb_loop_user);
+			}
+
+			// Apply loop delay (fixed delay between iterations)
+			if (clip->loop_delay > 0.0f) {
+				inst->delay_left += clip->loop_delay;
+			}
+
 			// Apply timing variations for new loop iteration
 			if (clip->has_timescale_var) {
 				float new_scale = apply_var_float(1.0f, clip->timescale_var, inst->current_loop, &inst->var_rng_state);
 				inst->time_scale = new_scale > 0.0f ? new_scale : 1.0f;
 			}
 			if (clip->has_delay_var) {
-				float loop_delay = apply_var_float(0.0f, clip->delay_var, inst->current_loop, &inst->var_rng_state);
-				if (loop_delay > 0.0f) {
-					inst->delay_left = loop_delay;
+				float var_delay = apply_var_float(0.0f, clip->delay_var, inst->current_loop, &inst->var_rng_state);
+				if (var_delay > 0.0f) {
+					inst->delay_left += var_delay;
 				}
 			}
 		}
@@ -3444,13 +3588,14 @@ float iam_stagger_delay(ImGuiID clip_id, int index) {
 	float delay = clip->stagger_delay;
 	float bias = clip->stagger_center_bias;
 
-	// Calculate delay based on index and center bias
+	// Calculate raw delay based on index and center bias
 	// bias = 0: start from beginning (index 0 has 0 delay)
 	// bias = 1: start from center (center indices have 0 delay, edges have max delay)
 	// bias = 0.5: mixed
+	float raw_delay = 0.0f;
 	if (bias <= 0.0f) {
 		// Simple linear stagger from start
-		return (float)index * delay;
+		raw_delay = (float)index * delay;
 	} else {
 		// Stagger from center
 		float center = (float)(count - 1) * 0.5f;
@@ -3459,10 +3604,22 @@ float iam_stagger_delay(ImGuiID clip_id, int index) {
 		if (max_dist > 0.0f) {
 			float linear_delay = (float)index * delay;
 			float center_delay = dist_from_center * delay * 2.0f / (float)count * (float)(count - 1);
-			return linear_delay * (1.0f - bias) + center_delay * bias;
+			raw_delay = linear_delay * (1.0f - bias) + center_delay * bias;
 		}
 	}
-	return 0.0f;
+
+	// Apply stagger easing to the delay distribution
+	if (clip->stagger_ease != iam_ease_linear && count > 1) {
+		float max_delay = (float)(count - 1) * delay;
+		if (max_delay > 0.0f) {
+			float t = raw_delay / max_delay;
+			iam_ease_desc ez = { clip->stagger_ease, 0, 0, 0, 0 };
+			t = iam_detail::eval(ez, t);
+			raw_delay = t * max_delay;
+		}
+	}
+
+	return raw_delay;
 }
 
 iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
@@ -3479,6 +3636,113 @@ iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
 		if (inst_data) {
 			inst_data->delay_left = clip->delay + iam_stagger_delay(clip_id, index);
 		}
+	}
+	return inst;
+}
+
+// Grid stagger - 2D grid-based delay distribution
+float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts const& opts) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	int rows = opts.rows > 0 ? opts.rows : 1;
+	int total = cols * rows;
+	if (total <= 1) return opts.start_delay;
+
+	// Determine origin position
+	float origin_col = 0.0f, origin_row = 0.0f;
+	switch (opts.from) {
+		case iam_stagger_first:
+			origin_col = 0.0f;
+			origin_row = 0.0f;
+			break;
+		case iam_stagger_last:
+			origin_col = (float)(cols - 1);
+			origin_row = (float)(rows - 1);
+			break;
+		case iam_stagger_center:
+			origin_col = (float)(cols - 1) * 0.5f;
+			origin_row = (float)(rows - 1) * 0.5f;
+			break;
+		case iam_stagger_index: {
+			int idx = ImClamp(opts.from_index, 0, total - 1);
+			origin_col = (float)(idx % cols);
+			origin_row = (float)(idx / cols);
+			break;
+		}
+		default:
+			break;
+	}
+
+	// Calculate distance based on axis constraint
+	float dist = 0.0f;
+	switch (opts.axis) {
+		case iam_stagger_x:
+			dist = fabsf((float)col - origin_col);
+			break;
+		case iam_stagger_y:
+			dist = fabsf((float)row - origin_row);
+			break;
+		case iam_stagger_both:
+		default:
+			// Euclidean distance for radial effect
+			float dx = (float)col - origin_col;
+			float dy = (float)row - origin_row;
+			dist = ImSqrt(dx * dx + dy * dy);
+			break;
+	}
+
+	// Calculate max possible distance for normalization
+	float max_dist = 0.0f;
+	for (int r = 0; r < rows; r++) {
+		for (int c = 0; c < cols; c++) {
+			float d = 0.0f;
+			switch (opts.axis) {
+				case iam_stagger_x:
+					d = fabsf((float)c - origin_col);
+					break;
+				case iam_stagger_y:
+					d = fabsf((float)r - origin_row);
+					break;
+				case iam_stagger_both:
+				default: {
+					float ddx = (float)c - origin_col;
+					float ddy = (float)r - origin_row;
+					d = ImSqrt(ddx * ddx + ddy * ddy);
+					break;
+				}
+			}
+			if (d > max_dist) max_dist = d;
+		}
+	}
+
+	// Normalize and apply easing
+	float t = (max_dist > 0.0f) ? (dist / max_dist) : 0.0f;
+	if (opts.ease != iam_ease_linear) {
+		iam_ease_desc ez = { opts.ease, 0, 0, 0, 0 };
+		t = iam_detail::eval(ez, t);
+	}
+
+	return opts.start_delay + t * opts.delay * (float)(total - 1);
+}
+
+float iam_stagger_grid_delay_index(int index, iam_stagger_grid_opts const& opts) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	int col = index % cols;
+	int row = index / cols;
+	return iam_stagger_grid_delay(col, row, opts);
+}
+
+iam_instance iam_play_with_delay(ImGuiID clip_id, ImGuiID instance_id, float delay) {
+	using namespace iam_clip_detail;
+	if (!g_clip_sys.initialized) iam_clip_init();
+
+	iam_clip_data* clip = find_clip(clip_id);
+	if (!clip) return iam_instance(0);
+
+	iam_instance inst = iam_play(clip_id, instance_id);
+	if (inst.valid()) {
+		iam_instance_data* inst_data = find_instance(instance_id);
+		if (inst_data)
+			inst_data->delay_left = delay;
 	}
 	return inst;
 }

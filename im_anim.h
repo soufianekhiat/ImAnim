@@ -58,7 +58,9 @@ enum iam_ease_type {
 enum iam_policy {
 	iam_policy_crossfade = 0,	// smooth into new target
 	iam_policy_cut,				// snap to target
-	iam_policy_queue			// queue one pending target
+	iam_policy_queue,			// queue one pending target
+	iam_policy_additive,		// add animated delta to current value
+	iam_policy_multiply			// multiply current value by animated factor
 };
 
 enum iam_color_space {
@@ -921,6 +923,9 @@ struct iam_instance_data;
 // Callback types (use instance ID instead of pointer for safety)
 typedef void (*iam_clip_callback)(ImGuiID inst_id, void* user_data);
 
+// Loop callback (includes the 0-based loop index)
+typedef void (*iam_loop_callback)(ImGuiID inst_id, int loop_index, void* user_data);
+
 // Marker callback (includes marker name/id for identification)
 typedef void (*iam_marker_callback)(ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user_data);
 
@@ -967,8 +972,10 @@ public:
 
 	// Clip options
 	iam_clip& set_loop(bool loop, int direction = iam_dir_normal, int loop_count = -1);
+	iam_clip& set_loop_delay(float delay_seconds);  // Delay between loop iterations
 	iam_clip& set_delay(float delay_seconds);
 	iam_clip& set_stagger(int count, float each_delay, float from_center_bias = 0.0f);
+	iam_clip& set_stagger_ease(int ease_type);  // Ease the delay distribution (default: linear)
 
 	// Timing variation per loop iteration
 	iam_clip& set_duration_var(iam_variation_float const& var);   // Vary clip duration per loop
@@ -979,6 +986,8 @@ public:
 	iam_clip& on_begin(iam_clip_callback cb, void* user = nullptr);
 	iam_clip& on_update(iam_clip_callback cb, void* user = nullptr);
 	iam_clip& on_complete(iam_clip_callback cb, void* user = nullptr);
+	iam_clip& on_loop(iam_loop_callback cb, void* user = nullptr);    // Callback per loop iteration
+	iam_clip& on_pause(iam_clip_callback cb, void* user = nullptr);   // Callback when paused
 
 	// Finalize the clip
 	void end();
@@ -1003,6 +1012,9 @@ public:
 	void pause();
 	void resume();
 	void stop();
+	void restart();  // Reset to t=0 and start playing (equivalent to stop + play on same clip)
+	void reset();    // Reset to t=0 and re-evaluate tracks, but do not start playing
+	void refresh();  // Re-evaluate all tracks at the current time (re-read current values)
 	void destroy();  // Remove instance from system (valid() will return false after this)
 	void seek(float time);
 	void set_time_scale(float scale);
@@ -1063,6 +1075,44 @@ bool iam_clip_exists(ImGuiID clip_id);                                          
 // Stagger helpers - compute delay for indexed instances
 float iam_stagger_delay(ImGuiID clip_id, int index);                            // Get stagger delay for element at index.
 iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index); // Play with stagger delay applied.
+
+// Grid stagger - 2D grid-based delay distribution
+enum iam_stagger_from {
+	iam_stagger_first  = 0,     // Stagger from first element (index 0)
+	iam_stagger_last,           // Stagger from last element
+	iam_stagger_center,         // Stagger from center of grid
+	iam_stagger_index           // Stagger from a specific index (use from_index)
+};
+
+enum iam_stagger_axis {
+	iam_stagger_both = 0,       // Distance on both axes
+	iam_stagger_x,              // Distance on X axis only (column)
+	iam_stagger_y               // Distance on Y axis only (row)
+};
+
+struct iam_stagger_grid_opts {
+	int   cols;                 // Number of columns
+	int   rows;                 // Number of rows
+	int   from;                 // iam_stagger_from - origin for distance calculation
+	int   from_index;           // Used when from == iam_stagger_index
+	int   axis;                 // iam_stagger_axis - constrain distance to an axis
+	float delay;                // Base delay between elements (seconds)
+	int   ease;                 // iam_ease_type - easing applied to the delay distribution
+	float start_delay;          // Initial delay offset before first element (seconds)
+
+	iam_stagger_grid_opts() : cols(1), rows(1), from(iam_stagger_first),
+	                          from_index(0), axis(iam_stagger_both),
+	                          delay(0.05f), ease(iam_ease_linear), start_delay(0) {}
+};
+
+// Get stagger delay for element at (col, row) in a grid
+float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts const& opts);
+
+// Get stagger delay for a linear index in the grid (index = row * cols + col)
+float iam_stagger_grid_delay_index(int index, iam_stagger_grid_opts const& opts);
+
+// Play a clip instance with a specific delay (useful with grid stagger)
+iam_instance iam_play_with_delay(ImGuiID clip_id, ImGuiID instance_id, float delay);
 
 // Layering support - blend multiple animation instances
 void iam_layer_begin(ImGuiID instance_id);                                      // Start blending into target instance.
