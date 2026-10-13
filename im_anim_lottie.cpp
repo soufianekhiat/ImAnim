@@ -202,7 +202,11 @@ struct layer_t {
 	float pw, ph;              // precomp layer size
 	prop_t pe;                 // camera zoom
 };
-struct effect_t { int kind; prop_t c0, c1, amount; };  // 1 fill (c0, opacity 0..1), 2 tint (black c0, white c1, amount %)
+// Effect parameters in file order. 1 fill (v2 colour, v6 opacity 0..1), 2 tint (v0 black, v1 white,
+// v2 amount %), 3 gaussian blur (v0 blurriness, v1 dimensions), 4 drop shadow (v0 colour, v1 opacity
+// 0..255, v2 direction, v3 distance, v4 softness, v5 shadow only)
+enum { FX_FILL = 1, FX_TINT, FX_BLUR, FX_SHADOW };
+struct effect_t { int kind; prop_t v[8]; };
 struct comp_t { int layer, layern, camera, has3d; };  // camera: layer index or -1
 struct marker_t { int name; float t, dur; };
 struct font_t { int name, family, style; };        // strings[]
@@ -660,9 +664,9 @@ struct builder {
 					for (int q = D->n[pe].child; q >= 0 && np < 8; q = D->n[q].next) params[np++] = D->get(q, "v");
 				effect_t fx;
 				memset(&fx, 0, sizeof(fx));
-				if (ty == 21 && np >= 7) { fx.kind = 1; fx.c0 = prop(params[2]); fx.amount = prop(params[6]); }
-				else if (ty == 20 && np >= 3) { fx.kind = 2; fx.c0 = prop(params[0]); fx.c1 = prop(params[1]); fx.amount = prop(params[2]); }
-				else { L->warn |= W_EFFECTS; continue; }
+				fx.kind = ty == 21 && np >= 7 ? FX_FILL : ty == 20 && np >= 3 ? FX_TINT : ty == 29 && np >= 1 ? FX_BLUR : ty == 25 && np >= 5 ? FX_SHADOW : 0;
+				if (fx.kind == 0) { L->warn |= W_EFFECTS; continue; }
+				for (int q = 0; q < np; q++) fx.v[q] = prop(params[q]);
 				L->effects.push_back(fx);
 			}
 		ly.fxn = L->effects.Size - ly.fx;
@@ -1463,7 +1467,7 @@ struct fill_scratch {
 
 // Fills a soup of directed segments (pairs of points), intersected with the active clips
 static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, ImU32 col, int even_odd, float aa,
-                          paint_t const* paint, clip_t const* clips, int nclips) {
+                          paint_t const* paint, clip_t const* clips, int nclips, ImVector<ImVec2> const* uni = nullptr) {
 	paint_eval pe;
 	if (paint) { pe.init(paint); col = IM_COL32_WHITE; }
 	if (!dl || !seg_pts || seg_count <= 0 || (col & IM_COL32_A_MASK) == 0) return;
@@ -1479,7 +1483,7 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 		for (int i = 0; i < count; ++i) {
 			ImVec2 const a = pts[i * 2], b = pts[i * 2 + 1];
 			if (!(a.x - a.x == 0.0f) || !(a.y - a.y == 0.0f) || !(b.x - b.x == 0.0f) || !(b.y - b.y == 0.0f)) continue;  // NaN / inf
-			if (set == 0) { subj.Add(a); subj.Add(b); }
+			if (set == 0 || set == MAX_CLIPS + 1) { subj.Add(a); subj.Add(b); }
 			if (a.y == b.y) continue;  // horizontal edges never change the winding
 			fill_edge e;
 			if (a.y < b.y) { e.x0 = a.x; e.y0 = a.y; e.x1 = b.x; e.y1 = b.y; e.dir = +1; }
@@ -1491,6 +1495,7 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 		}
 	};
 	add_edges(seg_pts, seg_count, 0);
+	if (uni) add_edges(uni->Data, uni->Size / 2, MAX_CLIPS + 1);  // union set: non-zero, OR'ed with the shape
 	if (edges.Size == 0) return;
 	int rules[MAX_CLIPS + 1];
 	rules[0] = even_odd;
@@ -1610,9 +1615,10 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 		cur_bottom.resize(0);
 		next_open.resize(0);
 		int open_cursor = 0;
-		int wnd[MAX_CLIPS + 1] = {};
+		int wnd[MAX_CLIPS + 2] = {};
 		auto inside_all = [&]() {
-			for (int c = 0; c <= nclips; ++c) if (!fill_inside(wnd[c], rules[c])) return false;
+			if (!fill_inside(wnd[0], rules[0]) && wnd[MAX_CLIPS + 1] == 0) return false;
+			for (int c = 1; c <= nclips; ++c) if (!fill_inside(wnd[c], rules[c])) return false;
 			return true;
 		};
 		for (int k = 0; k < slab.Size; ) {
@@ -2049,6 +2055,11 @@ struct ctx {
 	int nfx;
 	int cur_comp;              // composition being drawn, and its size (3D projection centre)
 	float cur_w, cur_h;
+	// CPU blur / drop shadow: a soft edge (fringe width in pixels) and a recoloured, offset pass
+	float soft;
+	bool shadow;
+	ImVec2 shadow_ofs;
+	float shadow_rgba[4];
 
 	// Colour through the active Fill / Tint effects, innermost layer first
 	void fx_color(float* rgb) {
@@ -2057,20 +2068,21 @@ struct ctx {
 			for (int i = 0; i < fx_stack[s].count; i++) {
 				effect_t const& fx = L->effects[fx_stack[s].first + i];
 				float const t = fx_stack[s].t;
+				if (fx.kind != FX_FILL && fx.kind != FX_TINT) continue;
 				float c0[3], c1[3];
-				eval(L, fx.c0, t, scratch);
+				eval(L, fx.v[fx.kind == FX_FILL ? 2 : 0], t, scratch);
 				for (int k = 0; k < 3; k++) c0[k] = k < scratch.Size ? scratch[k] : 0.0f;
 				float target[3];
 				float amount;
-				if (fx.kind == 1) {
+				if (fx.kind == FX_FILL) {
 					for (int k = 0; k < 3; k++) target[k] = c0[k];
-					amount = pv(fx.amount, t, 0, 1.0f);
+					amount = pv(fx.v[6], t, 0, 1.0f);
 				} else {
-					eval(L, fx.c1, t, scratch);
+					eval(L, fx.v[1], t, scratch);
 					for (int k = 0; k < 3; k++) c1[k] = k < scratch.Size ? scratch[k] : 1.0f;
 					float const luma = rgb[0] * 0.299f + rgb[1] * 0.587f + rgb[2] * 0.114f;
 					for (int k = 0; k < 3; k++) target[k] = c0[k] + (c1[k] - c0[k]) * luma;
-					amount = pv(fx.amount, t, 0, 100.0f) * 0.01f;
+					amount = pv(fx.v[2], t, 0, 100.0f) * 0.01f;
 				}
 				amount = ImSaturate(amount);
 				for (int k = 0; k < 3; k++) rgb[k] += (target[k] - rgb[k]) * amount;
@@ -2130,20 +2142,78 @@ struct ctx {
 	}
 	void pop_clip() { if (overflow > 0) overflow--; else if (nclips > 0) nclips--; }
 
-	// Region outside `segs` (positive outlines): a big rectangle minus them
+	// Region outside `segs` (positive outlines, winding -1 each, possibly overlapping): a big
+	// rectangle winding +1 plus the outlines as they are, filled where winding >= 1 (rule 2), so
+	// a point is outside only when no outline covers it
 	void complement(ImVector<ImVec2>& out, ImVector<ImVec2> const& segs) {
 		ImVec4 const cr = dl->_CmdHeader.ClipRect;
 		ImVec2 const r[4] = { ImVec2(cr.x - 4, cr.y - 4), ImVec2(cr.z + 4, cr.y - 4), ImVec2(cr.z + 4, cr.w + 4), ImVec2(cr.x - 4, cr.w + 4) };
 		out.resize(0);
-		add_poly(out, r, 4);
-		for (int i = 0; i + 1 < segs.Size; i += 2) { out.push_back(segs[i + 1]); out.push_back(segs[i]); }
+		add_poly(out, r, 4, true);
+		for (int i = 0; i < segs.Size; i++) out.push_back(segs[i]);
+	}
+
+	// Soft edge `width` wide (blur, shadow softness): the shape drawn grown / shrunk at K
+	// distances across the edge, each layer's opacity chosen so the stack composites to a
+	// linear ramp. Grown = shape OR a stroke of its outline; shrunk = shape minus that stroke.
+	void soft_fill(ImVector<ImVec2> const& segs, ImU32 col, int even_odd, paint_t const* paint, float width) {
+		// Outline contours from the segment soup (fills and stroke outlines are chained loops)
+		ImVector<ImVec2> pts;
+		ImVector<int> counts;
+		ImVector<bool> closed;
+		for (int i = 0; i < segs.Size; i += 2) {
+			if (i == 0 || segs[i].x != segs[i - 1].x || segs[i].y != segs[i - 1].y) {
+				if (counts.Size) closed.back() = pts.Size > 0 && pts.back().x == pts[pts.Size - counts.back()].x && pts.back().y == pts[pts.Size - counts.back()].y;
+				counts.push_back(0); closed.push_back(false);
+				pts.push_back(segs[i]); counts.back()++;
+			}
+			pts.push_back(segs[i + 1]); counts.back()++;
+		}
+		if (counts.Size) closed.back() = pts.back().x == pts[pts.Size - counts.back()].x && pts.back().y == pts[pts.Size - counts.back()].y;
+		float const h = width * 0.5f;
+		int const K = ImClamp((int)(width / 2.0f + 0.5f), 2, 12);
+		float const base_a = ((col >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
+		ImVector<ImVec2> stroke, comp;
+		for (int j = 0; j < K; j++) {
+			float const d = h - (j + 0.5f) * (width / K);   // outermost first
+			float const a = 1.0f / (K - j);                  // so that the stack ends fully covered
+			stroke.resize(0);
+			int ofs = 0;
+			for (int c = 0; c < counts.Size; c++) {
+				if (counts[c] >= 2) stroke_polyline(stroke, pts.Data + ofs, counts[c], closed[c], ImFabs(d), 2, 2, 4.0f, tol);
+				ofs += counts[c];
+			}
+			paint_t pj;
+			if (paint) { pj = *paint; for (int k = 0; k < pj.n; k++) pj.rgba[k][3] *= a; }
+			ImU32 const cj = (col & ~IM_COL32_A_MASK) | ((ImU32)(ImSaturate(base_a * a) * 255.0f + 0.5f) << IM_COL32_A_SHIFT);
+			if (d >= 0.0f) {
+				fill_segments(dl, segs.Data, segs.Size / 2, cj, even_odd, 1.0f, paint ? &pj : nullptr, clips, nclips, &stroke);
+			} else {
+				complement(comp, stroke);
+				push_clip(comp, 2);
+				fill_segments(dl, segs.Data, segs.Size / 2, cj, even_odd, 1.0f, paint ? &pj : nullptr, clips, nclips);
+				pop_clip();
+			}
+		}
 	}
 
 	void fill(ImVector<ImVec2> const& segs, ImU32 col, int even_odd, paint_t const* paint) {
 		if (collect) { for (int i = 0; i < segs.Size; i++) collect->push_back(segs[i]); return; }
+		if (shadow) {
+			// Shadow pass: the same coverage, offset, in the shadow colour
+			static ImVector<ImVec2> moved;
+			moved.resize(segs.Size);
+			for (int i = 0; i < segs.Size; i++) moved[i] = ImVec2(segs[i].x + shadow_ofs.x, segs[i].y + shadow_ofs.y);
+			float const a = (paint ? 1.0f : ((col >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f) * shadow_rgba[3];
+			ImU32 const sc = ImGui::ColorConvertFloat4ToU32(ImVec4(shadow_rgba[0], shadow_rgba[1], shadow_rgba[2], a));
+			if (soft > 2.0f) soft_fill(moved, sc, even_odd, nullptr, soft);
+			else fill_segments(dl, moved.Data, moved.Size / 2, sc, even_odd, 1.0f, nullptr, clips, nclips);
+			return;
+		}
 #if IAM_LOTTIE_GPU
-		if (!paint && nclips == 0 && gpu_fill(dl, segs.Data, segs.Size / 2, col, even_odd)) return;  // gradients and clips stay on the CPU
+		if (!paint && nclips == 0 && soft <= 1.0f && gpu_fill(dl, segs.Data, segs.Size / 2, col, even_odd)) return;  // gradients, clips and blur stay on the CPU
 #endif
+		if (soft > 2.0f) { soft_fill(segs, col, even_odd, paint, soft); return; }
 		fill_segments(dl, segs.Data, segs.Size / 2, col, even_odd, 1.0f, paint, clips, nclips);
 	}
 
@@ -2589,7 +2659,7 @@ struct ctx {
 				continue;
 			}
 			flush();
-			if (subtract) { ImVector<ImVec2> comp; complement(comp, segs); push_clip(comp, 0); }
+			if (subtract) { ImVector<ImVec2> comp; complement(comp, segs); push_clip(comp, 2); }
 			else push_clip(segs, 0);
 			pushed++;
 		}
@@ -2621,13 +2691,42 @@ struct ctx {
 				layer_t const& ml = L->layers[ly.matte];
 				if (t >= ml.ip && t < ml.op) render_layer(ly.matte, t, M, 1.0f);
 				collect = prev;
-				if (ly.tt == 2 || ly.tt == 4) { ImVector<ImVec2> comp; complement(comp, matte); push_clip(comp, 0); }
+				if (ly.tt == 2 || ly.tt == 4) { ImVector<ImVec2> comp; complement(comp, matte); push_clip(comp, 2); }
 				else push_clip(matte, 0);
 				pushed++;
 			}
 			pushed += push_masks(ly, W, lt);
 			bool const fx_pushed = ly.fxn > 0 && nfx < 16;
 			if (fx_pushed) { active_fx f = { ly.fx, ly.fxn, lt }; fx_stack[nfx++] = f; }
+			// Blur and drop shadow (CPU approximation): a Gaussian of sigma becomes a linear edge
+			// ~2.5 sigma wide; the shadow is the content drawn first, offset and recoloured
+			float const prev_soft = soft;
+			float const scale = mat_scale(W);
+			int shadow_fx = -1;
+			for (int i = 0; i < ly.fxn && !collect; i++) {
+				effect_t const& fx = L->effects[ly.fx + i];
+				if (fx.kind == FX_BLUR) soft = ImMax(soft, pv(fx.v[0], lt, 0, 0.0f) * 0.3f * 2.5f * scale);  // lottie-web: sigma = 0.3 blurriness
+				if (fx.kind == FX_SHADOW) shadow_fx = ly.fx + i;
+			}
+			bool draw_content = true;
+			for (int pass = shadow_fx >= 0 ? 0 : 1; pass < 2; pass++) {
+				if (pass == 0) {
+					effect_t const& fx = L->effects[shadow_fx];
+					eval(L, fx.v[0], lt, scratch);
+					for (int k = 0; k < 3; k++) shadow_rgba[k] = k < scratch.Size ? scratch[k] : 0.0f;
+					shadow_rgba[3] = ImSaturate(pv(fx.v[1], lt, 0, 255.0f) / 255.0f * ImSaturate(a));
+					float const ang = (pv(fx.v[2], lt, 0, 135.0f) - 90.0f) * (IM_PI / 180.0f), dist = pv(fx.v[3], lt, 0, 5.0f) * scale;
+					shadow_ofs = ImVec2(ImCos(ang) * dist, ImSin(ang) * dist);
+					soft = ImMax(prev_soft, pv(fx.v[4], lt, 0, 0.0f) * 0.25f * 2.5f * scale);  // lottie-web: sigma = softness / 4
+					shadow = true;
+					draw_content = pv(fx.v[5], lt, 0, 0.0f) == 0.0f;
+				} else {
+					shadow = false;
+					if (!draw_content) break;
+					soft = prev_soft;
+					for (int i = 0; i < ly.fxn && !collect; i++)
+						if (L->effects[ly.fx + i].kind == FX_BLUR) soft = ImMax(soft, pv(L->effects[ly.fx + i].v[0], lt, 0, 0.0f) * 0.3f * 2.5f * scale);
+				}
 			switch (ly.ty) {
 				case 4: render_group(ly.shapes, ly.shapesn, W, a, lt); break;
 				case 1: {
@@ -2645,6 +2744,9 @@ struct ctx {
 					break;
 				default: break;
 			}
+			}
+			shadow = false;
+			soft = prev_soft;
 			if (fx_pushed) nfx--;
 		}
 		while (pushed-- > 0) pop_clip();
@@ -2782,6 +2884,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	C.dl = dl;
 	C.L = anim;
 	C.nclips = C.overflow = C.depth = C.nfx = 0;
+	C.soft = 0.0f;
+	C.shadow = false;
 	C.collect = nullptr;
 	C.tol = 0.25f;
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);

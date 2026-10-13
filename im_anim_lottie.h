@@ -10,7 +10,7 @@
 // stroke (caps, joins, dashes), linear / radial gradients (with highlight), trim paths,
 // round corners, pucker / bloat, zig-zag, offset path, twist, merge paths, repeater, masks (add,
 // subtract, intersect, difference) and alpha track mattes (from the matte layer's
-// geometry), Fill and Tint effects, time remap, markers.
+// geometry), Fill / Tint / Gaussian blur / drop shadow effects, time remap, markers.
 // Not supported (reported by iam_lottie_warnings): expressions, other effects, image
 // layers, text without embedded glyphs and text animators, blend modes, luma
 // mattes (drawn as alpha mattes). Older Bodymovin exports (0..255 colours, ...) are

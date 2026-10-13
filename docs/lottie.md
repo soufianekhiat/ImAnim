@@ -70,7 +70,7 @@ animations were made for the demo and ship under ImAnim's license.
 - Styles: fill with non-zero or even-odd rule, stroke (butt / round / square caps, miter / round / bevel joins, dashes), linear and radial gradients (with highlight)
 - Modifiers: trim paths (each path or all together), round corners, pucker / bloat, zig-zag (corner and smooth), offset path, twist, merge paths (merge, add, subtract, intersect, exclude), repeater
 - Masks (add, subtract, intersect, difference, inverted) and alpha track mattes, markers
-- Effects: Fill and Tint recolour a layer (and the layers of a precomp); expression controls (sliders, checkboxes, ...) are ignored as they draw nothing
+- Effects: Fill and Tint recolour a layer (and the layers of a precomp); Gaussian blur and drop shadow (colour, opacity, direction, distance, softness, shadow only); expression controls (sliders, checkboxes, ...) are ignored as they draw nothing
 - Text layers drawn from the glyph outlines the file embeds (`chars`): lines, justification, tracking, line height, fill and stroke colours
 
 Fills use an anti-aliased trapezoid sweep with exact non-zero / even-odd rules,
@@ -103,7 +103,7 @@ where the CPU fill fades across the edge.
 ## Limits
 
 Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than
-Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
+Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded glyphs
 (exported with system fonts) and text animators, blend modes. Also:
 
 - Mattes and masks clip by geometry: luma mattes act as alpha mattes, feather is
@@ -115,6 +115,10 @@ Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
   shapes are filled; a stroke after them still follows the original paths, and an
   offset path fills the holes of the shapes it offsets.
 - Text boxes do not wrap; the text is laid out as point text.
+- Blur and drop shadow are drawn without an offscreen layer: each shape's edge becomes a
+  soft ramp (the shape stacked grown and shrunk across the edge), so a blur softens
+  edges rather than mixing colours of shapes that touch, and directional blur is
+  applied in both directions.
 - Twist has no reference implementation (lottie-web, Skottie, ThorVG and rlottie skip it):
   it follows After Effects' description, each point turning by angle * (1 - d / R)
   around the centre, so it can differ from After Effects in detail.

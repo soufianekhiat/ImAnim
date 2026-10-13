@@ -201,6 +201,16 @@ int main() {
 		cov_at(100, 100, rgb);
 		CHECK(rgb[2] > 0.99f && rgb[0] < 0.01f, "matte layer itself is not drawn");
 		iam_lottie_free(a);
+		{
+			// Inverted matte made of two overlapping shapes: their overlap stays hidden too
+			std::string const matte2 = "{\"ty\":4,\"ind\":1,\"td\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{},\"shapes\":[" +
+				group(rect(90, 100, 40, 40) + "," + fill(1, 1, 1)) + "," + group(rect(110, 100, 40, 40) + "," + fill(1, 1, 1)) + "]}";
+			std::string inv = target;
+			inv.replace(inv.find("\"tt\":1"), 6, "\"tt\":2");
+			iam_lottie* m2 = draw(doc(matte2 + "," + inv), 0.0f);
+			CHECK(cov_at(100, 103) < 0.01f && cov_at(80, 103) < 0.01f && cov_at(60, 103) > 0.99f, "inverted matte with overlapping shapes");
+			iam_lottie_free(m2);
+		}
 		target.replace(target.find("\"tt\":1"), 6, "\"tt\":2");
 		a = draw(doc(matte + "," + target), 0.0f);
 		CHECK(cov_at(100, 100) < 0.01f && cov_at(60, 100) > 0.99f, "inverted alpha matte");
@@ -326,10 +336,28 @@ int main() {
 		cov_at(97, 103, rgb);
 		CHECK(rgb[1] > 0.99f && rgb[0] < 0.01f && rgb[2] < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "Tint maps white to the white colour; slider controls are silent");
 		iam_lottie_free(a);
-		std::string const blur = "\"ef\":[{\"ty\":29,\"nm\":\"Blur\",\"mn\":\"ADBE Gaussian Blur 2\",\"ef\":[]}],";
+		std::string const blur = "\"ef\":[{\"ty\":26,\"nm\":\"Radial Wipe\",\"mn\":\"ADBE Radial Wipe\",\"ef\":[]}],";
 		std::string const blur_doc = doc(layer(group(rect(100, 100, 60, 60) + "," + fill(1, 1, 1)), blur));
 		a = iam_lottie_load_from_memory(blur_doc.data(), blur_doc.size());
 		CHECK(a && strstr(iam_lottie_warnings(a), "effects"), "other effects are reported");
+		iam_lottie_free(a);
+		// Gaussian blur (CPU: soft edge ~2.5 sigma wide, sigma = 0.3 blurriness)
+		std::string const blur_fx = "\"ef\":[{\"ty\":29,\"nm\":\"Gaussian Blur\",\"ef\":[{\"ty\":0,\"v\":" + val("20") + "},{\"ty\":7,\"v\":" + val("1") + "},{\"ty\":7,\"v\":" + val("0") + "}]}],";
+		a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + fill(1, 1, 1)), blur_fx)), 0.0f);
+		{
+			float const e = cov_at(70, 103), in = cov_at(97, 103), out = cov_at(64, 103);
+			CHECK(e > 0.35f && e < 0.65f && in > 0.99f && out > 0.01f && out < 0.35f && strcmp(iam_lottie_warnings(a), "") == 0, "blur softens the edge (%.2f %.2f %.2f)", out, e, in);
+		}
+		iam_lottie_free(a);
+		// Drop shadow: direction 135 = down right, distance 20, black; the layer stays on top
+		std::string const shadow_fx = "\"ef\":[{\"ty\":25,\"nm\":\"Drop Shadow\",\"ef\":[{\"ty\":2,\"v\":" + val("[0,0,0,1]") + "},{\"ty\":0,\"v\":" + val("255") +
+			"},{\"ty\":1,\"v\":" + val("135") + "},{\"ty\":0,\"v\":" + val("20") + "},{\"ty\":0,\"v\":" + val("0") + "},{\"ty\":7,\"v\":" + val("0") + "}]}],";
+		a = draw(doc(layer(group(rect(90, 90, 40, 40) + "," + fill(1, 0, 0)), shadow_fx)), 0.0f);
+		{
+			float s[3], c[3];
+			float const cs = cov_at(119, 121, s), cc = cov_at(88, 92, c);
+			CHECK(cs > 0.99f && s[0] < 0.01f && cc > 0.99f && c[0] > 0.99f && cov_at(127, 127) < 0.01f, "drop shadow behind the layer");
+		}
 		iam_lottie_free(a);
 		auto radial = [](float h) {
 			char b[400];
