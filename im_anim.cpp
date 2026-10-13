@@ -4051,7 +4051,8 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Tracks: count + for each: channel, type, num_keys, keys...
 
 static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static int const IAM_CLIP_VERSION = 3;
+static int const IAM_CLIP_VERSION = 4;      // 4: + loop delay, track color space/anchor, key color space/value_ext
+static int const IAM_CLIP_VERSION_MIN = 3;  // Oldest version iam_clip_load() accepts
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	using namespace iam_clip_detail;
@@ -4076,6 +4077,7 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	fwrite(&clip->stagger_count, sizeof(int), 1, f);
 	fwrite(&clip->stagger_delay, sizeof(float), 1, f);
 	fwrite(&clip->stagger_center_bias, sizeof(float), 1, f);
+	fwrite(&clip->loop_delay, sizeof(float), 1, f);
 
 	// Write tracks
 	int track_count = clip->iam_tracks.Size;
@@ -4085,6 +4087,11 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 		iam_track& trk = clip->iam_tracks[t];
 		fwrite(&trk.channel, sizeof(ImGuiID), 1, f);
 		fwrite(&trk.type, sizeof(int), 1, f);
+		int is_relative_i = trk.is_relative ? 1 : 0;
+		fwrite(&trk.color_space, sizeof(int), 1, f);
+		fwrite(&is_relative_i, sizeof(int), 1, f);
+		fwrite(&trk.anchor_space, sizeof(int), 1, f);
+		fwrite(&trk.anchor_axis, sizeof(int), 1, f);
 
 		int key_count = trk.keys.Size;
 		fwrite(&key_count, sizeof(int), 1, f);
@@ -4104,6 +4111,8 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 			fwrite(&kf.spring.damping, sizeof(float), 1, f);
 			fwrite(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fwrite(kf.value, sizeof(float), 4, f);
+			fwrite(&kf.color_space, sizeof(int), 1, f);
+			fwrite(kf.value_ext, sizeof(float), 4, f);
 		}
 	}
 
@@ -4128,7 +4137,7 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	}
 
 	int version;
-	if (fread(&version, sizeof(int), 1, f) != 1 || version != IAM_CLIP_VERSION) {
+	if (fread(&version, sizeof(int), 1, f) != 1 || version < IAM_CLIP_VERSION_MIN || version > IAM_CLIP_VERSION) {
 		fclose(f);
 		return iam_err_bad_arg;
 	}
@@ -4163,6 +4172,8 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	fread(&clip->stagger_count, sizeof(int), 1, f);
 	fread(&clip->stagger_delay, sizeof(float), 1, f);
 	fread(&clip->stagger_center_bias, sizeof(float), 1, f);
+	clip->loop_delay = 0.0f;
+	if (version >= 4) fread(&clip->loop_delay, sizeof(float), 1, f);
 
 	// Read tracks
 	int track_count;
@@ -4178,6 +4189,14 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 
 		fread(&trk.channel, sizeof(ImGuiID), 1, f);
 		fread(&trk.type, sizeof(int), 1, f);
+		if (version >= 4) {
+			int is_relative_i = 0;
+			fread(&trk.color_space, sizeof(int), 1, f);
+			fread(&is_relative_i, sizeof(int), 1, f);
+			fread(&trk.anchor_space, sizeof(int), 1, f);
+			fread(&trk.anchor_axis, sizeof(int), 1, f);
+			trk.is_relative = (is_relative_i != 0);
+		}
 
 		int key_count;
 		fread(&key_count, sizeof(int), 1, f);
@@ -4196,6 +4215,10 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 			fread(&kf.spring.damping, sizeof(float), 1, f);
 			fread(&kf.spring.initial_velocity, sizeof(float), 1, f);
 			fread(kf.value, sizeof(float), 4, f);
+			if (version >= 4) {
+				fread(&kf.color_space, sizeof(int), 1, f);
+				fread(kf.value_ext, sizeof(float), 4, f);
+			}
 			kf.has_bezier = (has_bezier_i != 0);
 			kf.is_spring = (is_spring_i != 0);
 			kf.channel = trk.channel;
