@@ -104,3 +104,17 @@ jobs:
 
       - name: Run
         run: sh tests/clip_control/run.sh
+
+  ease:
+    runs-on: ubuntu-latest
+    name: Curve eases and ease editor
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/ease/run.sh

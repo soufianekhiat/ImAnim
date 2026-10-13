@@ -227,7 +227,14 @@ int main() {
 	{
 		static float const bz[4] = { 0.1f, 0.7f, 0.3f, 1.2f };
 		iam_spring_params sp = { 1.0f, 180.0f, 12.0f, 0.5f };
+		iam_vec2 const bump[] = { iam_v2(0, 0), iam_v2(0.2f, 0.0f), iam_v2(0.3f, 1.3f), iam_v2(0.5f, 1.2f), iam_v2(0.7f, 1.1f), iam_v2(0.8f, 1.0f), iam_v2(1, 1) };
+		iam_ease_curve_set(iam_id("bump"), bump, 7);
+		static float const steps4[4] = { 4.0f, 0.0f, 0.0f, 0.0f };
 		iam_clip::begin(CLIP)
+			.key_float(iam_id("curved"), 0.0f, 0.0f, iam_ease_curve, iam_ease_curve_ref(iam_id("bump")))
+			.key_float(iam_id("curved"), 1.0f, 1.0f)
+			.key_float(iam_id("stepped"), 0.0f, 0.0f, iam_ease_steps, steps4)
+			.key_float(iam_id("stepped"), 1.0f, 1.0f)
 			.key_float(CH_A, 0.0f, 0.0f, iam_ease_cubic_bezier, bz)
 			.key_float_spring(CH_A, 0.5f, 1.0f, sp)
 			.key_float(CH_A, 1.0f, 0.25f)
@@ -247,11 +254,14 @@ int main() {
 			.end();
 		frames(2);
 		std::string all = export_cpp();
-		CHECK(all.find("bezier_0[4] = { 0.1f, 0.7f, 0.3f, 1.2f }") != std::string::npos, "export bezier array");
+		CHECK(all.find("[4] = { 0.1f, 0.7f, 0.3f, 1.2f }") != std::string::npos, "export bezier array");
 		CHECK(all.find(".key_float_spring(iam_id(\"alpha\"), 0.5f, 1.0f, iam_spring_params{ 1.0f, 180.0f, 12.0f, 0.5f })") != std::string::npos, "export spring");
 		CHECK(all.find(".set_loop(true, iam_dir_alternate, 3)") != std::string::npos && all.find(".set_delay(0.125f)") != std::string::npos && all.find(".set_loop_delay(0.5f)") != std::string::npos, "export loop/delay");
 		CHECK(all.find("iam_anchor_window, 1, iam_ease_linear") != std::string::npos, "export float_rel anchor+axis");
 		CHECK(all.find("iam_col_hsv, iam_anchor_window_content") != std::string::npos, "export color_rel space+anchor");
+		CHECK(all.find("iam_ease_curve_set(iam_id(\"bump\"), curve_0, 7);") != std::string::npos, "export defines the curve");
+		CHECK(all.find("iam_ease_curve, iam_ease_curve_ref(iam_id(\"bump\"))") != std::string::npos, "export references the curve");
+		CHECK(all.find("iam_ease_steps, bezier_") != std::string::npos, "export keeps steps params");
 		FILE* f2 = fopen("exported_clip2.inl", "wb"); if (f2) { fputs(all.c_str(), f2); fclose(f2); }
 	}
 
