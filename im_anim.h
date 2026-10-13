@@ -540,11 +540,34 @@ enum iam_text_stagger_effect {
 	iam_text_fx_typewriter       // Typewriter style (instant per char)
 };
 
+// Text stagger split units: what one stagger step reveals
+enum iam_text_split {
+	iam_text_split_chars = 0,    // One character per step (default)
+	iam_text_split_words,        // One word per step (characters of a word animate together)
+	iam_text_split_lines         // One line per step ('\n' separated)
+};
+
+// Per-glyph state passed to iam_text_stagger_opts::glyph_callback (after the built-in effect).
+// Modify offset/scale/rotation/alpha/color to build custom effects (use iam_text_fx_none for a blank slate).
+struct iam_text_glyph {
+	int          index;          // Character index in the text
+	int          unit;           // Stagger unit index (character, word or line, see split)
+	unsigned int codepoint;
+	float        t;              // Eased progress of this unit [0,1] (may overshoot with back/elastic eases)
+	float        raw_t;          // Linear progress of this unit [0,1]
+	iam_vec2     offset;         // Pixel offset (in/out)
+	float        scale;          // Scale around the glyph center (in/out)
+	float        rotation;       // Radians (in/out)
+	float        alpha;          // 0..1 (in/out)
+	ImU32        color;          // Glyph color, alpha applied after (in/out)
+};
+typedef void (*iam_text_glyph_fn)(iam_text_glyph* glyph, void* user);
+
 // Text stagger options
 struct iam_text_stagger_opts {
 	iam_vec2 pos;                  // Base position for text
 	int    effect;               // iam_text_stagger_effect
-	float  char_delay;           // Delay between each character (seconds)
+	float  char_delay;           // Delay between each stagger unit (character, word or line; seconds)
 	float  char_duration;        // Duration of each character's animation (seconds)
 	float  effect_intensity;     // Intensity of effect (pixels for slide, degrees for rotate, scale factor)
 	iam_ease_desc ease;          // Easing for character animation
@@ -552,11 +575,16 @@ struct iam_text_stagger_opts {
 	ImFont* font;                // Font to use (nullptr = current)
 	float  font_scale;           // Font scale multiplier
 	float  letter_spacing;       // Extra spacing between characters
+	int    split;                // iam_text_split: stagger by character, word or line ('\n' starts a new line)
+	float  line_spacing;         // Extra spacing between lines (pixels)
+	iam_text_glyph_fn glyph_callback;  // Optional per-glyph hook (custom effects)
+	void*  glyph_user;           // User data for glyph_callback
 
 	iam_text_stagger_opts()
 		: pos(iam_v2(0, 0)), effect(iam_text_fx_fade), char_delay(0.05f), char_duration(0.3f),
 		  effect_intensity(20.0f), ease(iam_ease_preset(iam_ease_out_cubic)),
-		  color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f), letter_spacing(0.0f) {}
+		  color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f), letter_spacing(0.0f),
+		  split(iam_text_split_chars), line_spacing(0.0f), glyph_callback(nullptr), glyph_user(nullptr) {}
 };
 
 // Render text with per-character stagger animation
@@ -1332,10 +1360,14 @@ struct iam_stagger_grid_opts {
 	float delay;                // Base delay between elements (seconds)
 	int   ease;                 // iam_ease_type - easing applied to the delay distribution
 	float start_delay;          // Initial delay offset before first element (seconds)
+	bool  reversed;             // Reverse the order (farthest element first)
+	float jitter;               // Random +/- seconds added per element (deterministic per index and seed)
+	unsigned seed;              // Seed for jitter
 
 	iam_stagger_grid_opts() : cols(1), rows(1), from(iam_stagger_first),
 	                          from_index(0), axis(iam_stagger_both),
-	                          delay(0.05f), ease(iam_ease_linear), start_delay(0) {}
+	                          delay(0.05f), ease(iam_ease_linear), start_delay(0),
+	                          reversed(false), jitter(0.0f), seed(0) {}
 };
 
 // Get stagger delay for element at (col, row) in a grid
@@ -1343,6 +1375,12 @@ IM_ANIM_API float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts
 
 // Get stagger delay for a linear index in the grid (index = row * cols + col)
 IM_ANIM_API float iam_stagger_grid_delay_index(int index, iam_stagger_grid_opts const& opts);
+
+// Stagger values (like anime.js stagger(range)): spread [start, end] across the grid using the same distance
+// (from/axis/ease/reversed) as the delays; jitter adds a random +/- amount (deterministic per index and opts.seed).
+// For a list of N items use cols = N, rows = 1.
+IM_ANIM_API float iam_stagger_value(int col, int row, float start, float end, iam_stagger_grid_opts const& opts, float jitter = 0.0f);
+IM_ANIM_API float iam_stagger_value_index(int index, float start, float end, iam_stagger_grid_opts const& opts, float jitter = 0.0f);
 
 // Play a clip instance with a specific delay (useful with grid stagger)
 IM_ANIM_API iam_instance iam_play_with_delay(ImGuiID clip_id, ImGuiID instance_id, float delay);
@@ -1355,6 +1393,20 @@ IM_ANIM_API bool iam_get_blended_float(ImGuiID instance_id, ImGuiID channel, flo
 IM_ANIM_API bool iam_get_blended_vec2(ImGuiID instance_id, ImGuiID channel, iam_vec2* out);   // Get blended vec2 value.
 IM_ANIM_API bool iam_get_blended_vec4(ImGuiID instance_id, ImGuiID channel, iam_vec4* out);   // Get blended vec4 value.
 IM_ANIM_API bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out);       // Get blended int value.
+
+// State-driven clip blending (a state machine without the graph): call iam_state_play() every frame with the
+// clip of the current state. Changing state crossfades from the previous clip(s) to the new one over crossfade
+// seconds; the new clip plays from its start (coming back to a state that is still fading out keeps it playing).
+// Read the blended result with iam_state_get_*. Machines unused for a while are collected by iam_gc().
+IM_ANIM_API void         iam_state_play(ImGuiID machine_id, ImGuiID state_clip_id, float crossfade = 0.25f);
+IM_ANIM_API ImGuiID      iam_state_current(ImGuiID machine_id);                        // Current state's clip (0 if none).
+IM_ANIM_API float        iam_state_blend(ImGuiID machine_id);                          // Weight of the current state [0,1] (1 when the crossfade is done).
+IM_ANIM_API iam_instance iam_state_instance(ImGuiID machine_id, ImGuiID state_clip_id); // Instance playing a state's clip (to pause, seek, set time scale...).
+IM_ANIM_API bool         iam_state_get_float(ImGuiID machine_id, ImGuiID channel, float* out);
+IM_ANIM_API bool         iam_state_get_int(ImGuiID machine_id, ImGuiID channel, int* out);
+IM_ANIM_API bool         iam_state_get_vec2(ImGuiID machine_id, ImGuiID channel, iam_vec2* out);
+IM_ANIM_API bool         iam_state_get_vec4(ImGuiID machine_id, ImGuiID channel, iam_vec4* out);
+IM_ANIM_API bool         iam_state_get_color(ImGuiID machine_id, ImGuiID channel, iam_vec4* out, int color_space = iam_col_oklab);
 
 // Persistence (optional)
 IM_ANIM_API iam_result iam_clip_save(ImGuiID clip_id, char const* path);

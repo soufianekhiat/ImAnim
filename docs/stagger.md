@@ -158,6 +158,25 @@ ImU32 rainbow_colors[] = {
 };
 ```
 
+## Stagger Values and Jitter
+
+`iam_stagger_value()` spreads a value range over the grid using the same
+distance as the delays (`from`, `axis`, `ease`, `reversed`), like anime.js
+`stagger([start, end])`:
+
+```cpp
+iam_stagger_grid_opts g;
+g.cols = 12; g.rows = 5;
+g.from = iam_stagger_center;
+float size = iam_stagger_value(col, row, 20.0f, 4.0f, g);          // big in the center, small at the edges
+float hue  = iam_stagger_value(col, row, 0.5f, 0.0f, g, 0.05f);    // with +/-0.05 random jitter
+float x    = iam_stagger_value_index(i, 0.0f, 300.0f, list_opts);  // list: cols = N, rows = 1
+```
+
+The grid options also gained `reversed` (farthest element first), `jitter`
+(random +/- seconds per element on `iam_stagger_grid_delay`) and `seed`.
+Jitter is deterministic per index and seed.
+
 ## See Also
 
 - [Clips](clips.md) - Clip system basics

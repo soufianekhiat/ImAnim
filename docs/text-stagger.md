@@ -193,6 +193,41 @@ ImGui::TextUnformatted(buf);
 `iam_text_scramble_opts`: `charset`, `change_rate` (symbol changes per second),
 `random_order` (reveal order), `keep_spaces`, `seed`.
 
+## Split by Word or Line
+
+`split` sets what one stagger step reveals: `iam_text_split_chars` (default),
+`iam_text_split_words` or `iam_text_split_lines`. Characters of a word or line
+share its timing, and `char_delay` becomes the delay between units. `'\n'`
+starts a new line (`line_spacing` adds extra space).
+
+```cpp
+iam_text_stagger_opts opts;
+opts.split = iam_text_split_words;
+opts.char_delay = 0.12f;          // per word
+iam_text_stagger(id, "Animate whole words\nor whole lines", progress, opts);
+```
+
+## Custom Glyph Effects
+
+`glyph_callback` runs for every glyph after the built-in effect and can change
+its offset, scale, rotation, alpha and color. With `effect = iam_text_fx_none`
+it is a blank slate:
+
+```cpp
+static void my_fx(iam_text_glyph* g, void* user) {
+    g->offset = iam_v2(0, (1.0f - g->t) * -20.0f);    // drop in
+    g->rotation = (1.0f - g->t) * 0.6f;
+    g->alpha = g->t;
+    g->color = g->unit % 2 ? IM_COL32(91, 194, 231, 255) : IM_COL32(204, 120, 88, 255);
+}
+opts.effect = iam_text_fx_none;
+opts.glyph_callback = my_fx;
+opts.glyph_user = nullptr;
+```
+
+`iam_text_glyph` also gives `index`, `unit` (word/line index), `codepoint` and
+`raw_t` (linear progress).
+
 ## See Also
 
 - [Text Along Paths](text-along-paths.md) - Text on curves

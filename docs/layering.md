@@ -204,6 +204,28 @@ iam_layer_add(inst, 0.8f);
 | `iam_get_blended_int(id, ch, out)` | Get blended int |
 | `inst.set_weight(w)` | Set instance weight |
 
+## State Blending
+
+`iam_state_play()` gives you state-machine style blending without building a
+graph: call it every frame with the clip of the current state. When the state
+changes, the previous clip fades out while the new one fades in over
+`crossfade` seconds.
+
+```cpp
+ImGuiID state = ImGui::IsItemActive() ? CLIP_PRESS : (ImGui::IsItemHovered() ? CLIP_HOVER : CLIP_IDLE);
+iam_state_play(id, state, 0.25f);
+
+float scale; iam_state_get_float(id, CH_SCALE, &scale);
+iam_vec4 col; iam_state_get_color(id, CH_COLOR, &col);    // blended in OKLAB by default
+```
+
+- The new state's clip plays from its start; going back to a state that is
+  still fading out keeps it playing.
+- `iam_state_current()`, `iam_state_blend()` (current state's weight) and
+  `iam_state_instance()` (to pause, seek or time-scale a state's clip).
+- Reduced motion makes switches instant; unused machines are collected by
+  `iam_gc()`.
+
 ## See Also
 
 - [Clips](clips.md) - Timeline animations

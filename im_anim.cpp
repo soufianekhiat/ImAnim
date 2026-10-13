@@ -921,12 +921,14 @@ static void iam_inertia_gc(unsigned max_age);  // Inertia section
 static void iam_inertia_clear();
 static void iam_track_velocity_gc(unsigned max_age);  // Velocity tracking section
 static void iam_track_velocity_clear();
+static void iam_state_gc(unsigned max_age);  // State blending section
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
 	iam_presence_gc(max_age_frames);
 	iam_inertia_gc(max_age_frames);
 	iam_track_velocity_gc(max_age_frames);
+	iam_state_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -2466,6 +2468,178 @@ int iam_text_scramble(char* out, int out_size, char const* text, float progress,
 	out[len] = 0;
 	return len;
 }
+
+// ----------------------------------------------------
+// State-driven clip blending
+// ----------------------------------------------------
+namespace iam_state_detail {
+	struct layer {
+		ImGuiID clip, inst;
+		float weight;       // current weight, moves toward target
+		float target;       // 1 for the current state, 0 for states fading out
+	};
+	struct machine {
+		ImGuiID current;
+		float crossfade;
+		double last_time;
+		unsigned last_seen_frame;
+		ImVector<layer> layers;
+	};
+	static ImPool<machine> g_machines;
+
+	static ImGuiID layer_instance(ImGuiID machine_id, ImGuiID clip_id) { return ImHashData(&clip_id, sizeof(clip_id), machine_id ^ 0x5157A7E5u); }
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_machines.GetMapSize(); ++i) {
+			if (machine* m = g_machines.TryGetMapData(i)) {
+				if (iam_detail::g_frame - m->last_seen_frame > max_age) {
+					for (int l = 0; l < m->layers.Size; l++) iam_instance(m->layers[l].inst).destroy();
+					m->layers.clear();
+					ImGuiID k = g_machines.Map.Data[i].key;
+					g_machines.Remove(k, g_machines.GetIndex(m));
+				}
+			}
+		}
+	}
+
+	// Total weight of layers that have the channel (via has(inst)), and accumulate weighted values
+	static float total_weight(machine const* m) {
+		float w = 0.0f;
+		for (int l = 0; l < m->layers.Size; l++) w += m->layers[l].weight;
+		return w;
+	}
+} // namespace iam_state_detail
+
+static void iam_state_gc(unsigned max_age) { iam_state_detail::gc(max_age); }
+
+void iam_state_play(ImGuiID machine_id, ImGuiID state_clip_id, float crossfade) {
+	using namespace iam_state_detail;
+	machine* m = g_machines.GetByKey(machine_id);
+	bool const first = (m == nullptr);
+	if (!m) {
+		m = g_machines.GetOrAddByKey(machine_id);
+		m->current = 0;
+		m->crossfade = 0.0f;
+		m->last_time = iam_detail::g_global_time;
+	}
+	m->last_seen_frame = iam_detail::g_frame;
+	m->crossfade = iam_detail::motion_dur(ImMax(crossfade, 0.0f));
+
+	// Advance weights (once per frame: time-based)
+	float dt = (float)(iam_detail::g_global_time - m->last_time);
+	m->last_time = iam_detail::g_global_time;
+	if (dt > 0.0f) {
+		float step = m->crossfade > 1e-5f ? dt / m->crossfade : 1.0f;
+		for (int l = 0; l < m->layers.Size; l++) {
+			layer& L = m->layers[l];
+			L.weight = (L.target > L.weight) ? ImMin(L.weight + step, L.target) : ImMax(L.weight - step, L.target);
+		}
+	}
+
+	// State change
+	if (state_clip_id != m->current) {
+		m->current = state_clip_id;
+		int found = -1;
+		for (int l = 0; l < m->layers.Size; l++) {
+			if (m->layers[l].clip == state_clip_id) found = l;
+			m->layers[l].target = 0.0f;
+		}
+		if (found >= 0) {
+			m->layers[found].target = 1.0f;  // coming back to a state still fading out: keep it playing
+		} else if (state_clip_id != 0) {
+			layer L;
+			L.clip = state_clip_id;
+			L.inst = layer_instance(machine_id, state_clip_id);
+			L.weight = (first || m->crossfade <= 1e-5f || m->layers.Size == 0) ? 1.0f : 0.0f;
+			L.target = 1.0f;
+			iam_play(state_clip_id, L.inst);
+			m->layers.push_back(L);
+		}
+		if (m->crossfade <= 1e-5f)
+			for (int l = 0; l < m->layers.Size; l++) m->layers[l].weight = m->layers[l].target;
+	}
+
+	// Drop layers that faded out
+	for (int l = m->layers.Size - 1; l >= 0; l--) {
+		if (m->layers[l].target == 0.0f && m->layers[l].weight <= 0.0f) {
+			iam_instance(m->layers[l].inst).destroy();
+			m->layers.erase(m->layers.Data + l);
+		}
+	}
+}
+
+ImGuiID iam_state_current(ImGuiID machine_id) {
+	iam_state_detail::machine* m = iam_state_detail::g_machines.GetByKey(machine_id);
+	return m ? m->current : 0;
+}
+
+float iam_state_blend(ImGuiID machine_id) {
+	using namespace iam_state_detail;
+	machine* m = g_machines.GetByKey(machine_id);
+	if (!m) return 1.0f;
+	float total = total_weight(m);
+	for (int l = 0; l < m->layers.Size; l++)
+		if (m->layers[l].clip == m->current) return total > 0.0f ? m->layers[l].weight / total : 1.0f;
+	return 1.0f;
+}
+
+iam_instance iam_state_instance(ImGuiID machine_id, ImGuiID state_clip_id) {
+	iam_state_detail::machine* m = iam_state_detail::g_machines.GetByKey(machine_id);
+	if (!m) return iam_instance(0);
+	for (int l = 0; l < m->layers.Size; l++)
+		if (m->layers[l].clip == state_clip_id) return iam_instance(m->layers[l].inst);
+	return iam_instance(0);
+}
+
+// Weighted average over the layers that provide the channel
+#define IAM_STATE_BLEND(TYPE, N, GET, TOARR, FROMARR)                                                   \
+	using namespace iam_state_detail;                                                                   \
+	machine* m = g_machines.GetByKey(machine_id);                                                       \
+	if (!m || !out) return false;                                                                       \
+	float acc[4] = { 0, 0, 0, 0 }, wsum = 0.0f;                                                         \
+	for (int l = 0; l < m->layers.Size; l++) {                                                          \
+		float w = m->layers[l].weight;                                                                   \
+		if (w <= 0.0f) continue;                                                                         \
+		TYPE v;                                                                                          \
+		iam_instance inst(m->layers[l].inst);                                                            \
+		if (!(GET)) continue;                                                                            \
+		float a[4] = { 0, 0, 0, 0 };                                                                     \
+		TOARR;                                                                                           \
+		for (int i = 0; i < N; i++) acc[i] += a[i] * w;                                                  \
+		wsum += w;                                                                                       \
+	}                                                                                                   \
+	if (wsum <= 0.0f) return false;                                                                     \
+	for (int i = 0; i < N; i++) acc[i] /= wsum;                                                         \
+	FROMARR;                                                                                            \
+	return true;
+
+bool iam_state_get_float(ImGuiID machine_id, ImGuiID channel, float* out) {
+	IAM_STATE_BLEND(float, 1, inst.get_float(channel, &v), a[0] = v, *out = acc[0])
+}
+
+bool iam_state_get_int(ImGuiID machine_id, ImGuiID channel, int* out) {
+	IAM_STATE_BLEND(int, 1, inst.get_int(channel, &v), a[0] = (float)v, *out = (int)ImFloor(acc[0] + 0.5f))
+}
+
+bool iam_state_get_vec2(ImGuiID machine_id, ImGuiID channel, iam_vec2* out) {
+	IAM_STATE_BLEND(iam_vec2, 2, inst.get_vec2(channel, &v),
+		ImVec2 x = IAM_VEC2_TO_IM(v); a[0] = x.x; a[1] = x.y,
+		*out = IAM_VEC2_FROM_IM(ImVec2(acc[0], acc[1])))
+}
+
+bool iam_state_get_vec4(ImGuiID machine_id, ImGuiID channel, iam_vec4* out) {
+	IAM_STATE_BLEND(iam_vec4, 4, inst.get_vec4(channel, &v),
+		ImVec4 x = IAM_VEC4_TO_IM(v); a[0] = x.x; a[1] = x.y; a[2] = x.z; a[3] = x.w,
+		*out = IAM_VEC4_FROM_IM(ImVec4(acc[0], acc[1], acc[2], acc[3])))
+}
+
+bool iam_state_get_color(ImGuiID machine_id, ImGuiID channel, iam_vec4* out, int color_space) {
+	// Blend in color_space (hue spaces blend hue linearly; oklab recommended)
+	IAM_STATE_BLEND(iam_vec4, 4, inst.get_color(channel, &v, color_space),
+		ImVec4 x = iam_detail::color::to_space(IAM_VEC4_TO_IM(v), color_space); a[0] = x.x; a[1] = x.y; a[2] = x.z; a[3] = x.w,
+		*out = IAM_VEC4_FROM_IM(iam_detail::color::from_space(ImVec4(acc[0], acc[1], acc[2], acc[3]), color_space)))
+}
+#undef IAM_STATE_BLEND
 
 // ============================================================
 // CLIP-BASED ANIMATION SYSTEM IMPLEMENTATION
@@ -4900,6 +5074,13 @@ iam_instance iam_play_stagger(ImGuiID clip_id, ImGuiID instance_id, int index) {
 }
 
 // Grid stagger - 2D grid-based delay distribution
+// Deterministic random in [-1, 1] per (index, seed)
+static float stagger_jitter(int index, unsigned seed) {
+	unsigned h = (unsigned)index * 0x9E3779B9u ^ (seed + 0x7F4A7C15u);
+	h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+	return (float)(h & 0xFFFFFF) / (float)0x7FFFFF - 1.0f;
+}
+
 float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts const& opts) {
 	int cols = opts.cols > 0 ? opts.cols : 1;
 	int rows = opts.rows > 0 ? opts.rows : 1;
@@ -4975,12 +5156,38 @@ float iam_stagger_grid_delay(int col, int row, iam_stagger_grid_opts const& opts
 
 	// Normalize and apply easing
 	float t = (max_dist > 0.0f) ? (dist / max_dist) : 0.0f;
+	if (opts.reversed) t = 1.0f - t;
 	if (opts.ease != iam_ease_linear) {
 		iam_ease_desc ez = { opts.ease, 0, 0, 0, 0 };
 		t = iam_detail::eval(ez, t);
 	}
 
-	return opts.start_delay + t * opts.delay * (float)(total - 1);
+	float delay = opts.start_delay + t * opts.delay * (float)(total - 1);
+	if (opts.jitter != 0.0f) delay = ImMax(delay + stagger_jitter(row * cols + col, opts.seed) * opts.jitter, 0.0f);
+	return delay;
+}
+
+float iam_stagger_value(int col, int row, float start, float end, iam_stagger_grid_opts const& opts, float jitter) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	int rows = opts.rows > 0 ? opts.rows : 1;
+	int total = cols * rows;
+	float t = 0.0f;
+	if (total > 1) {
+		// Same distance/ease/reversed as the delays, normalized to [0,1]
+		iam_stagger_grid_opts o = opts;
+		o.start_delay = 0.0f;
+		o.delay = 1.0f / (float)(total - 1);
+		o.jitter = 0.0f;
+		t = iam_stagger_grid_delay(col, row, o);
+	}
+	float v = start + (end - start) * t;
+	if (jitter != 0.0f) v += stagger_jitter(row * cols + col, opts.seed ^ 0xA5A5A5A5u) * jitter;
+	return v;
+}
+
+float iam_stagger_value_index(int index, float start, float end, iam_stagger_grid_opts const& opts, float jitter) {
+	int cols = opts.cols > 0 ? opts.cols : 1;
+	return iam_stagger_value(index % cols, index / cols, start, end, opts, jitter);
 }
 
 float iam_stagger_grid_delay_index(int index, iam_stagger_grid_opts const& opts) {
@@ -7240,6 +7447,30 @@ void iam_text_path_animated(ImGuiID path_id, char const* text, float progress, i
 // TEXT STAGGER - Per-character animation effects
 // ============================================================
 
+// Stagger unit index for every character (chars: index, words: word index, lines: line index); returns the unit count
+static int text_units(char const* text, int split, ImVector<int>& units) {
+	units.resize(0);
+	int unit = -1, idx = 0;
+	bool prev_space = true;
+	for (char const* p = text; *p; ) {
+		unsigned int c;
+		int len = ImTextCharFromUtf8(&c, p, nullptr);
+		if (len == 0) break;
+		bool space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+		if (split == iam_text_split_words) { if (!space && prev_space) unit++; }
+		else if (split == iam_text_split_lines) { if (idx == 0) unit = 0; }
+		else unit = idx;
+		units.push_back(unit < 0 ? 0 : unit);
+		if (split == iam_text_split_lines && c == '\n') unit++;
+		prev_space = space;
+		p += len;
+		idx++;
+	}
+	int count = 0;
+	for (int i = 0; i < units.Size; i++) count = ImMax(count, units[i] + 1);
+	return count;
+}
+
 float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts) {
 	ImFont* font = opts.font ? opts.font : ImGui::GetFont();
 	float font_size = ImGui::GetFontSize() * opts.font_scale;
@@ -7249,38 +7480,33 @@ float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts
 	char const* p = text;
 	int char_count = 0;
 
+	float line_width = 0.0f;
 	while (*p) {
 		unsigned int c;
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
+		if (c == '\n') { width = ImMax(width, line_width); line_width = 0.0f; p += char_len; char_count++; continue; }
 		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (glyph) {
-			width += glyph->AdvanceX;
-			if (*(p + char_len)) {
-				width += opts.letter_spacing;
+			line_width += glyph->AdvanceX;
+			if (*(p + char_len) && *(p + char_len) != '\n') {
+				line_width += opts.letter_spacing;
 			}
 		}
 		p += char_len;
 		char_count++;
 	}
 
-	return width;
+	return ImMax(width, line_width);
 }
 
 float iam_text_stagger_duration(char const* text, iam_text_stagger_opts const& opts) {
-	int char_count = 0;
-	char const* p = text;
-	while (*p) {
-		unsigned int c;
-		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
-		if (char_len == 0) break;
-		char_count++;
-		p += char_len;
-	}
-
-	if (char_count == 0) return 0.0f;
-	return (char_count - 1) * opts.char_delay + opts.char_duration;
+	if (!text || !*text) return 0.0f;
+	ImVector<int> units;
+	int unit_count = text_units(text, opts.split, units);
+	if (unit_count == 0) return 0.0f;
+	return (unit_count - 1) * opts.char_delay + opts.char_duration;
 }
 
 void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_stagger_opts const& opts) {
@@ -7307,7 +7533,10 @@ void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_sta
 	float total_duration = iam_text_stagger_duration(text, opts);
 	float current_time = progress * total_duration;
 
-	float cursor_x = IAM_VEC2_TO_IM(opts.pos).x;
+	ImVector<int> units;
+	text_units(text, opts.split, units);
+	float const start_x = IAM_VEC2_TO_IM(opts.pos).x;
+	float cursor_x = start_x;
 	float cursor_y = IAM_VEC2_TO_IM(opts.pos).y;
 	p = text;
 	int char_idx = 0;
@@ -7317,6 +7546,13 @@ void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_sta
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
+		if (c == '\n') {  // new line
+			cursor_x = start_x;
+			cursor_y += font_size + opts.line_spacing;
+			p += char_len;
+			char_idx++;
+			continue;
+		}
 		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (!glyph) {
 			p += char_len;
@@ -7324,19 +7560,23 @@ void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_sta
 			continue;
 		}
 
-		// Calculate character animation progress
-		float char_start_time = char_idx * opts.char_delay;
+		// Calculate character animation progress (characters of one unit share its timing)
+		int const unit_idx = char_idx < units.Size ? units[char_idx] : char_idx;
+		float char_start_time = unit_idx * opts.char_delay;
 		float char_progress = 0.0f;
+		float raw_progress = 0.0f;
 
 		if (current_time >= char_start_time + opts.char_duration) {
 			char_progress = 1.0f;
+			raw_progress = 1.0f;
 		} else if (current_time > char_start_time) {
 			float local_t = (current_time - char_start_time) / opts.char_duration;
 			char_progress = iam_detail::eval(opts.ease, local_t);
+			raw_progress = local_t;
 		}
 
-		// Skip invisible characters
-		if (char_progress <= 0.0f && opts.effect != iam_text_fx_wave) {
+		// Skip invisible characters (the callback may want to draw them)
+		if (char_progress <= 0.0f && opts.effect != iam_text_fx_wave && !opts.glyph_callback) {
 			cursor_x += glyph->AdvanceX + opts.letter_spacing;
 			p += char_len;
 			char_idx++;
@@ -7412,6 +7652,26 @@ void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_sta
 			}
 		}
 
+		// Per-glyph hook
+		ImU32 glyph_color = opts.color;
+		if (opts.glyph_callback) {
+			iam_text_glyph g;
+			g.index = char_idx;
+			g.unit = unit_idx;
+			g.codepoint = c;
+			g.t = char_progress;
+			g.raw_t = raw_progress;
+			g.offset = IAM_VEC2_FROM_IM(ImVec2(offset_x, offset_y));
+			g.scale = scale;
+			g.rotation = rotation;
+			g.alpha = alpha;
+			g.color = glyph_color;
+			opts.glyph_callback(&g, opts.glyph_user);
+			ImVec2 off = IAM_VEC2_TO_IM(g.offset);
+			offset_x = off.x; offset_y = off.y;
+			scale = g.scale; rotation = g.rotation; alpha = g.alpha; glyph_color = g.color;
+		}
+
 		if (alpha <= 0.0f) {
 			cursor_x += glyph->AdvanceX + opts.letter_spacing;
 			p += char_len;
@@ -7436,9 +7696,9 @@ void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_sta
 		}
 
 		// Apply color with alpha
-		ImU32 color = opts.color;
+		ImU32 color = glyph_color;
 		ImU32 base_alpha = (color >> IM_COL32_A_SHIFT) & 0xFF;
-		ImU32 final_alpha = (ImU32)(base_alpha * alpha);
+		ImU32 final_alpha = (ImU32)(base_alpha * ImMin(alpha, 1.0f));
 		color = (color & ~IM_COL32_A_MASK) | (final_alpha << IM_COL32_A_SHIFT);
 
 		// Render the glyph
