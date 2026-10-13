@@ -15,6 +15,29 @@
 #include <math.h>
 #include <stdio.h>
 
+// Text scaling: SetWindowFontScale() and single-argument PushFont() are obsolete since Dear ImGui 1.92
+static void DemoPushFontScale(float scale) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(NULL, ImGui::GetStyle().FontSizeBase * scale);
+#else
+	ImGui::SetWindowFontScale(scale);
+#endif
+}
+static void DemoPopFontScale() {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PopFont();
+#else
+	ImGui::SetWindowFontScale(1.0f);
+#endif
+}
+static void DemoPushFont(ImFont* font) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(font, 0.0f);  // keep current size
+#else
+	ImGui::PushFont(font);
+#endif
+}
+
 #ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 constexpr auto ImGuiChildFlags_Borders = ImGuiChildFlags_Border;
 #endif
@@ -1736,10 +1759,10 @@ static void ShowBasicTweensDemo()
 		int animated_value = iam_tween_int(id, 0, counter_target, 0.8f,
 			iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt);
 
-		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
-		ImGui::SetWindowFontScale(2.0f);
+		DemoPushFont(ImGui::GetIO().Fonts->Fonts[0]);
+		DemoPushFontScale(2.0f);
 		ImGui::Text("%d", animated_value);
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 		ImGui::PopFont();
 
 		ImGui::TextDisabled("Target: %d", counter_target);
@@ -2602,9 +2625,9 @@ static void ShowClipSystemDemo()
 			if (scale > 10.0f) scale = 10.0f;
 
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-			ImGui::SetWindowFontScale(scale);
+			DemoPushFontScale(scale);
 			ImGui::Text("Fading Text (a:%.2f s:%.2f)", alpha, scale);
-			ImGui::SetWindowFontScale(1.0f);
+			DemoPopFontScale();
 			ImGui::PopStyleVar();
 		}
 
@@ -2634,9 +2657,9 @@ static void ShowClipSystemDemo()
 			ImVec2 cur = ImGui::GetCursorPos();
 			ImGui::SetCursorPos(ImVec2(cur.x + offset.x, cur.y + offset.y));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-			ImGui::SetWindowFontScale(scale);
+			DemoPushFontScale(scale);
 			ImGui::Text("Bouncing!");
-			ImGui::SetWindowFontScale(1.0f);
+			DemoPopFontScale();
 			ImGui::PopStyleVar();
 		}
 
@@ -2668,9 +2691,9 @@ static void ShowClipSystemDemo()
 			ImVec2 cur = ImGui::GetCursorPos();
 			ImGui::SetCursorPos(ImVec2(cur.x + offset.x, cur.y + offset.y));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-			ImGui::SetWindowFontScale(scale);
+			DemoPushFontScale(scale);
 			ImGui::TextColored(color, "Multi-channel Animation");
-			ImGui::SetWindowFontScale(1.0f);
+			DemoPopFontScale();
 			ImGui::PopStyleVar();
 		}
 
@@ -2806,9 +2829,9 @@ static void ShowClipSystemDemo()
 		if (scale > 10.0f) scale = 10.0f;
 
 		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-		ImGui::SetWindowFontScale(scale);
+		DemoPushFontScale(scale);
 		ImGui::Text("Delayed Text");
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 		ImGui::PopStyleVar();
 
 		if (was_playing) {
@@ -2846,9 +2869,9 @@ static void ShowClipSystemDemo()
 		if (scale > 10.0f) scale = 10.0f;
 
 		ImGui::SameLine();
-		ImGui::SetWindowFontScale(scale);
+		DemoPushFontScale(scale);
 		ImGui::Text("Scaling");
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 
 		ImGui::Text("on_begin called:    %d times", s_callback_begin_count);
 		ImGui::Text("on_update called:   %d times", s_callback_update_count);
@@ -4185,7 +4208,11 @@ static void ShowPresenceDemo()
 		ImVec2 half((ts.x * 0.5f + fs * 1.5f) * scale, fs * 2.0f * scale);
 		int a = (int)(ImClamp(t, 0.0f, 1.0f) * 255);
 		dl->AddRectFilled(ImVec2(c.x - half.x, c.y - half.y), ImVec2(c.x + half.x, c.y + half.y), IM_COL32(45, 50, 64, a), 8.0f);
+#if IMGUI_VERSION_NUM < 19276
 		dl->AddRect(ImVec2(c.x - half.x, c.y - half.y), ImVec2(c.x + half.x, c.y + half.y), IM_COL32(91, 194, 231, a), 8.0f, 0, 1.5f);
+#else
+		dl->AddRect(ImVec2(c.x - half.x, c.y - half.y), ImVec2(c.x + half.x, c.y + half.y), IM_COL32(91, 194, 231, a), 8.0f, 1.5f);
+#endif
 		dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), IM_COL32(230, 230, 235, a), txt);
 	}
 
@@ -5860,11 +5887,11 @@ static void ShowOscillatorsDemo()
 		float fixed_height = 40 * max_scale + ImGui::GetStyle().ItemSpacing.y;
 		ImGui::BeginChild("##PulsingButtonContainer", ImVec2(0, fixed_height), false, ImGuiWindowFlags_NoScrollbar);
 
-		ImGui::SetWindowFontScale(scale);
+		DemoPushFontScale(scale);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f + pulse * 0.5f, 0.5f, 0.8f, 1.0f));
 		ImGui::Button("Click Me!", ImVec2(120 * scale, 40 * scale));
 		ImGui::PopStyleColor();
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 
 		ImGui::SameLine();
 		ImGui::TextDisabled("Button pulses continuously");

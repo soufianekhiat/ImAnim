@@ -14,6 +14,46 @@
 #include <math.h>
 #include <stdio.h>
 
+// Text scaling: SetWindowFontScale() and single-argument PushFont() are obsolete since Dear ImGui 1.92
+static void DemoPushFontScale(float scale) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(NULL, ImGui::GetStyle().FontSizeBase * scale);
+#else
+	ImGui::SetWindowFontScale(scale);
+#endif
+}
+static void DemoPopFontScale() {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PopFont();
+#else
+	ImGui::SetWindowFontScale(1.0f);
+#endif
+}
+static void DemoPushFont(ImFont* font) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(font, 0.0f);  // keep current size
+#else
+	ImGui::PushFont(font);
+#endif
+}
+
+// Global font scale: io.FontGlobalScale moved to style.FontScaleMain in Dear ImGui 1.92
+static float UcFontScale() {
+#if IMGUI_VERSION_NUM >= 19200
+	return ImGui::GetStyle().FontScaleMain;
+#else
+	return ImGui::GetIO().FontGlobalScale;
+#endif
+}
+
+// Corner rounding flags: ImDrawFlags_RoundCornersXXX were renamed ImDrawFlags_RoundXXX in Dear ImGui 1.93 (same values)
+static ImDrawFlags const UC_ROUND_TOP_LEFT = 1 << 4, UC_ROUND_TOP_RIGHT = 1 << 5, UC_ROUND_BOTTOM_LEFT = 1 << 6, UC_ROUND_BOTTOM_RIGHT = 1 << 7;
+static ImDrawFlags const UC_ROUND_TOP = UC_ROUND_TOP_LEFT | UC_ROUND_TOP_RIGHT;
+static ImDrawFlags const UC_ROUND_BOTTOM = UC_ROUND_BOTTOM_LEFT | UC_ROUND_BOTTOM_RIGHT;
+static ImDrawFlags const UC_ROUND_LEFT = UC_ROUND_TOP_LEFT | UC_ROUND_BOTTOM_LEFT;
+static ImDrawFlags const UC_ROUND_RIGHT = UC_ROUND_TOP_RIGHT | UC_ROUND_BOTTOM_RIGHT;
+static ImDrawFlags const UC_ROUND_ALL = UC_ROUND_TOP | UC_ROUND_BOTTOM;
+
 // ============================================================
 // HELPER: Get delta time with safety bounds
 // ============================================================
@@ -274,7 +314,7 @@ static void ShowUsecase_ToastNotifications()
 		ImU32 accent_color = ImGui::ColorConvertFloat4ToU32(col);
 
 		dl->AddRectFilled(ImVec2(x, y), ImVec2(x + toast_width, y + toast_height), bg_color, 6.0f);
-		dl->AddRectFilled(ImVec2(x, y), ImVec2(x + 4.0f, y + toast_height), accent_color, 6.0f, ImDrawFlags_RoundCornersLeft);
+		dl->AddRectFilled(ImVec2(x, y), ImVec2(x + 4.0f, y + toast_height), accent_color, 6.0f, UC_ROUND_LEFT);
 
 		// Text
 		ImU32 text_color = IM_COL32(255, 255, 255, (int)(alpha * 255));
@@ -322,7 +362,7 @@ static void ShowUsecase_SidebarNavigation()
 	if (sidebar_width > 1.0f)
 	{
 		dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + sidebar_width, canvas_pos.y + canvas_size.y),
-			IM_COL32(45, 48, 60, 255), 4.0f, ImDrawFlags_RoundCornersLeft);
+			IM_COL32(45, 48, 60, 255), 4.0f, UC_ROUND_LEFT);
 
 		// Menu items with stagger
 		const char* menu_items[5] = { "Dashboard", "Analytics", "Projects", "Settings", "Help" };
@@ -614,7 +654,7 @@ static void ShowUsecase_TabTransitions()
 
 	// Draw tab background
 	dl->AddRectFilled(tabs_pos, ImVec2(tabs_pos.x + total_width, tabs_pos.y + tab_height),
-		IM_COL32(35, 38, 48, 255), 4.0f, ImDrawFlags_RoundCornersTop);
+		IM_COL32(35, 38, 48, 255), 4.0f, UC_ROUND_TOP);
 
 	// Calculate target indicator position
 	float target_x = tabs_pos.x;
@@ -726,7 +766,7 @@ static void ShowUsecase_ProgressBar()
 		ImVec4 fill_color = iam_get_blended_color(start_col, end_col, progress, iam_col_oklab);
 
 		dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + filled_width, bar_pos.y + bar_size.y),
-			ImGui::ColorConvertFloat4ToU32(fill_color), 6.0f, ImDrawFlags_RoundCornersLeft);
+			ImGui::ColorConvertFloat4ToU32(fill_color), 6.0f, UC_ROUND_LEFT);
 
 		// Glow effect at the edge
 		float glow_x = bar_pos.x + filled_width - 4.0f;
@@ -957,7 +997,7 @@ static void ShowUsecase_Accordion()
 
 		ImU32 header_color = header_hovered ? IM_COL32(55, 58, 70, 255) : IM_COL32(45, 48, 60, 255);
 		dl->AddRectFilled(header_min, header_max, header_color, 4.0f,
-			animated_height > 1.0f ? ImDrawFlags_RoundCornersTop : ImDrawFlags_RoundCornersAll);
+			animated_height > 1.0f ? UC_ROUND_TOP : UC_ROUND_ALL);
 
 		// Arrow icon
 		ImVec2 arrow_center(header_min.x + 20.0f, header_min.y + header_height * 0.5f);
@@ -989,7 +1029,7 @@ static void ShowUsecase_Accordion()
 			dl->PushClipRect(content_min, content_max, true);
 
 			dl->AddRectFilled(content_min, ImVec2(content_max.x, content_min.y + content_heights[i]),
-				IM_COL32(35, 38, 48, 255), 4.0f, ImDrawFlags_RoundCornersBottom);
+				IM_COL32(35, 38, 48, 255), 4.0f, UC_ROUND_BOTTOM);
 
 			// Content text
 			float content_alpha = ImClamp(animated_height / content_heights[i], 0.0f, 1.0f);
@@ -1240,7 +1280,7 @@ static void ShowUsecase_AnimatedCounter()
 		else
 			snprintf(value_text, sizeof(value_text), "%d%s", display_value, stats[i].suffix);
 
-		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font
+		DemoPushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font
 		ImVec2 value_size = ImGui::CalcTextSize(value_text);
 		dl->AddText(ImVec2(center.x - value_size.x * 0.5f, center.y - 20.0f),
 			IM_COL32(91, 194, 231, 255), value_text);
@@ -3163,7 +3203,7 @@ static void ShowUsecase_SlideDrawer()
 	// Header bar
 	float header_height = 40.0f * scale;
 	dl->AddRectFilled(pos, ImVec2(pos.x + canvas_size.x, pos.y + header_height),
-		IM_COL32(45, 50, 65, 255), 8.0f, ImDrawFlags_RoundCornersTop);
+		IM_COL32(45, 50, 65, 255), 8.0f, UC_ROUND_TOP);
 
 	// Hamburger menu button
 	ImVec2 menu_pos(pos.x + 12 * scale, pos.y + header_height * 0.5f);
@@ -5662,7 +5702,7 @@ static void ShowUsecase_PopoverMenu()
 		"Items fade in with staggered timing.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static bool show_popover = false;
 	static float popover_time = 0.0f;
@@ -5750,7 +5790,7 @@ static void ShowUsecase_AlertBanner()
 		"Auto-dismiss with progress indicator.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static int alert_type = -1;  // -1 = none, 0 = info, 1 = success, 2 = warning, 3 = error
 	static float alert_timer = 0.0f;
@@ -5817,7 +5857,7 @@ static void ShowUsecase_AlertBanner()
 		dl->AddRectFilled(
 			ImVec2(banner_pos.x, banner_pos.y + banner_size.y - 4 * scale),
 			ImVec2(banner_pos.x + bar_width, banner_pos.y + banner_size.y),
-			IM_COL32(255, 255, 255, 100), 0, ImDrawFlags_RoundCornersBottom);
+			IM_COL32(255, 255, 255, 100), 0, UC_ROUND_BOTTOM);
 
 		// Auto dismiss
 		if (alert_timer >= alert_duration)
@@ -5844,7 +5884,7 @@ static void ShowUsecase_ExpandableListItem()
 		"Each item has different content lengths to demonstrate adaptive sizing.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static int expanded_item = -1;
 
@@ -5911,7 +5951,7 @@ static void ShowUsecase_ExpandableListItem()
 			IM_COL32(255, 152, 0, 255)    // Orange for major releases
 		};
 		dl->AddRectFilled(item_pos, ImVec2(item_pos.x + 4 * scale, item_pos.y + item_size.y),
-			accent_colors[i], 8 * scale, ImDrawFlags_RoundCornersLeft);
+			accent_colors[i], 8 * scale, UC_ROUND_LEFT);
 
 		// Title
 		dl->AddText(ImVec2(item_pos.x + 15 * scale, item_pos.y + 8 * scale),
@@ -5995,7 +6035,7 @@ static void ShowUsecase_ImageGalleryGrid()
 		"Grid items scale up smoothly on hover.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static int selected_image = -1;
 	static int hovered_image = -1;
@@ -6089,7 +6129,7 @@ static void ShowUsecase_ParticleBurst()
 		"Great for celebrations, achievements, or feedback.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static float burst_time = -1.0f;
 	static ImVec2 burst_pos;
@@ -6182,7 +6222,7 @@ static void ShowUsecase_GlowingBorder()
 		"Pulses with customizable color.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static float glow_time = 0.0f;
 	glow_time += dt;
@@ -6248,7 +6288,7 @@ static void ShowUsecase_AnimatedGraphNode()
 		"Common in node-based editors and flowcharts.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static int hovered_node = -1;
 	static float connection_anim = 0.0f;
@@ -6372,7 +6412,7 @@ static void ShowUsecase_PlaybackControls()
 		"Play/pause morph and progress scrubbing.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 
 	static bool is_playing = false;
 	static float playback_pos = 0.3f;
@@ -6497,7 +6537,7 @@ static void ShowUsecase_IconButtonRotation()
 	ImGui::TextWrapped("Icon button that rotates its icon shape on hover using iam_tween_float.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool hovered[3] = {false, false, false};
@@ -6597,7 +6637,7 @@ static void ShowUsecase_ButtonGlow()
 	ImGui::TextWrapped("Button with animated glow effect on focus/hover using iam_oscillate.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool focused = false;
@@ -6654,7 +6694,7 @@ static void ShowUsecase_LikeHeartButton()
 	ImGui::TextWrapped("Instagram-style heart button with hover grow, click bounce, and particle burst animations.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool liked = false;
@@ -6747,7 +6787,7 @@ static void ShowUsecase_DownloadProgressButton()
 	ImGui::TextWrapped("Button that transforms into a progress indicator during download.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int state = 0;  // 0=idle, 1=downloading, 2=complete
@@ -6822,7 +6862,7 @@ static void ShowUsecase_SubmitButtonStates()
 	ImGui::TextWrapped("Form submit button with idle/loading/success/error state transitions.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int state = 0;  // 0=idle, 1=loading, 2=success, 3=error
@@ -6903,7 +6943,7 @@ static void ShowUsecase_PillNavigation()
 	ImGui::TextWrapped("Tab navigation with sliding pill indicator using iam_tween_float. Pills sized to fit text.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int selected = 0;
@@ -6971,7 +7011,7 @@ static void ShowUsecase_DropdownMenu()
 	ImGui::TextWrapped("Animated dropdown menu with staggered item reveal.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool open = false;
@@ -7042,7 +7082,7 @@ static void ShowUsecase_ContextMenu()
 	ImGui::TextWrapped("Right-click context menu with scale animation. Right-click in the box below.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool show_menu = false;
@@ -7105,7 +7145,7 @@ static void ShowUsecase_BottomSheet()
 	ImGui::TextWrapped("iOS-style bottom sheet that slides up from bottom.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool open = false;
@@ -7142,7 +7182,7 @@ static void ShowUsecase_BottomSheet()
 	// Sheet
 	ImVec2 sheet_pos(pos.x, pos.y + sheet_y);
 	dl->AddRectFilled(sheet_pos, ImVec2(sheet_pos.x + container_size.x, sheet_pos.y + sheet_height),
-		IM_COL32(50, 55, 65, 255), 12 * scale, ImDrawFlags_RoundCornersTop);
+		IM_COL32(50, 55, 65, 255), 12 * scale, UC_ROUND_TOP);
 
 	// Handle
 	dl->AddRectFilled(
@@ -7176,7 +7216,7 @@ static void ShowUsecase_Snackbar()
 	ImGui::TextWrapped("Animated cookie consent banner with slide-up entrance and button hover effects.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool show_banner = true;
@@ -7228,7 +7268,7 @@ static void ShowUsecase_Snackbar()
 		// Banner background with gradient effect
 		dl->AddRectFilled(banner_pos,
 			ImVec2(banner_pos.x + container_size.x, banner_pos.y + banner_height),
-			IM_COL32(30, 35, 50, 250), 12 * scale, ImDrawFlags_RoundCornersTop);
+			IM_COL32(30, 35, 50, 250), 12 * scale, UC_ROUND_TOP);
 
 		// Cookie icon (animated wobble) - larger
 		float wobble = iam_oscillate(ImGui::GetID("cookie_wobble"), 0.1f, 2.0f, 0, 0.0f, dt);
@@ -7332,7 +7372,7 @@ static void ShowUsecase_Lightbox()
 	ImGui::TextWrapped("Image lightbox overlay with zoom animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool open = false;
@@ -7406,7 +7446,7 @@ static void ShowUsecase_CommandPalette()
 	ImGui::TextWrapped("Spotlight/Command-K style search palette.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool open = false;
@@ -7474,7 +7514,7 @@ static void ShowUsecase_InlineConfirmation()
 	ImGui::TextWrapped("Inline delete confirmation that expands in place with hover effects.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool confirming = false;
@@ -7554,7 +7594,7 @@ static void ShowUsecase_InlineConfirmation()
 		if (confirm_hover > 0.01f)
 		{
 			dl->AddRectFilled(pos, ImVec2(pos.x + confirm_btn_width, pos.y + btn_height),
-				IM_COL32(255, 255, 255, (int)(40 * confirm_hover)), 4 * scale, ImDrawFlags_RoundCornersLeft);
+				IM_COL32(255, 255, 255, (int)(40 * confirm_hover)), 4 * scale, UC_ROUND_LEFT);
 		}
 
 		// Cancel button hover highlight
@@ -7562,7 +7602,7 @@ static void ShowUsecase_InlineConfirmation()
 		{
 			dl->AddRectFilled(ImVec2(cancel_start_x, pos.y),
 				ImVec2(cancel_start_x + cancel_btn_width, pos.y + btn_height),
-				IM_COL32(255, 255, 255, (int)(40 * cancel_hover)), 4 * scale, ImDrawFlags_RoundCornersRight);
+				IM_COL32(255, 255, 255, (int)(40 * cancel_hover)), 4 * scale, UC_ROUND_RIGHT);
 		}
 
 		// Center "Confirm" text in its section
@@ -7601,7 +7641,7 @@ static void ShowUsecase_UploadProgress()
 	ImGui::TextWrapped("File upload progress with percentage and animated bar.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float progress = 0.0f;
@@ -7657,7 +7697,7 @@ static void ShowUsecase_MultiStepProgress()
 	ImGui::TextWrapped("File upload progress with animated bars and completion states.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	struct FileUpload {
@@ -7769,7 +7809,7 @@ static void ShowUsecase_InfiniteScrollLoader()
 	ImGui::TextWrapped("Loading indicator at the bottom of scrollable content.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float spinner_angle = 0.0f;
@@ -7836,7 +7876,7 @@ static void ShowUsecase_PullToRefresh()
 	ImGui::TextWrapped("Pull-down-to-refresh gesture indicator.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float pull_amount = 0.0f;
@@ -7909,7 +7949,7 @@ static void ShowUsecase_DataFetchStates()
 	ImGui::TextWrapped("Loading/Success/Error states for data fetching.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int state = 0; // 0=idle, 1=loading, 2=success, 3=error
@@ -7979,7 +8019,7 @@ static void ShowUsecase_PercentageCounter()
 	ImGui::TextWrapped("Animated percentage counter with easing.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float target_pct = 75.0f;
@@ -7996,15 +8036,15 @@ static void ShowUsecase_PercentageCounter()
 	char pct_text[16];
 	snprintf(pct_text, sizeof(pct_text), "%.0f%%", current_pct);
 
-	ImGui::PushFont(ImGui::GetFont());
+	DemoPushFont(ImGui::GetFont());
 	float font_scale = 3.0f;
 	ImVec2 text_size = ImGui::CalcTextSize(pct_text);
 	text_size.x *= font_scale;
 	text_size.y *= font_scale;
 
-	ImGui::SetWindowFontScale(font_scale);
+	DemoPushFontScale(font_scale);
 	dl->AddText(pos, IM_COL32(100, 200, 255, 255), pct_text);
-	ImGui::SetWindowFontScale(1.0f);
+	DemoPopFontScale();
 	ImGui::PopFont();
 
 	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + text_size.y + 10 * scale));
@@ -8022,7 +8062,7 @@ static void ShowUsecase_SegmentedControl()
 	ImGui::TextWrapped("Toggle switch group with animated knob and glow effects.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool toggles[3] = {true, false, true};
@@ -8097,7 +8137,7 @@ static void ShowUsecase_QuantityStepper()
 	ImGui::TextWrapped("Rotary dial/knob control with smooth rotation, tick marks, and glow effect.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float dial_value = 0.5f;  // 0.0 to 1.0
@@ -8226,7 +8266,7 @@ static void ShowUsecase_StrengthMeter()
 	ImGui::TextWrapped("Animated password strength meter with segmented bar and requirements checklist.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int strength = 0; // 0=none, 1=weak, 2=fair, 3=good, 4=strong
@@ -8362,7 +8402,7 @@ static void ShowUsecase_RangeSlider()
 	ImGui::TextWrapped("Analog joystick with spring-back animation, deadzone visualization, and directional feedback.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float stick_x = 0.0f;  // -1 to 1
@@ -8513,7 +8553,7 @@ static void ShowUsecase_SearchInput()
 	ImGui::TextWrapped("Social media reaction buttons with pop animations, particle effects, and hold-to-change.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	// Reaction data
@@ -8704,7 +8744,7 @@ static void ShowUsecase_StackedCards()
 	ImGui::TextWrapped("Stacked card deck with animated reveal on hover.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool expanded = false;
@@ -8745,7 +8785,7 @@ static void ShowUsecase_NotificationCard()
 	ImGui::TextWrapped("Notification card with slide-in and dismiss animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool visible = false;
@@ -8774,7 +8814,7 @@ static void ShowUsecase_NotificationCard()
 
 		// Accent bar
 		dl->AddRectFilled(final_pos, ImVec2(final_pos.x + 4 * scale, final_pos.y + card_size.y),
-			IM_COL32(76, 175, 80, 255), 8 * scale, ImDrawFlags_RoundCornersLeft);
+			IM_COL32(76, 175, 80, 255), 8 * scale, UC_ROUND_LEFT);
 
 		// Content
 		dl->AddText(ImVec2(final_pos.x + 15 * scale, final_pos.y + 12 * scale),
@@ -8794,7 +8834,7 @@ static void ShowUsecase_ProductCard()
 	ImGui::TextWrapped("Music player with animated progress, waveform visualization, and playback controls.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool playing = false;
@@ -8924,7 +8964,7 @@ static void ShowUsecase_TimelineCard()
 	ImGui::TextWrapped("Timeline/Activity feed card with staggered animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float anim_time = 0.0f;
@@ -8981,7 +9021,7 @@ static void ShowUsecase_HighlightText()
 	ImGui::TextWrapped("Text with animated highlight marker effect.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool highlight = false;
@@ -9021,7 +9061,7 @@ static void ShowUsecase_AnimatedLabel()
 	ImGui::TextWrapped("Label with animated entrance and color transition.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int label_state = 0; // 0=none, 1=pending, 2=success, 3=error
@@ -9066,7 +9106,7 @@ static void ShowUsecase_ScrollingMarquee()
 	ImGui::TextWrapped("Horizontal scrolling text marquee animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float scroll_x = 0.0f;
@@ -9103,7 +9143,7 @@ static void ShowUsecase_CountdownDisplay()
 	ImGui::TextWrapped("Animated countdown timer with flip-style digits.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float countdown = 99.0f;
@@ -9130,7 +9170,7 @@ static void ShowUsecase_CountdownDisplay()
 	dl->AddRectFilled(tens_pos, ImVec2(tens_pos.x + digit_width, tens_pos.y + digit_height),
 		IM_COL32(50, 55, 65, 255), 4 * scale);
 	char tens_str[2] = {(char)('0' + tens), '\0'};
-	ImGui::SetWindowFontScale(2.5f);
+	DemoPushFontScale(2.5f);
 	ImVec2 tens_size = ImGui::CalcTextSize(tens_str);
 	dl->AddText(ImVec2(tens_pos.x + (digit_width - tens_size.x) * 0.5f,
 		tens_pos.y + (digit_height - tens_size.y) * 0.5f + tens_y), IM_COL32(255, 255, 255, 255), tens_str);
@@ -9142,7 +9182,7 @@ static void ShowUsecase_CountdownDisplay()
 	char ones_str[2] = {(char)('0' + ones), '\0'};
 	dl->AddText(ImVec2(ones_pos.x + (digit_width - tens_size.x) * 0.5f,
 		ones_pos.y + (digit_height - tens_size.y) * 0.5f + ones_y), IM_COL32(255, 255, 255, 255), ones_str);
-	ImGui::SetWindowFontScale(1.0f);
+	DemoPopFontScale();
 
 	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + digit_height + 10 * scale));
 }
@@ -9155,7 +9195,7 @@ static void ShowUsecase_WordCloud()
 	ImGui::TextWrapped("Animated word cloud with hover effects.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	const char* words[] = {"Animation", "ImGui", "Tween", "UI", "Design", "Code", "Fast"};
@@ -9195,9 +9235,9 @@ static void ShowUsecase_WordCloud()
 
 		ImU32 word_col = hovered ? IM_COL32(100, 200, 255, 255) : IM_COL32(200, 200, 210, 255);
 
-		ImGui::SetWindowFontScale(word_scale);
+		DemoPushFontScale(word_scale);
 		dl->AddText(word_pos, word_col, words[i]);
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 	}
 
 	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
@@ -9211,10 +9251,10 @@ static void ShowUsecase_AnimatedTooltipText()
 	ImGui::TextWrapped("Text with animated tooltip on hover.");
 
 	// Add empty line before the interactive element
-	ImGui::Dummy(ImVec2(0, 10 * ImGui::GetIO().FontGlobalScale));
+	ImGui::Dummy(ImVec2(0, 10 * UcFontScale()));
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool showing = false;
@@ -9266,7 +9306,7 @@ static void ShowUsecase_CharacterReveal()
 	ImGui::TextWrapped("Text with per-character reveal animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float anim_time = 0.0f;
@@ -9308,7 +9348,7 @@ static void ShowUsecase_PulseRing()
 	ImGui::TextWrapped("Pulsating ring effect for attention/notification.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float pulse_time = 0.0f;
@@ -9341,7 +9381,7 @@ static void ShowUsecase_MorphingShape()
 	ImGui::TextWrapped("Shape morphing between circle and square.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool is_circle = true;
@@ -9372,7 +9412,7 @@ static void ShowUsecase_BouncingDots()
 	ImGui::TextWrapped("Bouncing dots loading animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float bounce_time = 0.0f;
@@ -9400,7 +9440,7 @@ static void ShowUsecase_ConfettiBurst()
 	ImGui::TextWrapped("Celebration confetti burst animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float burst_time = -1.0f;
@@ -9454,7 +9494,7 @@ static void ShowUsecase_HealthBar()
 	ImGui::TextWrapped("Game-style health bar with damage animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float health = 100.0f;
@@ -9511,7 +9551,7 @@ static void ShowUsecase_CooldownTimer()
 	ImGui::TextWrapped("Ability cooldown with circular sweep animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float cooldown = 0.0f;
@@ -9565,7 +9605,7 @@ static void ShowUsecase_DamageNumber()
 	ImGui::TextWrapped("Floating damage number with pop and fade.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static float dmg_time = -1.0f;
@@ -9595,11 +9635,11 @@ static void ShowUsecase_DamageNumber()
 		char dmg_str[8];
 		snprintf(dmg_str, sizeof(dmg_str), "-%d", dmg_value);
 
-		ImGui::SetWindowFontScale(pop_scale * 1.5f);
+		DemoPushFontScale(pop_scale * 1.5f);
 		ImVec2 dmg_size = ImGui::CalcTextSize(dmg_str);
 		dl->AddText(ImVec2(target_center.x - dmg_size.x * 0.5f, target_center.y - 30 * scale - float_y),
 			IM_COL32(255, 100, 100, (int)(alpha * 255)), dmg_str);
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 	}
 
 	ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + container_size.y + 10 * scale));
@@ -9618,7 +9658,7 @@ static void ShowUsecase_XPProgress()
 	ImGui::TextWrapped("Experience bar with level-up animation.");
 
 	float dt = GetUsecaseDeltaTime();
-	float scale = ImGui::GetIO().FontGlobalScale;
+	float scale = UcFontScale();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static int level = 1;

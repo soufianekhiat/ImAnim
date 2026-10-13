@@ -13,6 +13,29 @@
 #include <math.h>
 #include <stdio.h>
 
+// Text scaling: SetWindowFontScale() and single-argument PushFont() are obsolete since Dear ImGui 1.92
+static void DemoPushFontScale(float scale) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(NULL, ImGui::GetStyle().FontSizeBase * scale);
+#else
+	ImGui::SetWindowFontScale(scale);
+#endif
+}
+static void DemoPopFontScale() {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PopFont();
+#else
+	ImGui::SetWindowFontScale(1.0f);
+#endif
+}
+static void DemoPushFont(ImFont* font) {
+#if IMGUI_VERSION_NUM >= 19200
+	ImGui::PushFont(font, 0.0f);  // keep current size
+#else
+	ImGui::PushFont(font);
+#endif
+}
+
 // ============================================================
 // HELPER: Get delta time with safety bounds
 // ============================================================
@@ -334,10 +357,10 @@ static void DocSection_TweenTypes()
 		int value = iam_tween_int(id, DOC_CH_VALUE, target_int, 0.8f,
 			iam_ease_preset(iam_ease_out_expo), iam_policy_crossfade, dt);
 
-		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
-		ImGui::SetWindowFontScale(2.0f);
+		DemoPushFont(ImGui::GetIO().Fonts->Fonts[0]);
+		DemoPushFontScale(2.0f);
 		ImGui::Text("%d", value);
-		ImGui::SetWindowFontScale(1.0f);
+		DemoPopFontScale();
 		ImGui::PopFont();
 
 		ImGui::TreePop();
