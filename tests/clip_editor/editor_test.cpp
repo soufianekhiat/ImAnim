@@ -343,6 +343,42 @@ int main() {
 		CHECK(vv > 10.5f, "variation still applies after load (%.2f)", vv);
 	}
 
+	// ---------------- Nudge, key jump, magnet ----------------
+	{
+		ImGuiID const M1 = iam_id("m1"), M2 = iam_id("m2");
+		iam_clip::begin(CLIP).key_float(M1, 0.0f, 0.0f).key_float(M1, 1.0f, 1.0f).key_float(M2, 0.0f, 0.0f).key_float(M2, 0.73f, 1.0f).key_float(M2, 2.0f, 2.0f).end();
+		inst = iam_instance(INST);
+		iam_play(CLIP, INST).pause();
+		frames(40);
+		L = get_layout(2.0f);
+		int r1 = row_of(export_cpp(), "m1");
+		click(key_pos(L, r1, 1.0f));                   // select m1@1.0
+		key(ImGuiKey_RightArrow);
+		std::string code = export_cpp();
+		CHECK(code.find(".key_float(iam_id(\"m1\"), 1.05f") != std::string::npos, "Right arrow nudges by the snap step");
+		key(ImGuiKey_RightArrow, false, true);
+		code = export_cpp();
+		CHECK(code.find(".key_float(iam_id(\"m1\"), 1.55f") != std::string::npos, "Shift+Right nudges x10");
+		// Magnet: drag m1@1.55 to ~0.74 -> sticks to m2@0.73 (not the 0.75 grid)
+		frames(30);
+		L = get_layout(iam_clip_duration(CLIP));
+		ImVec2 k0 = key_pos(L, r1, 1.55f), k1 = key_pos(L, r1, 0.74f);
+		mouse_to(k0); mouse_btn(0, true);
+		for (int i = 1; i <= 8; i++) mouse_to(ImVec2(k0.x + (k1.x - k0.x) * i / 8.0f, k0.y));
+		mouse_btn(0, false);
+		code = export_cpp();
+		CHECK(code.find(".key_float(iam_id(\"m1\"), 0.73f") != std::string::npos, "drag sticks to a nearby key time (magnet)");
+		// , and . jump the playhead between keys
+		inst.seek(0.1f); inst.refresh();
+		mouse_to(key_pos(L, r1, 1.9f));                // keep the editor hovered/focused
+		key(ImGuiKey_Period);
+		CHECK(fabsf(inst.time() - 0.73f) < 1e-4f, "'.' jumps to the next key (%.3f)", inst.time());
+		key(ImGuiKey_Period);
+		CHECK(fabsf(inst.time() - 1.0f) < 1e-4f || fabsf(inst.time() - 2.0f) < 1e-4f, "'.' again jumps further (%.3f)", inst.time());
+		key(ImGuiKey_Comma);
+		CHECK(fabsf(inst.time() - 0.73f) < 1e-4f || fabsf(inst.time() - 1.0f) < 1e-4f, "',' jumps back (%.3f)", inst.time());
+	}
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;

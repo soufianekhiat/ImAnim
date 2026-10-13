@@ -11265,9 +11265,24 @@ namespace iam_clip_editor_detail {
 				if (canvas_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
 					if (!st->drag_moved) { push_undo(st, clip); st->drag_moved = true; }
 					float dt = mouse_t - st->drag_origin_t;
+					// Magnet: the first selected key sticks to the playhead, labels and other keys within a few pixels
+					bool magnet = false;
+					if (st->snap && !io.KeyAlt && st->drag_orig_times.Size > 0) {
+						float const ref = st->drag_orig_times[0] + dt;
+						float best = ImGui::GetFontSize() * 0.5f / tl_w * st->view_len, cand = -1.0f;
+						float const fixed[2] = { play_t, 0.0f };
+						for (int i = 0; i < 2; i++) if (ImFabs(fixed[i] - ref) < best) { best = ImFabs(fixed[i] - ref); cand = fixed[i]; }
+						for (int l = 0; l < clip->labels.Size; l++) if (ImFabs(clip->labels[l].time - ref) < best) { best = ImFabs(clip->labels[l].time - ref); cand = clip->labels[l].time; }
+						for (int t = 0; t < clip->iam_tracks.Size; t++)
+							for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) {
+								keyframe const& o = clip->iam_tracks[t].keys[k];
+								if (!st->is_selected(o.uid) && ImFabs(o.time - ref) < best) { best = ImFabs(o.time - ref); cand = o.time; }
+							}
+						if (cand >= 0.0f) { dt = cand - st->drag_orig_times[0]; magnet = true; }
+					}
 					for (int i = 0; i < st->selected.Size && i < st->drag_orig_times.Size; i++) {
 						keyframe* kf = find_key(clip, st->selected[i]);
-						if (kf) kf->time = snap_time(st, st->drag_orig_times[i] + dt);
+						if (kf) kf->time = magnet ? ImMax(st->drag_orig_times[i] + dt, 0.0f) : snap_time(st, st->drag_orig_times[i] + dt);
 					}
 					after_edit(st, clip, preview_id);
 					ImGui::SetTooltip("%.3fs", find_key(clip, st->selected.Size ? st->selected[0] : 0) ? find_key(clip, st->selected[0])->time : 0.0f);
@@ -11406,6 +11421,31 @@ namespace iam_clip_editor_detail {
 				st->selected.clear();
 				for (int t = 0; t < clip->iam_tracks.Size; t++)
 					for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) st->select(clip->iam_tracks[t].keys[k].uid);
+			}
+			// Arrows nudge the selection by the snap step (Shift: x10)
+			bool const left = ImGui::IsKeyPressed(ImGuiKey_LeftArrow), right = ImGui::IsKeyPressed(ImGuiKey_RightArrow);
+			if ((left || right) && st->selected.Size && !io.KeyCtrl) {
+				float step = (st->snap_step > 1e-4f ? st->snap_step : 0.01f) * (io.KeyShift ? 10.0f : 1.0f) * (left ? -1.0f : 1.0f);
+				push_undo(st, clip);
+				for (int i = 0; i < st->selected.Size; i++) { keyframe* kf = find_key(clip, st->selected[i]); if (kf) kf->time = ImMax(kf->time + step, 0.0f); }
+				after_edit(st, clip, preview_id);
+			}
+			// , and . jump the playhead to the previous / next key
+			bool const prev_key = ImGui::IsKeyPressed(ImGuiKey_Comma), next_key = ImGui::IsKeyPressed(ImGuiKey_Period);
+			if ((prev_key || next_key) && clip->iam_tracks.Size) {
+				float now = preview.valid() ? preview.time() : 0.0f, target = prev_key ? -1.0f : FLT_MAX;
+				for (int t = 0; t < clip->iam_tracks.Size; t++)
+					for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) {
+						float kt = clip->iam_tracks[t].keys[k].time;
+						if (prev_key && kt < now - 1e-4f && kt > target) target = kt;
+						if (next_key && kt > now + 1e-4f && kt < target) target = kt;
+					}
+				if (target >= 0.0f && target < FLT_MAX) {
+					if (!preview.valid()) preview = iam_play(clip_id, preview_id);
+					if (preview.is_playing() && !preview.is_paused()) preview.pause();
+					preview.seek(target);
+					preview.refresh();
+				}
 			}
 			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && st->selected.Size) copy_selected(st, clip);
 			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && g_key_clipboard.Size) { paste_at(st, clip, snap_time(st, preview.valid() ? preview.time() : 0.0f)); after_edit(st, clip, preview_id); }

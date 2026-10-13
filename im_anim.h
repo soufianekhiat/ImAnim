@@ -183,7 +183,7 @@ IM_ANIM_API void iam_show_debug_timeline(ImGuiID instance_id);                  
 
 // Clip editor - edit a clip's tracks and keyframes visually while it plays (edits apply live).
 // preview_instance_id: instance the playhead scrubs and controls (0 = the editor plays its own instance).
-// Keys: drag to retime, double-click a lane to add, Del to delete, Ctrl+Z/Ctrl+Y undo/redo, Ctrl+A select all,
+// Keys: drag to retime, arrows to nudge, ,/. to jump between keys, double-click a lane to add, Del to delete, Ctrl+Z/Ctrl+Y undo/redo, Ctrl+A select all, Ctrl+C/V/D copy/paste/duplicate,
 // Ctrl+wheel zoom, wheel/middle-drag pan. "Copy C++" puts an equivalent iam_clip::begin(...)...end() chain on the clipboard.
 IM_ANIM_API bool iam_show_clip_editor(ImGuiID clip_id, bool* p_open = nullptr, ImGuiID preview_instance_id = 0); // Editor window. Returns true if the clip changed this frame.
 IM_ANIM_API bool iam_clip_editor(ImGuiID clip_id, ImGuiID preview_instance_id = 0);             // Editor embedded in the current window. Returns true if the clip changed this frame.

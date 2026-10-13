@@ -43,7 +43,9 @@ Both functions return `true` on frames where the clip changed.
 | Click empty lane space | Move the playhead |
 | Click a key | Select it (Ctrl/Shift: add/remove) |
 | Drag on empty space | Box select (Ctrl/Shift: add) |
-| Drag selected keys | Retime them (snaps to the step, hold Alt for free) |
+| Drag selected keys | Retime them (snaps to the step and sticks to nearby keys, labels and the playhead; hold Alt for free) |
+| Left / Right arrows | Nudge selected keys by the snap step (Shift: x10) |
+| `,` / `.` | Move the playhead to the previous / next key |
 | Double-click a lane | Add a key there, valued on the existing curve |
 | Right-click a key | Set ease for the selection, delete |
 | Right-click a track label | Add key at playhead, select all keys, paste, move up/down, delete track |
