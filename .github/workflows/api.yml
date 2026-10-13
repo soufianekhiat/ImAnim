@@ -132,3 +132,17 @@ jobs:
 
       - name: Run
         run: sh tests/extras/run.sh
+
+  bench:
+    runs-on: ubuntu-latest
+    name: Performance benchmarks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/bench/run.sh
