@@ -4266,6 +4266,146 @@ static void ShowPathDrawDemo()
 }
 
 // ============================================================
+// SECTION: Layout Animation
+// ============================================================
+static void ShowLayoutDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped("iam_layout() animates items to the slot the layout gives them: shuffle, insert or remove items, "
+		"or click one to expand it. Positions are window-relative so window drags don't lag.");
+	static ImVector<int> items;
+	static ImVector<int> expanded;
+	static int next_id = 0;
+	if (items.Size == 0) for (int i = 0; i < 6; i++) items.push_back(next_id++);
+	if (ImGui::Button("Shuffle")) {
+		for (int i = items.Size - 1; i > 0; i--) { int j = rand() % (i + 1); int t = items[i]; items[i] = items[j]; items[j] = t; }
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Insert")) items.insert(items.Data + (items.Size ? rand() % (items.Size + 1) : 0), next_id++);
+	ImGui::SameLine();
+	if (ImGui::Button("Remove") && items.Size > 0) items.erase(items.Data + rand() % items.Size);
+
+	float const fs = ImGui::GetFontSize();
+	float const w = ImGui::GetContentRegionAvail().x;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 const win = ImGui::GetWindowPos();
+	for (int i = 0; i < items.Size; i++) {
+		int id = items[i];
+		bool big = expanded.contains(id);
+		ImVec2 slot = ImGui::GetCursorPos();
+		ImVec2 item_size(w * (big ? 1.0f : 0.7f), fs * (big ? 3.2f : 1.8f));
+		ImVec2 pos, size;
+		ImGui::PushID(id);
+		iam_layout(ImGui::GetID("item"), slot, item_size, &pos, &size, dt);
+		// Draw at the animated rect; click it to toggle expansion
+		ImGui::SetCursorPos(pos);
+		if (ImGui::InvisibleButton("##card", ImVec2(ImMax(size.x, 1.0f), ImMax(size.y - fs * 0.3f, 1.0f)))) {
+			if (big) expanded.find_erase(id); else expanded.push_back(id);
+		}
+		ImVec2 a(win.x + pos.x - ImGui::GetScrollX(), win.y + pos.y - ImGui::GetScrollY());
+		ImVec2 b(a.x + size.x, a.y + size.y - fs * 0.3f);
+		float hue = (float)((id * 37) % 100) / 100.0f;
+		ImVec4 col;
+		ImGui::ColorConvertHSVtoRGB(hue, 0.45f, 0.75f, col.x, col.y, col.z);
+		col.w = ImGui::IsItemHovered() ? 1.0f : 0.85f;
+		dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(col), fs * 0.3f);
+		char label[32];
+		snprintf(label, sizeof(label), "Item %d%s", id, big ? "  (expanded)" : "");
+		dl->AddText(ImVec2(a.x + fs * 0.6f, a.y + (b.y - a.y - fs) * 0.5f), IM_COL32(20, 20, 25, 255), label);
+		ImGui::PopID();
+		ImGui::SetCursorPos(slot);
+		ImGui::Dummy(item_size);
+	}
+}
+
+// ============================================================
+// SECTION: Scroll Reveal
+// ============================================================
+static void ShowScrollRevealDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped("iam_scroll_item_visible() + iam_presence(): rows fade and slide in as they scroll into view, and "
+		"out when they leave. The bar shows iam_scroll_window_progress().");
+	float const fs = ImGui::GetFontSize();
+	static float progress = 0.0f;
+	ImGui::ProgressBar(progress, ImVec2(-1, fs * 0.4f), "");
+	ImGui::BeginChild("##reveal", ImVec2(0, fs * 14.0f), true);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	iam_presence_opts opts;
+	opts.enter_duration = 0.35f;
+	opts.exit_duration = 0.2f;
+	for (int i = 0; i < 40; i++) {
+		ImGui::PushID(i);
+		ImVec2 p = ImGui::GetCursorScreenPos();
+		ImVec2 row(ImGui::GetContentRegionAvail().x, fs * 2.0f);
+		ImGui::Dummy(row);
+		bool visible = iam_scroll_item_visible(0.3f);
+		float t;
+		if (iam_presence(ImGui::GetID("row"), visible, &t, dt, opts)) {
+			float slide = (1.0f - t) * fs * 3.0f * ((i & 1) ? 1.0f : -1.0f);
+			int a = (int)(ImClamp(t, 0.0f, 1.0f) * 255);
+			ImVec2 r0(p.x + slide, p.y + fs * 0.15f), r1(p.x + row.x + slide, p.y + row.y - fs * 0.15f);
+			dl->AddRectFilled(r0, r1, IM_COL32(45, 50, 64, a), fs * 0.25f);
+			dl->AddRectFilled(r0, ImVec2(r0.x + fs * 0.25f, r1.y), (i & 1) ? IM_COL32(204, 120, 88, a) : IM_COL32(91, 194, 231, a));
+			char label[32];
+			snprintf(label, sizeof(label), "Row %d", i);
+			dl->AddText(ImVec2(r0.x + fs * 0.8f, r0.y + (r1.y - r0.y - fs) * 0.5f), IM_COL32(220, 220, 228, a), label);
+		}
+		ImGui::PopID();
+	}
+	progress = iam_scroll_window_progress();
+	ImGui::EndChild();
+}
+
+// ============================================================
+// SECTION: Inertia
+// ============================================================
+static void ShowInertiaDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped("iam_inertia_float(): drag the carousel and let go. It keeps the fling velocity, slows down with "
+		"friction, rubber-bands at the ends and snaps to the card it would have stopped closest to.");
+	float const fs = ImGui::GetFontSize();
+	int const count = 12;
+	float const card_w = fs * 8.0f, gap = fs * 0.8f, step = card_w + gap;
+	ImVec2 size(ImGui::GetContentRegionAvail().x, fs * 7.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImGui::InvisibleButton("##carousel", size);
+	bool held = ImGui::IsItemActive();
+	static float offset = 0.0f;  // scroll offset in px (0 = first card)
+	if (held) offset -= ImGui::GetIO().MouseDelta.x;
+	iam_inertia_opts opts;
+	opts.use_bounds = true;
+	opts.bounds_min = iam_v2(0, 0);
+	opts.bounds_max = iam_v2(step * (count - 1), 0);
+	opts.snap_grid = iam_v2(step, 0);
+	offset = iam_inertia_float(ImGui::GetID("carousel"), offset, held, dt, opts);
+
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	dl->PushClipRect(p, ImVec2(p.x + size.x, p.y + size.y), true);
+	float center_x = p.x + size.x * 0.5f;
+	for (int i = 0; i < count; i++) {
+		float x = center_x - card_w * 0.5f + i * step - offset;
+		float dist = ImFabs((x + card_w * 0.5f) - center_x) / step;
+		float scale = 1.0f - ImMin(dist, 1.5f) * 0.12f;
+		float h = (size.y - fs * 1.2f) * scale;
+		ImVec2 a(x + card_w * (1.0f - scale) * 0.5f, p.y + (size.y - h) * 0.5f), b(a.x + card_w * scale, a.y + h);
+		float hue = (float)i / count;
+		ImVec4 col;
+		ImGui::ColorConvertHSVtoRGB(hue, 0.5f, 0.8f, col.x, col.y, col.z);
+		col.w = 1.0f - ImMin(dist, 2.0f) * 0.3f;
+		dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(col), fs * 0.4f);
+		char label[16];
+		snprintf(label, sizeof(label), "%d", i + 1);
+		ImVec2 ts = ImGui::CalcTextSize(label);
+		dl->AddText(ImVec2((a.x + b.x - ts.x) * 0.5f, (a.y + b.y - ts.y) * 0.5f), IM_COL32(20, 20, 25, 255), label);
+	}
+	dl->PopClipRect();
+	ImGui::Text("Card %d / %d %s", (int)ImFloor(offset / step + 0.5f) + 1, count, iam_inertia_is_moving(ImGui::GetID("carousel")) ? "(moving)" : "");
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8011,6 +8151,24 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Enter / Exit (Presence)")) {
 			ShowPresenceDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Layout Animation")) {
+			ShowLayoutDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Scroll Reveal")) {
+			ShowScrollRevealDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Inertia (Fling)")) {
+			ShowInertiaDemo();
 			ImGui::TreePop();
 		}
 
