@@ -34,3 +34,17 @@ jobs:
 
       - name: Drive the editor and compile its exported code
         run: sh tests/clip_editor/run.sh
+
+  springs:
+    runs-on: ubuntu-latest
+    name: Spring channels and tween queries
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/springs/run.sh
