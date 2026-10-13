@@ -11,9 +11,11 @@
 // round corners, pucker / bloat, zig-zag, offset path, twist, merge paths, repeater, masks (add,
 // subtract, intersect, difference) and alpha track mattes (from the matte layer's
 // geometry), Fill / Tint / Gaussian blur / drop shadow effects, time remap, markers.
+// With the GPU path on DX10 / DX11 (see below): blend modes and exact track mattes
+// (alpha with opacity and gradients, luma); without it blend modes draw as normal and luma
+// mattes as alpha mattes.
 // Not supported (reported by iam_lottie_warnings): expressions, other effects, image
-// layers, text without embedded glyphs and text animators, blend modes, luma
-// mattes (drawn as alpha mattes). Older Bodymovin exports (0..255 colours, ...) are
+// layers, text without embedded glyphs and text animators. Older Bodymovin exports (0..255 colours, ...) are
 // upgraded on load like lottie-web does.
 
 #pragma once
@@ -41,7 +43,8 @@ IM_ANIM_API void         iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim,
 
 // GPU fill: build with IAM_LOTTIE_IMPLATFORM (and ImPlatform on the include path, with
 // IM_CURRENT_GFX defined) to fill solid shapes with a winding-number shader through
-// ImPlatform's custom shaders on the D3D10/11/12 backends. Gradients, masks and mattes,
-// other backends, or a failed shader compile use the CPU fill.
+// ImPlatform's custom shaders on the D3D10/11/12 backends, and on D3D10/11 to draw layers
+// with a blend mode or a track matte offscreen and composite them with a shader. Gradients,
+// masks, other backends, or a failed shader compile use the CPU path.
 IM_ANIM_API bool         iam_lottie_gpu_active();               // GPU fill compiled in, enabled and working
 IM_ANIM_API void         iam_lottie_set_gpu(bool enabled);      // on by default

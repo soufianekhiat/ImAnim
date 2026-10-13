@@ -21,6 +21,13 @@
 #ifndef IAM_LOTTIE_GPU
 #define IAM_LOTTIE_GPU 0
 #endif
+// Offscreen layers (blend modes, luma mattes) need render textures and immediate texture
+// binding: DX10 / DX11
+#if IAM_LOTTIE_GPU && ((IM_CURRENT_GFX == IM_GFX_DIRECTX10) || (IM_CURRENT_GFX == IM_GFX_DIRECTX11))
+#define IAM_LOTTIE_OFFSCREEN 1
+#else
+#define IAM_LOTTIE_OFFSCREEN 0
+#endif
 
 namespace iam_lottie_detail {
 
@@ -190,7 +197,7 @@ struct shape_t {
 struct dash_t { int kind; prop_t v; };  // 0 dash, 1 gap, 2 offset
 struct mask_t { char mode; int inv; prop_t pt, o; };
 struct layer_t {
-	int ty, ind, parent, hidden, td, tt, tp, matte, comp, ao, ddd;
+	int ty, ind, parent, hidden, td, tt, tp, matte, comp, ao, ddd, bm;
 	float ip, op, st, sr;
 	xform_t ks;
 	int shapes, shapesn;       // children[]
@@ -517,7 +524,8 @@ struct builder {
 				ly.ddd = D->num(c, "ddd", 0.0) != 0.0;
 				ly.pw = (float)D->num(c, "w", 0.0);
 				ly.ph = (float)D->num(c, "h", 0.0);
-				if (D->num(c, "bm", 0.0) != 0.0) L->warn |= W_BLEND;
+				ly.bm = (int)D->num(c, "bm", 0.0);
+				if (ly.bm != 0) L->warn |= W_BLEND;
 				ly.ao = D->num(c, "ao", 0.0) != 0.0;
 				effects(D->get(c, "ef"), ly);
 				switch (ly.ty) {
@@ -734,8 +742,8 @@ struct builder {
 
 static void build_warnings(iam_lottie* L) {
 	static char const* const names[] = {
-		"expressions", "effects", "text without embedded glyphs", "image layers", "blend modes", "3D layers",
-		"merge paths", "path modifiers", "luma mattes", "gradient highlights", "text animators",
+		"expressions", "effects", "text without embedded glyphs", "image layers", "blend modes (GPU path only)", "3D layers",
+		"merge paths", "path modifiers", "luma mattes (GPU path only, else alpha)", "gradient highlights", "text animators",
 		"mask modes", "unknown layer types"
 	};
 	for (int i = 0; i < IM_ARRAYSIZE(names); i++)
@@ -1875,6 +1883,151 @@ static bool gpu_fill(ImDrawList* dl, ImVec2 const* segs, int n, ImU32 col, int e
 }
 #endif
 
+#if IAM_LOTTIE_OFFSCREEN
+// Offscreen layer composite: t0 = the layer drawn into a backbuffer-sized texture
+// (premultiplied), t1 = the matte (luma mattes) or a copy of the backbuffer (blend modes)
+static char const s_comp_hlsl[] = R"(
+cbuffer vertexBuffer : register(b0) { float4x4 ProjMtx; };
+cbuffer compositeBuffer : register(b1) { float4 params; };   // x: mode (-1 / -2 luma, -3 / -4 alpha matte (inverted), 1..17 blend), y: opacity
+Texture2D layerTex : register(t0);
+Texture2D extraTex : register(t1);
+struct VS_INPUT { float2 pos : POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };
+struct PS_INPUT { float4 pos : SV_POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };
+PS_INPUT main_vs(VS_INPUT input) {
+	PS_INPUT o;
+	o.pos = mul(ProjMtx, float4(input.pos.xy, 0.f, 1.f));
+	o.col = input.col;
+	o.uv = input.uv;
+	return o;
+}
+float lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+float3 clip_color(float3 c) {
+	float l = lum(c), n = min(c.r, min(c.g, c.b)), x = max(c.r, max(c.g, c.b));
+	if (n < 0.0) c = l + (c - l) * l / (l - n);
+	if (x > 1.0) c = l + (c - l) * (1.0 - l) / (x - l);
+	return c;
+}
+float3 set_lum(float3 c, float l) { return clip_color(c + (l - lum(c))); }
+float sat(float3 c) { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+float3 set_sat(float3 c, float s) {
+	float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+	return mx > mn ? (c - mn) * s / (mx - mn) : float3(0, 0, 0);
+}
+float3 soft_light(float3 b, float3 s) {
+	float3 d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b);
+	return s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b) : b + (2.0 * s - 1.0) * (d - b);
+}
+float3 hard_light(float3 b, float3 s) { return s <= 0.5 ? b * 2.0 * s : 1.0 - (1.0 - b) * (1.0 - (2.0 * s - 1.0)); }
+// W3C compositing formulas, Lottie / After Effects mode numbers
+float3 blend(int m, float3 b, float3 s) {
+	if (m == 1) return b * s;
+	if (m == 2) return b + s - b * s;
+	if (m == 3) return hard_light(s, b);
+	if (m == 4) return min(b, s);
+	if (m == 5) return max(b, s);
+	if (m == 6) return b <= 0.0 ? 0.0 : (s >= 1.0 ? 1.0 : min(1.0, b / (1.0 - s)));
+	if (m == 7) return b >= 1.0 ? 1.0 : (s <= 0.0 ? 0.0 : 1.0 - min(1.0, (1.0 - b) / s));
+	if (m == 8) return hard_light(b, s);
+	if (m == 9) return soft_light(b, s);
+	if (m == 10) return abs(b - s);
+	if (m == 11) return b + s - 2.0 * b * s;
+	if (m == 12) return set_lum(set_sat(s, sat(b)), lum(b));
+	if (m == 13) return set_lum(set_sat(b, sat(s)), lum(b));
+	if (m == 14) return set_lum(s, lum(b));
+	if (m == 15) return set_lum(b, lum(s));
+	if (m == 16) return min(1.0, b + s);
+	if (m == 17) return (b + s) >= 1.0 ? 1.0 : 0.0;
+	return s;
+}
+float4 main_ps(PS_INPUT input) : SV_Target {
+	int3 px = int3(input.pos.xy, 0);
+	float4 src = layerTex.Load(px);
+	if (src.a <= 0.0) discard;
+	float3 s = src.rgb / src.a;
+	int mode = (int)params.x;
+	float a = src.a * params.y;
+	if (mode < 0) {
+		float4 m = extraTex.Load(px);
+		float l = mode >= -2 ? dot(m.rgb, float3(0.299, 0.587, 0.114)) : m.a;   // premultiplied: luma times alpha
+		a *= (mode == -1 || mode == -3) ? l : 1.0 - l;
+		return float4(s, a);
+	}
+	float3 b = extraTex.Load(px).rgb;
+	return float4(saturate(blend(mode, b, s)), a);
+}
+)";
+
+static ImPlatform_ShaderProgram s_comp_program = nullptr;
+static bool s_comp_tried = false;
+static ImTextureID s_rt[2] = { ImTextureID(), ImTextureID() };
+static ImTextureID s_bg = ImTextureID();
+static unsigned s_rt_w = 0, s_rt_h = 0;
+
+static ImPlatform_ShaderProgram comp_program() {
+	if (!s_gpu_enabled) return nullptr;
+	if (!s_comp_tried) {
+		s_comp_tried = true;
+		ImPlatform_ShaderDesc d;
+		memset(&d, 0, sizeof(d));
+		d.format = ImPlatform_ShaderFormat_HLSL;
+		d.source_code = s_comp_hlsl;
+		d.stage = ImPlatform_ShaderStage_Vertex;
+		d.entry_point = "main_vs";
+		ImPlatform_Shader const vs = ImPlatform_CreateShader(&d);
+		d.stage = ImPlatform_ShaderStage_Fragment;
+		d.entry_point = "main_ps";
+		ImPlatform_Shader const ps = ImPlatform_CreateShader(&d);
+		if (vs && ps) s_comp_program = ImPlatform_CreateShaderProgram(vs, ps);
+	}
+	return s_comp_program;
+}
+
+// Backbuffer-sized targets (recreated when the backbuffer size changes)
+static bool offscreen_targets() {
+	unsigned w = 0, h = 0;
+	ImPlatform_GetBackbufferSize(&w, &h);
+	if (w == 0 || h == 0) return false;
+	if (w != s_rt_w || h != s_rt_h || !s_rt[0]) {
+		for (int i = 0; i < 2; i++) if (s_rt[i]) ImPlatform_DestroyTexture(s_rt[i]);
+		if (s_bg) ImPlatform_DestroyTexture(s_bg);
+		ImPlatform_TextureDesc desc = ImPlatform_TextureDesc_Default(w, h);
+		desc.format = ImPlatform_PixelFormat_RGBA8;
+		for (int i = 0; i < 2; i++) s_rt[i] = ImPlatform_CreateRenderTexture(&desc);
+		ImVector<unsigned char> zeros;
+		zeros.resize((int)(w * h * 4));
+		memset(zeros.Data, 0, (size_t)zeros.Size);
+		s_bg = ImPlatform_CreateTexture(zeros.Data, &desc);  // CopyBackbuffer target: same size and format
+		s_rt_w = w; s_rt_h = h;
+	}
+	return s_rt[0] && s_rt[1] && s_bg;
+}
+
+static void cb_begin_rt(ImDrawList const*, ImDrawCmd const* cmd) { ImTextureID t; memcpy(&t, cmd->UserCallbackData, sizeof(t)); ImPlatform_BeginRenderToTexture(t); }
+static void cb_end_rt(ImDrawList const*, ImDrawCmd const*) { ImPlatform_EndRenderToTexture(); }
+static void cb_copy_bg(ImDrawList const*, ImDrawCmd const*) { ImPlatform_CopyBackbuffer(s_bg); }
+struct comp_cb { ImPlatform_ShaderProgram prog; ImTextureID extra; float params[4]; };
+static void cb_composite(ImDrawList const*, ImDrawCmd const* cmd) {
+	comp_cb c;
+	memcpy(&c, cmd->UserCallbackData, sizeof(c));
+	ImPlatform_SetShaderUniform(c.prog, "compositeBuffer", c.params, sizeof(c.params));
+	ImPlatform_SetShaderTexture(c.prog, "extraTex", 1, c.extra);
+}
+
+static void offscreen_begin(ImDrawList* dl, int i) { dl->AddCallback(cb_begin_rt, &s_rt[i], sizeof(ImTextureID)); }
+static void offscreen_end(ImDrawList* dl) { dl->AddCallback(cb_end_rt, nullptr); dl->AddCallback(ImDrawCallback_ResetRenderState, nullptr); }
+// Draws target 0 over the clip rect through the composite shader
+static void offscreen_composite(ImDrawList* dl, int mode, ImTextureID extra) {
+	ImPlatform_ShaderProgram const prog = comp_program();
+	if (mode > 0) dl->AddCallback(cb_copy_bg, nullptr);
+	comp_cb c = { prog, extra, { (float)mode, 1.0f, 0.0f, 0.0f } };
+	dl->AddCallback(cb_composite, &c, sizeof(c));
+	ImPlatform_BeginCustomShader(dl, prog);
+	ImVec4 const cr = dl->_CmdHeader.ClipRect;
+	dl->AddImageQuad(ImTextureRef(s_rt[0]), ImVec2(cr.x, cr.y), ImVec2(cr.z, cr.y), ImVec2(cr.z, cr.w), ImVec2(cr.x, cr.w));
+	ImPlatform_EndCustomShader(dl);
+}
+#endif
+
 // ----------------------------------------------------------------------------
 // Stroke outlines (pieces filled once with non-zero, so overlaps never darken)
 // ----------------------------------------------------------------------------
@@ -2055,6 +2208,8 @@ struct ctx {
 	int nfx;
 	int cur_comp;              // composition being drawn, and its size (3D projection centre)
 	float cur_w, cur_h;
+	bool offscreen;            // drawing into an offscreen layer (no nesting)
+	int skip_matte;            // layer whose matte is applied by the composite
 	// CPU blur / drop shadow: a soft edge (fringe width in pixels) and a recoloured, offset pass
 	float soft;
 	bool shadow;
@@ -2678,13 +2833,38 @@ struct ctx {
 		// Clips are geometric; opacity is approximated: a single add mask's opacity and an
 		// alpha matte layer's own opacity scale the layer
 		if (ly.maskn == 1 && L->masks[ly.mask].mode == 'a' && !L->masks[ly.mask].inv) a *= ImSaturate(pv(L->masks[ly.mask].o, lt, 0, 100.0f) * 0.01f);
-		if (ly.matte >= 0 && ly.matte != li && (ly.tt == 1 || ly.tt == 3)) {
+		if (ly.matte >= 0 && ly.matte != li && li != skip_matte && (ly.tt == 1 || ly.tt == 3)) {
 			layer_t const& ml = L->layers[ly.matte];
 			a *= ImSaturate(pv(ml.ks.o, t, 0, 100.0f) * 0.01f);
 		}
 		int pushed = 0;
+#if IAM_LOTTIE_OFFSCREEN
+		// Track mattes and blend modes: draw the layer (and the matte) into textures, composite
+		// (exact matte opacity, gradients and luma, unlike the CPU's geometric clip)
+		bool const luma = ly.matte >= 0 && ly.matte != li && ly.tt >= 1 && ly.tt <= 4;
+		if (!collect && !offscreen && a > 0.0f && (luma || (ly.bm > 0 && ly.bm <= 17)) && comp_program() && offscreen_targets()) {
+			offscreen = true;
+			if (luma) {
+				layer_t const& ml = L->layers[ly.matte];
+				offscreen_begin(dl, 1);
+				if (t >= ml.ip && t < ml.op) render_layer(ly.matte, t, M, 1.0f);
+				offscreen_end(dl);
+			}
+			int const prev_skip = skip_matte;
+			if (luma) skip_matte = li;  // the texture is the matte
+			offscreen_begin(dl, 0);
+			render_layer(li, t, M, alpha);
+			offscreen_end(dl);
+			skip_matte = prev_skip;
+			offscreen = false;
+			static int const matte_mode[5] = { 0, -3, -4, -1, -2 };  // tt 1 alpha, 2 inverted alpha, 3 luma, 4 inverted luma
+			offscreen_composite(dl, luma ? matte_mode[ly.tt] : ly.bm, luma ? s_rt[1] : s_bg);
+			depth--;
+			return;
+		}
+#endif
 		if (a > 0.0f || collect) {
-			if (ly.matte >= 0 && ly.matte != li) {
+			if (ly.matte >= 0 && ly.matte != li && li != skip_matte) {
 				ImVector<ImVec2> matte;
 				ImVector<ImVec2>* const prev = collect;
 				collect = &matte;
@@ -2886,6 +3066,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	C.nclips = C.overflow = C.depth = C.nfx = 0;
 	C.soft = 0.0f;
 	C.shadow = false;
+	C.offscreen = false;
+	C.skip_matte = -1;
 	C.collect = nullptr;
 	C.tol = 0.25f;
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);

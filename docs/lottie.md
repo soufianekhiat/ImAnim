@@ -94,7 +94,14 @@ iam_lottie_set_gpu(false);          // force the CPU fill (on by default)
 bool on = iam_lottie_gpu_active();  // compiled in, enabled and the shader compiled
 ```
 
-It runs on the D3D10/11/12 backends (their custom-shader constant buffers hold the
+On D3D10 / D3D11 it also draws layers that use a blend mode or a track matte into
+offscreen textures (ImPlatform render textures) and composites them with a shader: all
+17 After Effects blend modes (W3C formulas, against a copy of the backbuffer) and exact
+track mattes, alpha and luma, inverted or not, including the matte's opacity and
+gradients. Offscreen layers do not nest (an inner one draws as with the CPU path) and
+use the main viewport's backbuffer.
+
+The fill runs on the D3D10/11/12 backends (their custom-shader constant buffers hold the
 segments). Other backends, a failed shader compile, gradients and anything under a
 mask or matte use the CPU fill, so output is the same everywhere apart from
 anti-aliasing: the shader keeps the inside opaque and fades half a pixel outside,
@@ -106,8 +113,8 @@ Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than
 Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded glyphs
 (exported with system fonts) and text animators, blend modes. Also:
 
-- Mattes and masks clip by geometry: luma mattes act as alpha mattes, feather is
-  ignored, and opacity is approximated (a single add mask's opacity and an alpha
+- Without the GPU path, mattes and masks clip by geometry: luma mattes act as alpha
+  mattes, blend modes draw as normal, feather is ignored, and opacity is approximated (a single add mask's opacity and an alpha
   matte layer's own opacity scale the layer; the matte's fill opacity and gradients
   do not count). Difference masks XOR with the add masks before them, exact unless
   those overlap each other.
