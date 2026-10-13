@@ -4558,6 +4558,42 @@ static void ShowPlaybackControlDemo()
 }
 
 // ============================================================
+// SECTION: Ease Editor
+// ============================================================
+static void ShowEaseEditorDemo()
+{
+	static ImGuiID const curve_id = iam_id("demo_overshoot");
+	static iam_ease_desc ez;
+	static bool init = false;
+	if (!init) {
+		iam_vec2 const pts[] = { iam_v2(0, 0), iam_v2(0.25f, 0.0f), iam_v2(0.35f, 1.25f), iam_v2(0.55f, 1.15f), iam_v2(0.7f, 1.05f), iam_v2(0.85f, 1.0f), iam_v2(1, 1) };
+		iam_ease_curve_set(curve_id, pts, 7);
+		ez = iam_ease_curve_desc(curve_id);
+		init = true;
+	}
+	ImGui::TextWrapped("iam_ease_editor() edits any ease: pick a preset, set steps/spring parameters, drag cubic-bezier "
+		"handles, or shape a custom curve (double-click adds a point, right-click removes one). The same editor is used "
+		"by the clip editor's key inspector.");
+	float const fs = ImGui::GetFontSize();
+	ImGui::BeginGroup();
+	iam_ease_editor("Ease", &ez, iam_v2(fs * 22.0f, fs * 13.0f));
+	ImGui::EndGroup();
+	ImGui::SameLine();
+
+	// Preview: a box sliding with this ease, replayed every 1.6s
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImMax(ImGui::GetContentRegionAvail().x, fs * 8.0f), fs * 4.0f);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	float u = ImClamp(ImFmod((float)ImGui::GetTime(), 1.6f) / 1.1f, 0.0f, 1.0f);
+	float v = iam_ease_eval(ez, u);
+	float pad = fs * 0.6f, box = fs * 1.6f;
+	float x = p.x + pad + (size.x - pad * 2.0f - box) * v;
+	dl->AddRectFilled(ImVec2(x, p.y + (size.y - box) * 0.5f), ImVec2(x + box, p.y + (size.y + box) * 0.5f), IM_COL32(91, 194, 231, 255), fs * 0.3f);
+	ImGui::Dummy(size);
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8271,6 +8307,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Custom Easing")) {
 			ShowCustomEasingDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Ease Editor")) {
+			ShowEaseEditorDemo();
 			ImGui::TreePop();
 		}
 
