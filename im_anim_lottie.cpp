@@ -177,7 +177,7 @@ struct xform_t { prop_t a, p, px, py, s, r, o, sk, sa, so, eo; int split; };
 
 enum {
 	SK_NONE, SK_GROUP, SK_PATH, SK_RECT, SK_ELLIPSE, SK_STAR,
-	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER
+	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER, SK_PUCKER, SK_ZIGZAG, SK_MERGE
 };
 struct shape_t {
 	int kind, hidden, dir, rule, cap, join, mode, gcount;
@@ -190,20 +190,28 @@ struct shape_t {
 struct dash_t { int kind; prop_t v; };  // 0 dash, 1 gap, 2 offset
 struct mask_t { char mode; int inv; prop_t pt, o; };
 struct layer_t {
-	int ty, ind, parent, hidden, td, tt, tp, matte, comp;
+	int ty, ind, parent, hidden, td, tt, tp, matte, comp, ao;
 	float ip, op, st, sr;
 	xform_t ks;
 	int shapes, shapesn;       // children[]
 	prop_t tm;
 	float solid[3], sw, sh;
 	int mask, maskn;
+	int doc, docn;             // docs[] (text layers)
 };
 struct comp_t { int layer, layern; };
 struct marker_t { int name; float t, dur; };
+struct font_t { int name, family, style; };        // strings[]
+struct glyph_t { unsigned cp; int family, style; float w; int shapes, shapesn; };  // outlines at size 100
+struct textdoc_t {
+	float t, size, tracking, lh, sw;
+	int text, font, justify, fill, stroke, stroke_over;
+	float fc[3], sc[3];
+};
 
 enum {
 	W_EXPR = 1 << 0, W_EFFECTS = 1 << 1, W_TEXT = 1 << 2, W_IMAGE = 1 << 3, W_BLEND = 1 << 4, W_3D = 1 << 5,
-	W_MERGE = 1 << 6, W_MODIFIER = 1 << 7, W_LUMA = 1 << 8, W_HIGHLIGHT = 1 << 9, W_AUTO_ORIENT = 1 << 10,
+	W_MERGE = 1 << 6, W_MODIFIER = 1 << 7, W_LUMA = 1 << 8, W_HIGHLIGHT = 1 << 9, W_TEXT_ANIM = 1 << 10,
 	W_MASK_MODE = 1 << 11, W_UNKNOWN_LAYER = 1 << 12
 };
 
@@ -222,6 +230,9 @@ struct iam_lottie {
 	ImVector<layer_t> layers;
 	ImVector<comp_t> comps;        // [0] = root
 	ImVector<marker_t> markers;
+	ImVector<font_t> fonts;
+	ImVector<glyph_t> glyphs;
+	ImVector<textdoc_t> docs;
 	ImVector<char> strings;
 	ImVector<char> warnings;
 	unsigned warn;
@@ -409,12 +420,18 @@ struct builder {
 					s.mode = (int)D->num(c, "m", 1.0);
 				} else if (D->str_eq(ty, "rd")) {
 					s.kind = SK_ROUND; s.p[0] = prop(D->get(c, "r"));
+				} else if (D->str_eq(ty, "pb")) {
+					s.kind = SK_PUCKER; s.p[0] = prop(D->get(c, "a"));
+				} else if (D->str_eq(ty, "zz")) {
+					s.kind = SK_ZIGZAG; s.p[0] = prop(D->get(c, "s")); s.p[1] = prop(D->get(c, "r")); s.p[2] = prop(D->get(c, "pt"));
 				} else if (D->str_eq(ty, "rp")) {
 					s.kind = SK_REPEATER; s.p[0] = prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o"));
 					s.mode = (int)D->num(c, "m", 1.0);
 					s.tr = xform(D->get(c, "tr"));
+				} else if (D->str_eq(ty, "mm")) {
+					s.kind = SK_MERGE; s.mode = (int)D->num(c, "mm", 1.0);
 				} else {
-					L->warn |= D->str_eq(ty, "mm") ? W_MERGE : W_MODIFIER;
+					L->warn |= W_MODIFIER;
 					continue;
 				}
 				ids.push_back(L->shapes.Size);
@@ -450,7 +467,7 @@ struct builder {
 				if (ly.tt == 3 || ly.tt == 4) L->warn |= W_LUMA;
 				if (D->num(c, "ddd", 0.0) != 0.0) L->warn |= W_3D;
 				if (D->num(c, "bm", 0.0) != 0.0) L->warn |= W_BLEND;
-				if (D->num(c, "ao", 0.0) != 0.0) L->warn |= W_AUTO_ORIENT;
+				ly.ao = D->num(c, "ao", 0.0) != 0.0;
 				if (D->count(D->get(c, "ef")) > 0) L->warn |= W_EFFECTS;
 				switch (ly.ty) {
 					case 0: {
@@ -480,7 +497,7 @@ struct builder {
 					case 2: L->warn |= W_IMAGE; break;
 					case 3: break;
 					case 4: items(D->get(c, "shapes"), ly.shapes, ly.shapesn, nullptr); break;
-					case 5: L->warn |= W_TEXT; break;
+					case 5: text(D->get(c, "t"), ly); break;
 					default: L->warn |= W_UNKNOWN_LAYER; break;
 				}
 				int const mp = D->get(c, "masksProperties");
@@ -493,7 +510,7 @@ struct builder {
 						mk.inv = D->num(m, "inv", 0.0) != 0.0;
 						mk.pt = prop(D->get(m, "pt"));
 						mk.o = prop(D->get(m, "o"));
-						if (mk.mode != 'a' && mk.mode != 's' && mk.mode != 'i' && mk.mode != 'n') L->warn |= W_MASK_MODE;
+						if (mk.mode != 'a' && mk.mode != 's' && mk.mode != 'i' && mk.mode != 'n' && mk.mode != 'f') L->warn |= W_MASK_MODE;
 						L->masks.push_back(mk);
 					}
 				ly.maskn = L->masks.Size - ly.mask;
@@ -521,12 +538,117 @@ struct builder {
 		L->strings.push_back(0);
 		return ofs;
 	}
+
+	static unsigned hex4(char const* c) {
+		unsigned v = 0;
+		for (int k = 0; k < 4; k++) { char const h = c[k]; v = v * 16 + (unsigned)(h >= '0' && h <= '9' ? h - '0' : h >= 'a' && h <= 'f' ? h - 'a' + 10 : h >= 'A' && h <= 'F' ? h - 'A' + 10 : 0); }
+		return v;
+	}
+
+	// JSON string node -> UTF-8 in strings[] (escapes resolved)
+	int add_json_string(int node) {
+		int const ofs = L->strings.Size;
+		if (D->type(node) == J_STR) {
+			char const* c = D->text + D->n[node].str;
+			char const* const e = c + D->n[node].str_len;
+			while (c < e) {
+				if (*c != '\\' || c + 1 >= e) { L->strings.push_back(*c++); continue; }
+				char const esc = c[1];
+				c += 2;
+				unsigned cp = (unsigned char)esc;  // \" \\ \/
+				if (esc == 'n') cp = '\n';
+				else if (esc == 'r') cp = '\r';
+				else if (esc == 't') cp = '\t';
+				else if (esc == 'b') cp = '\b';
+				else if (esc == 'f') cp = '\f';
+				else if (esc == 'u') {
+					if (e - c < 4) break;
+					cp = hex4(c);
+					c += 4;
+					if (cp >= 0xD800 && cp < 0xDC00 && e - c >= 6 && c[0] == '\\' && c[1] == 'u') {  // surrogate pair
+						unsigned const lo = hex4(c + 2);
+						if (lo >= 0xDC00 && lo < 0xE000) { cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00); c += 6; }
+					}
+				}
+				char u[5];
+				int const n = ImTextCharToUtf8(u, cp);
+				for (int k = 0; k < n; k++) L->strings.push_back(u[k]);
+			}
+		}
+		L->strings.push_back(0);
+		return ofs;
+	}
+
+	void color3(int node, float* out) {
+		for (int k = 0; k < 3; k++) out[k] = 0.0f;
+		int c = D->type(node) == J_ARR ? D->n[node].child : -1;
+		bool bytes = false;
+		for (int k = 0; k < 3 && c >= 0; k++, c = D->n[c].next) { out[k] = (float)D->num(c, 0.0); if (out[k] > 1.0f) bytes = true; }
+		if (bytes) for (int k = 0; k < 3; k++) out[k] /= 255.0f;  // some exporters write 0..255
+	}
+
+	// Text layer: the document keyframes (text, font, size, colours); animators are not supported
+	void text(int t, layer_t& ly) {
+		ly.doc = L->docs.Size;
+		int const k = D->get(D->get(t, "d"), "k");
+		if (D->type(k) == J_ARR)
+			for (int kf = D->n[k].child; kf >= 0; kf = D->n[kf].next) {
+				int const sd = D->get(kf, "s");
+				textdoc_t d;
+				memset(&d, 0, sizeof(d));
+				d.t = (float)D->num(kf, "t", 0.0);
+				d.size = (float)D->num(sd, "s", 10.0);
+				d.tracking = (float)D->num(sd, "tr", 0.0);
+				d.lh = (float)D->num(sd, "lh", d.size * 1.2);
+				d.justify = (int)D->num(sd, "j", 0.0);
+				d.text = add_json_string(D->get(sd, "t"));
+				d.font = -1;
+				int const f = D->get(sd, "f");
+				for (int i = 0; i < L->fonts.Size; i++)
+					if (D->type(f) == J_STR && strlen(L->strings.Data + L->fonts[i].name) == (size_t)D->n[f].str_len &&
+					    memcmp(L->strings.Data + L->fonts[i].name, D->text + D->n[f].str, (size_t)D->n[f].str_len) == 0) d.font = i;
+				d.fill = D->get(sd, "fc") >= 0;
+				d.stroke = D->get(sd, "sc") >= 0 && D->num(sd, "sw", 0.0) > 0.0;
+				color3(D->get(sd, "fc"), d.fc);
+				color3(D->get(sd, "sc"), d.sc);
+				d.sw = (float)D->num(sd, "sw", 0.0);
+				d.stroke_over = D->num(sd, "of", 0.0) != 0.0;
+				L->docs.push_back(d);
+			}
+		ly.docn = L->docs.Size - ly.doc;
+		if (D->count(D->get(t, "a")) > 0) L->warn |= W_TEXT_ANIM;
+	}
+
+	void fonts_and_chars(int root) {
+		int const list = D->get(D->get(root, "fonts"), "list");
+		if (D->type(list) == J_ARR)
+			for (int f = D->n[list].child; f >= 0; f = D->n[f].next) {
+				font_t ft;
+				ft.name = add_json_string(D->get(f, "fName"));
+				ft.family = add_json_string(D->get(f, "fFamily"));
+				ft.style = add_json_string(D->get(f, "fStyle"));
+				L->fonts.push_back(ft);
+			}
+		int const chars = D->get(root, "chars");
+		if (D->type(chars) == J_ARR)
+			for (int c = D->n[chars].child; c >= 0; c = D->n[c].next) {
+				glyph_t g;
+				int const ch = add_json_string(D->get(c, "ch"));
+				g.cp = 0;
+				ImTextCharFromUtf8(&g.cp, L->strings.Data + ch, L->strings.Data + ch + strlen(L->strings.Data + ch));
+				g.family = add_json_string(D->get(c, "fFamily"));
+				g.style = add_json_string(D->get(c, "style"));
+				g.w = (float)D->num(c, "w", 0.0);
+				items(D->get(D->get(c, "data"), "shapes"), g.shapes, g.shapesn, nullptr);
+				L->glyphs.push_back(g);
+			}
+	}
 };
 
 static void build_warnings(iam_lottie* L) {
 	static char const* const names[] = {
-		"expressions", "effects", "text layers", "image layers", "blend modes", "3D layers",
-		"merge paths", "path modifiers", "luma mattes", "gradient highlights", "auto-orient",
+		"expressions", "effects", "text without embedded glyphs", "image layers", "blend modes", "3D layers",
+		"merge paths", "path modifiers", "luma mattes", "gradient highlights", "text animators",
 		"mask modes", "unknown layer types"
 	};
 	for (int i = 0; i < IM_ARRAYSIZE(names); i++)
@@ -636,9 +758,11 @@ static inline mat rot(float deg) { float const r = deg * (IM_PI / 180.0f), c = I
 static inline float mat_scale(mat const& M) { return ImSqrt(ImFabs(M.a * M.d - M.b * M.c)); }
 
 struct contour { int first, count; bool closed; };
+// Fill rules: 0 non-zero, 1 even-odd, k >= 2: winding >= k - 1 (merge paths)
 struct geom {
 	ImVector<ImVec2> pts;      // cubic chains: p0, (c1 c2 p) * n
 	ImVector<contour> cs;
+	int rule = -1;             // set by merge paths, overrides the style's rule
 	void begin(ImVec2 p) { contour c = { pts.Size, 1, false }; cs.push_back(c); pts.push_back(p); }
 	void cubic(ImVec2 c1, ImVec2 c2, ImVec2 p) { pts.push_back(c1); pts.push_back(c2); pts.push_back(p); cs.back().count += 3; }
 	void line(ImVec2 p) { ImVec2 const a = pts.back(); cubic(a, p, p); }  // Lottie convention: handles on the vertices
@@ -723,7 +847,7 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 	if (s > e) { float const t = s; s = e; e = t; }
 	if (e - s >= 1.0f) return;
 	geom out;
-	if (e - s <= 1e-6f) { g = out; return; }
+	if (e - s <= 1e-6f) { out.rule = g.rule; g = out; return; }
 	float start = s + o;
 	start -= ImFloor(start);
 	float const end = start + (e - s);
@@ -759,7 +883,130 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 			out.polyline(piece.Data, piece.Size, false);
 		}
 	}
-	g = out;
+	out.rule = g.rule; g = out;
+}
+
+// Contour as vertices with absolute handles (in = handle before the vertex, out = after)
+static int contour_vertices(geom const& g, contour const& c, ImVector<ImVec2>& v, ImVector<ImVec2>& vin, ImVector<ImVec2>& vout) {
+	ImVec2 const* p = g.pts.Data + c.first;
+	int const nseg = (c.count - 1) / 3;
+	int const n = c.closed ? nseg : nseg + 1;
+	v.resize(0); vin.resize(0); vout.resize(0);
+	for (int k = 0; k < n; k++) {
+		v.push_back(p[3 * k]);
+		vin.push_back(k > 0 ? p[3 * k - 1] : (c.closed && nseg > 0 ? p[c.count - 2] : p[0]));
+		vout.push_back(k < nseg ? p[3 * k + 1] : p[3 * k]);
+	}
+	return n;
+}
+
+static void add_contour_vertices(geom& out, ImVector<ImVec2> const& v, ImVector<ImVec2> const& vin, ImVector<ImVec2> const& vout, bool closed) {
+	if (v.Size == 0) return;
+	out.begin(v[0]);
+	for (int k = 0; k + 1 < v.Size; k++) out.cubic(vout[k], vin[k + 1], v[k + 1]);
+	if (closed) out.cubic(vout.back(), vin[0], v[0]);
+	out.cs.back().closed = closed;
+}
+
+// Pucker (amount < 0) / bloat (> 0), in percent: vertices move toward the centre of their
+// path, handles away from it
+static void pucker_bloat(geom& g, float amount) {
+	if (amount == 0.0f) return;
+	float const f = amount * 0.01f;
+	geom out;
+	ImVector<ImVec2> v, vin, vout;
+	for (int ci = 0; ci < g.cs.Size; ci++) {
+		int const n = contour_vertices(g, g.cs[ci], v, vin, vout);
+		ImVec2 c(0, 0);
+		for (int k = 0; k < n; k++) { c.x += v[k].x / n; c.y += v[k].y / n; }
+		for (int k = 0; k < n; k++) {
+			v[k] = ImVec2(v[k].x + (c.x - v[k].x) * f, v[k].y + (c.y - v[k].y) * f);
+			vin[k] = ImVec2(vin[k].x - (c.x - vin[k].x) * f, vin[k].y - (c.y - vin[k].y) * f);
+			vout[k] = ImVec2(vout[k].x - (c.x - vout[k].x) * f, vout[k].y - (c.y - vout[k].y) * f);
+		}
+		add_contour_vertices(out, v, vin, vout, g.cs[ci].closed);
+	}
+	out.rule = g.rule; g = out;
+}
+
+// Zig-zag: `ridges` points per segment (vertex to vertex), alternately pushed `size` to each
+// side of the path; smooth = 2 rounds the peaks
+static void zigzag(geom& g, float size, int ridges, bool smooth, float tol) {
+	if (size == 0.0f || ridges < 0) return;
+	geom out;
+	ImVector<ImVec2> seg, pts, nrm, v, vin, vout;
+	for (int ci = 0; ci < g.cs.Size; ci++) {
+		contour const& c = g.cs[ci];
+		ImVec2 const* p = g.pts.Data + c.first;
+		pts.resize(0); nrm.resize(0);
+		for (int k = 0; k + 3 < c.count; k += 3) {
+			// One segment, flattened, sampled at ridges + 1 equal arc-length steps
+			geom one;
+			one.begin(p[k]);
+			one.cubic(p[k + 1], p[k + 2], p[k + 3]);
+			flatten_contour(one, one.cs[0], seg, tol);
+			float const len = poly_length(seg, false);
+			int const steps = ridges + 1;
+			int j = 0;
+			float acc = 0.0f;
+			for (int st = 0; st < steps; st++) {
+				float const target = len * st / steps;
+				while (j + 1 < seg.Size - 1 && acc + ImSqrt((seg[j + 1].x - seg[j].x) * (seg[j + 1].x - seg[j].x) + (seg[j + 1].y - seg[j].y) * (seg[j + 1].y - seg[j].y)) < target) {
+					acc += ImSqrt((seg[j + 1].x - seg[j].x) * (seg[j + 1].x - seg[j].x) + (seg[j + 1].y - seg[j].y) * (seg[j + 1].y - seg[j].y));
+					j++;
+				}
+				ImVec2 const a = seg[j], b = seg[ImMin(j + 1, seg.Size - 1)];
+				float const l = ImSqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+				float const f = l > 0.0f ? ImSaturate((target - acc) / l) : 0.0f;
+				pts.push_back(ImVec2(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f));
+				nrm.push_back(l > 0.0f ? ImVec2(-(b.y - a.y) / l, (b.x - a.x) / l) : ImVec2(0, 0));
+			}
+		}
+		if (!c.closed && c.count >= 4) {
+			ImVec2 const a = p[c.count - 2], b = p[c.count - 1];
+			float const l = ImSqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+			pts.push_back(b);
+			nrm.push_back(l > 0.0f ? ImVec2(-(b.y - a.y) / l, (b.x - a.x) / l) : (nrm.Size ? nrm.back() : ImVec2(0, 0)));
+		}
+		if (pts.Size < 2) continue;
+		v.resize(pts.Size); vin.resize(pts.Size); vout.resize(pts.Size);
+		for (int k = 0; k < pts.Size; k++) {
+			float const side = (k % 2) ? -size : size;
+			v[k] = ImVec2(pts[k].x + nrm[k].x * side, pts[k].y + nrm[k].y * side);
+		}
+		for (int k = 0; k < pts.Size; k++) {
+			vin[k] = vout[k] = v[k];
+			if (!smooth) continue;
+			// Handles along the path direction, a third of the way to the neighbours
+			ImVec2 const prev = v[(k - 1 + pts.Size) % pts.Size], next = v[(k + 1) % pts.Size];
+			ImVec2 const tdir(nrm[k].y, -nrm[k].x);
+			float const lp = ImSqrt((v[k].x - prev.x) * (v[k].x - prev.x) + (v[k].y - prev.y) * (v[k].y - prev.y)) * 0.36f;
+			float const ln = ImSqrt((next.x - v[k].x) * (next.x - v[k].x) + (next.y - v[k].y) * (next.y - v[k].y)) * 0.36f;
+			vin[k] = ImVec2(v[k].x - tdir.x * lp, v[k].y - tdir.y * lp);
+			vout[k] = ImVec2(v[k].x + tdir.x * ln, v[k].y + tdir.y * ln);
+		}
+		add_contour_vertices(out, v, vin, vout, c.closed);
+	}
+	out.rule = g.rule; g = out;
+}
+
+// Merge paths (geometry so far in the group): 1 merge keeps the paths as they are; 2 add,
+// 3 subtract, 4 intersect, 5 exclude orient the contours and pick a fill rule
+static void merge_paths(geom& g, int mode, float tol) {
+	if (mode < 2 || mode > 5 || g.cs.Size == 0) return;
+	ImVector<ImVec2> poly, rev;
+	for (int ci = 0; ci < g.cs.Size; ci++) {
+		flatten_contour(g, g.cs[ci], poly, tol);
+		float area = 0.0f;
+		for (int i = 0; i < poly.Size; i++) { ImVec2 const a = poly[i], b = poly[(i + 1) % poly.Size]; area += a.x * b.y - b.x * a.y; }
+		bool const want_positive = !(mode == 3 && ci > 0);  // subtract: the first path minus the others
+		if ((area <= 0.0f) == want_positive) continue;  // y down: negative shoelace area = winding +1
+		contour const& c = g.cs[ci];
+		rev.resize(c.count);
+		for (int i = 0; i < c.count; i++) rev[i] = g.pts[c.first + c.count - 1 - i];  // reversed cubic chain
+		for (int i = 0; i < c.count; i++) g.pts[c.first + i] = rev[i];
+	}
+	g.rule = mode == 2 ? 0 : mode == 3 ? 2 : mode == 4 ? g.cs.Size + 1 : 1;
 }
 
 // Round corners: sharp vertices (both handles on the vertex) become arcs of radius r
@@ -798,7 +1045,7 @@ static void round_corners(geom& g, float r) {
 		if (c.closed) out.cubic(vout.back(), vin[0], v[0]);
 		out.cs.back().closed = c.closed;
 	}
-	g = out;
+	out.rule = g.rule; g = out;
 }
 
 // ----------------------------------------------------------------------------
@@ -977,7 +1224,7 @@ struct fill_writer {
 	}
 };
 
-static inline bool fill_inside(int winding, int even_odd) { return even_odd ? (winding & 1) != 0 : winding != 0; }
+static inline bool fill_inside(int winding, int rule) { return rule == 0 ? winding != 0 : rule == 1 ? (winding & 1) != 0 : winding >= rule - 1; }
 
 // Appends the parts of `a` that are not covered by `b` (both sorted, disjoint)
 static void span_difference(ImVector<span> const& a, ImVector<span> const& b, ImVector<span>& out) {
@@ -1294,6 +1541,7 @@ float4 main_ps(PS_INPUT input) : SV_Target {
 	int num = (int)params.x;
 	int winding = 0;
 	float d2 = 1e10;
+	int across = 0;  // winding change when crossing the nearest segment
 	for (int i = 0; i < num; i++) {
 		float2 p0 = segments[i].xy, p1 = segments[i].zw;
 		float c = (p1.x - p0.x) * (P.y - p0.y) - (P.x - p0.x) * (p1.y - p0.y);
@@ -1303,11 +1551,17 @@ float4 main_ps(PS_INPUT input) : SV_Target {
 		float l2 = dot(d, d);
 		float t = l2 > 1e-8 ? saturate(dot(P - p0, d) / l2) : 0.0;
 		float2 q = P - (p0 + d * t);
-		d2 = min(d2, dot(q, q));
+		float e2 = dot(q, q);
+		if (e2 < d2) { d2 = e2; across = c > 0.0 ? 1 : -1; }
 	}
-	bool inside = params.y > 0.5 ? (winding & 1) != 0 : winding != 0;
-	// Inside is opaque so inner edges (stroke joins, overlaps) leave no seam
-	float a = inside ? 1.0 : saturate(0.5 - sqrt(d2));
+	int rule = (int)params.y;
+	winding = -winding;  // the ray goes to +x: opposite sign to the CPU sweep, which counts from the left
+	bool inside = rule == 0 ? winding != 0 : rule == 1 ? (winding & 1) != 0 : winding >= rule - 1;
+	int w2 = winding + across;
+	bool inside2 = rule == 0 ? w2 != 0 : rule == 1 ? (w2 & 1) != 0 : w2 >= rule - 1;
+	// Inside is opaque so inner edges (stroke joins, overlaps) leave no seam; outside fades
+	// only next to an edge whose other side is filled
+	float a = inside ? 1.0 : (inside2 ? saturate(0.5 - sqrt(d2)) : 0.0);
 	if (a <= 0.0) discard;
 	return float4(fillColor.rgb, fillColor.a * a);
 }
@@ -1391,7 +1645,7 @@ static bool gpu_fill(ImDrawList* dl, ImVec2 const* segs, int n, ImU32 col, int e
 		memset(buf.Data, 0, 64);
 		memcpy(buf.Data, &prog, sizeof(prog));
 		float* f = (float*)(void*)(buf.Data + 16);
-		f[0] = (float)bd.count; f[1] = even_odd ? 1.0f : 0.0f;
+		f[0] = (float)bd.count; f[1] = (float)even_odd;
 		f[4] = c.x; f[5] = c.y; f[6] = c.z; f[7] = c.w;
 		f[8] = b.Min.x; f[9] = bd.y0; f[10] = b.Max.x; f[11] = bd.y1;
 		for (int i = 0; i < bd.count; i++) {
@@ -1598,13 +1852,27 @@ struct ctx {
 		if (scratch.Size > 1) out[1] = scratch[1];
 	}
 
-	mat xform(xform_t const& x, float t, float* opacity) {
-		float a[2], p[2], s[2];
-		pv2(x.a, t, 0.0f, a);
+	void position(xform_t const& x, float t, float p[2]) {
 		if (x.split) { p[0] = pv(x.px, t, 0, 0.0f); p[1] = pv(x.py, t, 0, 0.0f); }
 		else pv2(x.p, t, 0.0f, p);
+	}
+
+	// auto_orient: also rotate along the motion path (layer "ao")
+	mat xform(xform_t const& x, float t, float* opacity, bool auto_orient = false) {
+		float a[2], p[2], s[2];
+		pv2(x.a, t, 0.0f, a);
+		position(x, t, p);
 		pv2(x.s, t, 100.0f, s);
-		float const r = pv(x.r, t, 0, 0.0f), sk = pv(x.sk, t, 0, 0.0f), sa = pv(x.sa, t, 0, 0.0f);
+		float r = pv(x.r, t, 0, 0.0f);
+		float const sk = pv(x.sk, t, 0, 0.0f), sa = pv(x.sa, t, 0, 0.0f);
+		if (auto_orient) {
+			// Tangent from a small step ahead (behind at the very end of the motion)
+			float q[2];
+			position(x, t + 0.05f, q);
+			float dx = q[0] - p[0], dy = q[1] - p[1];
+			if (dx * dx + dy * dy < 1e-10f) { position(x, t - 0.05f, q); dx = p[0] - q[0]; dy = p[1] - q[1]; }
+			if (dx * dx + dy * dy >= 1e-10f) r += ImAtan2(dy, dx) * (180.0f / IM_PI);
+		}
 		if (opacity) *opacity = pv(x.o, t, 0, 100.0f) * 0.01f;
 		mat m = mat_make(s[0] * 0.01f, 0, 0, s[1] * 0.01f, -a[0] * s[0] * 0.01f, -a[1] * s[1] * 0.01f);
 		if (sk != 0.0f) m = mul(mul(mul(rot(-sa), mat_make(1, 0, tanf(-sk * (IM_PI / 180.0f)), 1, 0, 0)), rot(sa)), m);
@@ -1739,6 +2007,11 @@ struct ctx {
 					trim(out, pv(sh.p[0], t, 0, 0.0f) * 0.01f, pv(sh.p[1], t, 0, 100.0f) * 0.01f, pv(sh.p[2], t, 0, 0.0f) / 360.0f, sh.mode, tol);
 					break;
 				case SK_ROUND: round_corners(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M)); break;
+				case SK_PUCKER: pucker_bloat(out, pv(sh.p[0], t, 0, 0.0f)); break;
+				case SK_MERGE: merge_paths(out, sh.mode, tol); break;  // shortcut: strokes still follow the original contours
+				case SK_ZIGZAG:
+					zigzag(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M), ImClamp((int)pv(sh.p[1], t, 0, 0.0f), 0, 1000), pv(sh.p[2], t, 0, 1.0f) >= 1.5f, tol);
+					break;
 				default: break;  // shortcut: a repeater only repeats what it styles, not geometry seen by later styles
 			}
 		}
@@ -1773,6 +2046,77 @@ struct ctx {
 		}
 	}
 
+	void fill_geom(geom const& g, ImU32 col) {
+		ImVector<ImVec2> poly, segs;
+		for (int c = 0; c < g.cs.Size; c++) {
+			flatten_contour(g, g.cs[c], poly, tol);
+			if (poly.Size < 3) continue;
+			if (collect) { add_poly(segs, poly.Data, poly.Size); continue; }
+			for (int i = 0; i < poly.Size; i++) { segs.push_back(poly[i]); segs.push_back(poly[(i + 1) % poly.Size]); }
+		}
+		fill(segs, col, 0, nullptr);
+	}
+
+	glyph_t const* find_glyph(unsigned cp, int font) const {
+		glyph_t const* any = nullptr;
+		for (int i = 0; i < L->glyphs.Size; i++) {
+			glyph_t const& g = L->glyphs[i];
+			if (g.cp != cp) continue;
+			if (font < 0 || (strcmp(L->strings.Data + g.family, L->strings.Data + L->fonts[font].family) == 0 &&
+			                 strcmp(L->strings.Data + g.style, L->strings.Data + L->fonts[font].style) == 0)) return &g;
+			if (!any) any = &g;
+		}
+		return any;
+	}
+
+	// Text layer: lines laid out from the embedded glyph outlines (point text; boxes do not wrap)
+	void draw_text(layer_t const& ly, mat const& W, float alpha, float lt) {
+		if (ly.docn == 0 || L->glyphs.Size == 0) return;
+		int di = 0;
+		for (int i = 0; i < ly.docn; i++) if (L->docs[ly.doc + i].t <= lt) di = i;
+		textdoc_t const& d = L->docs[ly.doc + di];
+		float const scale = d.size * 0.01f, track = d.tracking * 0.001f * d.size;
+		geom g;
+		char const* line = L->strings.Data + d.text;
+		for (float y = 0.0f; ; y += d.lh) {
+			char const* e = line;
+			while (*e && *e != '\r' && *e != '\n' && *e != 3) e++;
+			float width = 0.0f;
+			for (char const* c = line; c < e; ) {
+				unsigned cp = 0;
+				c += ImTextCharFromUtf8(&cp, c, e);
+				glyph_t const* gl = find_glyph(cp, d.font);
+				width += (gl ? gl->w * scale : 0.0f) + track;
+			}
+			float x = d.justify == 1 ? -width : d.justify == 2 ? -width * 0.5f : 0.0f;
+			for (char const* c = line; c < e; ) {
+				unsigned cp = 0;
+				c += ImTextCharFromUtf8(&cp, c, e);
+				glyph_t const* gl = find_glyph(cp, d.font);
+				if (!gl) continue;
+				collect_geom(gl->shapes, gl->shapesn, mul(W, mat_make(scale, 0, 0, scale, x, y)), lt, g);
+				x += gl->w * scale + track;
+			}
+			if (!*e) break;
+			line = e + 1;
+		}
+		float const a = collect ? 1.0f : ImSaturate(alpha);
+		ImU32 const fc = ImGui::ColorConvertFloat4ToU32(ImVec4(d.fc[0], d.fc[1], d.fc[2], a));
+		ImU32 const sc = ImGui::ColorConvertFloat4ToU32(ImVec4(d.sc[0], d.sc[1], d.sc[2], a));
+		ImVector<ImVec2> poly, segs;
+		float const hw = d.sw * mat_scale(W) * 0.5f;
+		for (int pass = 0; pass < 2; pass++) {
+			bool const stroke_pass = (pass == 0) != (d.stroke_over != 0);  // "of": stroke over fill
+			if (stroke_pass && d.stroke) {
+				segs.resize(0);
+				for (int c = 0; c < g.cs.Size; c++) { flatten_contour(g, g.cs[c], poly, tol); stroke_polyline(segs, poly.Data, poly.Size, g.cs[c].closed, hw, 1, 1, 4.0f, tol); }
+				fill(segs, sc, 0, nullptr);
+			} else if (!stroke_pass && d.fill) {
+				fill_geom(g, fc);
+			}
+		}
+	}
+
 	void draw_style(shape_t const& sh, geom const& g, mat const& M, float alpha, float t) {
 		if (g.cs.Size == 0) return;
 		bool const stroke = sh.kind == SK_STROKE || sh.kind == SK_GSTROKE;
@@ -1797,7 +2141,7 @@ struct ctx {
 				if (collect) { add_poly(segs, poly.Data, poly.Size); continue; }  // matte: union of positive outlines
 				for (int i = 0; i < poly.Size; i++) { segs.push_back(poly[i]); segs.push_back(poly[(i + 1) % poly.Size]); }
 			}
-			fill(segs, col, sh.rule == 2, grad ? &pt : nullptr);
+			fill(segs, col, g.rule >= 0 ? g.rule : sh.rule == 2 ? 1 : 0, grad ? &pt : nullptr);
 			return;
 		}
 		float const scale = mat_scale(M);
@@ -1869,11 +2213,11 @@ struct ctx {
 
 	mat layer_world(int li, float t, float* opacity) {
 		layer_t const& ly = L->layers[li];
-		mat W = xform(ly.ks, (t - ly.st) / ly.sr, opacity);
+		mat W = xform(ly.ks, (t - ly.st) / ly.sr, opacity, ly.ao != 0);
 		int p = ly.parent;
 		for (int guard = 0; p >= 0 && guard < 32; guard++) {
 			layer_t const& pl = L->layers[p];
-			W = mul(xform(pl.ks, (t - pl.st) / pl.sr, nullptr), W);  // parents pass their transform, not their opacity
+			W = mul(xform(pl.ks, (t - pl.st) / pl.sr, nullptr, pl.ao != 0), W);  // parents pass their transform, not their opacity
 			p = pl.parent;
 		}
 		return W;
@@ -1882,7 +2226,8 @@ struct ctx {
 	int push_masks(layer_t const& ly, mat const& W, float lt) {
 		int pushed = 0;
 		ImVector<ImVec2> uni, segs, poly;
-		auto flush = [&]() { if (uni.Size) { push_clip(uni, 0); pushed++; uni.resize(0); } };
+		bool uni_eo = false;  // a difference mask in the group: even-odd gives the XOR with the masks before it
+		auto flush = [&]() { if (uni.Size) { push_clip(uni, uni_eo ? 1 : 0); pushed++; uni.resize(0); } uni_eo = false; };
 		for (int i = 0; i < ly.maskn; i++) {
 			mask_t const& mk = L->masks[ly.mask + i];
 			if (mk.mode == 'n') continue;
@@ -1895,7 +2240,11 @@ struct ctx {
 			segs.resize(0);
 			for (int c = 0; c < g.cs.Size; c++) { flatten_contour(g, g.cs[c], poly, tol); if (poly.Size >= 3) add_poly(segs, poly.Data, poly.Size); }
 			bool const subtract = (mk.mode == 's') != (mk.inv != 0);
-			if (mk.mode != 's' && mk.mode != 'i' && !mk.inv) { for (int k = 0; k < segs.Size; k++) uni.push_back(segs[k]); continue; }  // add (and other modes): union
+			if (mk.mode != 's' && mk.mode != 'i' && !mk.inv) {  // add (and lighten / darken): union; difference: XOR
+				if (mk.mode == 'f') uni_eo = true;
+				for (int k = 0; k < segs.Size; k++) uni.push_back(segs[k]);
+				continue;
+			}
 			flush();
 			if (subtract) { ImVector<ImVec2> comp; complement(comp, segs); push_clip(comp, 0); }
 			else push_clip(segs, 0);
@@ -1911,8 +2260,15 @@ struct ctx {
 		depth++;
 		float op = 1.0f;
 		mat const W = mul(M, layer_world(li, t, &op));
-		float const a = alpha * op;
 		float const lt = (t - ly.st) / ly.sr;
+		float a = alpha * op;
+		// Clips are geometric; opacity is approximated: a single add mask's opacity and an
+		// alpha matte layer's own opacity scale the layer
+		if (ly.maskn == 1 && L->masks[ly.mask].mode == 'a' && !L->masks[ly.mask].inv) a *= ImSaturate(pv(L->masks[ly.mask].o, lt, 0, 100.0f) * 0.01f);
+		if (ly.matte >= 0 && ly.matte != li && (ly.tt == 1 || ly.tt == 3)) {
+			layer_t const& ml = L->layers[ly.matte];
+			a *= ImSaturate(pv(ml.ks.o, (t - ml.st) / ml.sr, 0, 100.0f) * 0.01f);
+		}
 		int pushed = 0;
 		if (a > 0.0f || collect) {
 			if (ly.matte >= 0 && ly.matte != li) {
@@ -1936,6 +2292,7 @@ struct ctx {
 					fill(segs, ImGui::ColorConvertFloat4ToU32(ImVec4(ly.solid[0], ly.solid[1], ly.solid[2], collect ? 1.0f : ImSaturate(a))), 0, nullptr);
 					break;
 				}
+				case 5: draw_text(ly, W, a, lt); break;
 				case 0:
 					if (ly.comp >= 0) render_comp(ly.comp, present(ly.tm) ? pv(ly.tm, lt, 0, 0.0f) * L->fr : lt, W, a);
 					break;
@@ -1983,6 +2340,7 @@ iam_lottie* iam_lottie_load_from_memory(char const* json, size_t size) {
 	builder B;
 	B.L = L;
 	B.D = &doc;
+	B.fonts_and_chars(root);  // before the layers: text documents refer to the fonts
 	B.layers(doc.get(root, "layers"));
 	int const assets = doc.get(root, "assets");
 	if (doc.type(assets) == J_ARR)
@@ -2007,6 +2365,8 @@ iam_lottie* iam_lottie_load_from_memory(char const* json, size_t size) {
 			mk.dur = (float)doc.num(m, "dr", 0.0);
 			L->markers.push_back(mk);
 		}
+	for (int i = 0; i < L->layers.Size; i++)
+		if (L->layers[i].ty == 5 && L->glyphs.Size == 0) L->warn |= W_TEXT;  // system fonts only: nothing to draw
 	build_warnings(L);
 	return L;
 }

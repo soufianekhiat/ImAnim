@@ -255,6 +255,86 @@ int main() {
 		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + rd + "," + fill(1, 1, 1)))), 0.0f);
 		CHECK(cov_at(52, 52) < 0.01f && cov_at(100, 52) > 0.99f, "round corners");
 		iam_lottie_free(a);
+		std::string const pb = "{\"ty\":\"pb\",\"a\":" + val("50") + "}";
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + pb + "," + fill(1, 1, 1)))), 0.0f);
+		CHECK(cov_at(100, 100) > 0.99f && cov_at(100, 45) > 0.99f && cov_at(55, 55) < 0.01f, "bloat: corners pulled in, edges bulge");
+		iam_lottie_free(a);
+		for (int mode = 1; mode <= 5; mode++) {
+			std::string const mm = "{\"ty\":\"mm\",\"mm\":" + std::to_string(mode) + "}";
+			a = draw(doc(layer(group(rect(80, 100, 80, 80) + "," + rect(120, 100, 80, 80) + "," + mm + "," + fill(1, 1, 1)))), 0.0f);
+			bool const only_a = cov_at(57, 103) > 0.99f, both = cov_at(97, 103) > 0.99f, only_b = cov_at(143, 103) > 0.99f;
+			bool const want[6][3] = { {}, { true, true, true }, { true, true, true }, { true, false, false }, { false, true, false }, { true, false, true } };
+			CHECK(only_a == want[mode][0] && both == want[mode][1] && only_b == want[mode][2] && strcmp(iam_lottie_warnings(a), "") == 0,
+			      "merge paths mode %d (A %d, A&B %d, B %d)", mode, only_a, both, only_b);
+			iam_lottie_free(a);
+		}
+		std::string const zz ="{\"ty\":\"zz\",\"s\":" + val("10") + ",\"r\":" + val("3") + ",\"pt\":" + val("1") + "}";
+		a = draw(doc(layer(group(line_path(20, 100, 180, 100) + "," + zz + "," + stroke(2, 1)))), 0.0f);
+		CHECK(cov_at(60, 90) > 0.9f && cov_at(100, 110) > 0.9f && cov_at(60, 100) < 0.01f, "zig-zag: alternating ridges");
+		iam_lottie_free(a);
+	}
+
+	// ---------------- Auto-orient, mask / matte opacity ----------------
+	{
+		std::string const bar = group(rect(0, 0, 40, 6) + "," + fill(1, 1, 1));
+		std::string const move = "\"ks\":{\"p\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[100,50],\"o\":{\"x\":0,\"y\":0},\"i\":{\"x\":1,\"y\":1}},{\"t\":30,\"s\":[100,150]}]}},";
+		iam_lottie* a = draw(doc("{\"ty\":4,\"ind\":1,\"ao\":1,\"ip\":0,\"op\":60,\"st\":0," + move + "\"shapes\":[" + bar + "]}"), 0.5f);
+		CHECK(cov_at(100, 115) > 0.99f && cov_at(115, 100) < 0.01f, "auto-orient turns the layer along its path");
+		iam_lottie_free(a);
+		a = draw(doc("{\"ty\":4,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0," + move + "\"shapes\":[" + bar + "]}"), 0.5f);
+		CHECK(cov_at(115, 100) > 0.99f && cov_at(100, 115) < 0.01f, "without auto-orient");
+		iam_lottie_free(a);
+		std::string const sq = "{\"c\":true,\"v\":[[80,80],[120,80],[120,120],[80,120]],\"i\":[[0,0],[0,0],[0,0],[0,0]],\"o\":[[0,0],[0,0],[0,0],[0,0]]}";
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + fill(1, 0, 0)), "\"masksProperties\":[{\"mode\":\"a\",\"pt\":" + val(sq) + ",\"o\":" + val("50") + "}],")), 0.0f);
+		CHECK(fabsf(cov_at(97, 103) - 0.5f) < 0.02f, "add mask opacity (%.2f)", cov_at(97, 103));
+		iam_lottie_free(a);
+		std::string const big = "{\"c\":true,\"v\":[[60,60],[140,60],[140,140],[60,140]],\"i\":[[0,0],[0,0],[0,0],[0,0]],\"o\":[[0,0],[0,0],[0,0],[0,0]]}";
+		a = draw(doc(layer(group(rect(100, 100, 160, 160) + "," + fill(1, 0, 0)),
+			"\"masksProperties\":[{\"mode\":\"a\",\"pt\":" + val(big) + ",\"o\":" + val("100") + "},{\"mode\":\"f\",\"pt\":" + val(sq) + ",\"o\":" + val("100") + "}],")), 0.0f);
+		CHECK(cov_at(97, 103) < 0.01f && cov_at(70, 103) > 0.99f && cov_at(30, 103) < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "difference mask: XOR with the add mask");
+		iam_lottie_free(a);
+		std::string const matte = "{\"ty\":4,\"ind\":1,\"td\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"o\":" + val("50") + "},\"shapes\":[" + group(rect(100, 100, 40, 40) + "," + fill(1, 1, 1)) + "]}";
+		std::string const target = "{\"ty\":4,\"ind\":2,\"tt\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{},\"shapes\":[" + group(rect(100, 100, 100, 100) + "," + fill(0, 0, 1)) + "]}";
+		a = draw(doc(matte + "," + target), 0.0f);
+		CHECK(fabsf(cov_at(97, 103) - 0.5f) < 0.02f && cov_at(60, 100) < 0.01f, "matte layer opacity (%.2f)", cov_at(97, 103));
+		iam_lottie_free(a);
+	}
+
+	// ---------------- Text layers with embedded glyphs ----------------
+	{
+		// Glyphs at size 100: 'A' a 60x70 box, 'B' a triangle, U+00E9 a small box; advance 70
+		auto glyph = [](char const* ch, char const* verts, int n) {
+			std::string zeros;
+			for (int i = 0; i < n; i++) zeros += i ? ",[0,0]" : "[0,0]";
+			return std::string("{\"ch\":\"") + ch + "\",\"fFamily\":\"Test\",\"style\":\"Regular\",\"size\":100,\"w\":70,\"data\":{\"shapes\":[{\"ty\":\"gr\",\"it\":[{\"ty\":\"sh\",\"ks\":{\"a\":0,\"k\":{\"c\":true,\"v\":[" +
+			       verts + "],\"i\":[" + zeros + "],\"o\":[" + zeros + "]}}},{\"ty\":\"tr\"}]}]}}";
+		};
+		std::string const fonts = "\"fonts\":{\"list\":[{\"fName\":\"TestSans\",\"fFamily\":\"Test\",\"fStyle\":\"Regular\",\"ascent\":70}]},\"chars\":[" +
+			glyph("A", "[0,0],[60,0],[60,-70],[0,-70]", 4) + "," + glyph("B", "[0,0],[60,0],[30,-70]", 3) + "," + glyph("\\u00e9", "[0,0],[20,0],[20,-20],[0,-20]", 4) + "],";
+		auto text = [](char const* t, int j, float tr, float x) {
+			char b[400];
+			snprintf(b, sizeof(b), "{\"ty\":5,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":0,\"k\":[%g,100]}},\"t\":{\"d\":{\"k\":[{\"t\":0,\"s\":{\"s\":50,\"f\":\"TestSans\",\"t\":\"%s\",\"j\":%d,\"tr\":%g,\"lh\":60,\"fc\":[1,0,0]}}]},\"a\":[]}}", x, t, j, tr);
+			return std::string(b);
+		};
+		iam_lottie* a = draw(doc(text("AB\\rA", 0, 0, 20), fonts), 0.0f);
+		float rgb[3];
+		CHECK(cov_at(35, 80, rgb) > 0.99f && rgb[0] > 0.99f && rgb[1] < 0.01f, "text: first glyph in the fill colour");
+		CHECK(cov_at(52, 80) < 0.01f && cov_at(70, 97) > 0.99f && cov_at(57, 70) < 0.01f, "text: second glyph after the advance");
+		CHECK(cov_at(35, 140) > 0.99f && cov_at(35, 110) < 0.01f, "text: \\r starts a line one line height down");
+		CHECK(strcmp(iam_lottie_warnings(a), "") == 0, "text with glyphs: no warning (%s)", iam_lottie_warnings(a));
+		iam_lottie_free(a);
+		a = draw(doc(text("AB", 2, 0, 100), fonts), 0.0f);
+		CHECK(cov_at(80, 80) > 0.99f && cov_at(62, 80) < 0.01f && cov_at(125, 97) > 0.99f, "text: centred");
+		iam_lottie_free(a);
+		a = draw(doc(text("AB", 1, 0, 100), fonts), 0.0f);
+		CHECK(cov_at(45, 80) > 0.99f && cov_at(90, 97) > 0.99f && cov_at(105, 97) < 0.01f, "text: right-aligned");
+		iam_lottie_free(a);
+		a = draw(doc(text("AB", 0, 200, 20), fonts), 0.0f);
+		CHECK(cov_at(60, 97) < 0.01f && cov_at(80, 97) > 0.99f, "text: tracking");
+		iam_lottie_free(a);
+		a = draw(doc(text("\\u00e9", 0, 0, 20), fonts), 0.0f);
+		CHECK(cov_at(25, 97) > 0.99f && cov_at(35, 97) < 0.01f, "text: \\u escapes map to glyphs");
+		iam_lottie_free(a);
 	}
 
 	// ---------------- Markers, warnings, robustness ----------------
@@ -266,7 +346,7 @@ int main() {
 		iam_lottie_free(a);
 		std::string const w = doc("{\"ty\":5,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"o\":{\"a\":0,\"k\":100,\"x\":\"value * 2\"}}}");
 		a = iam_lottie_load_from_memory(w.data(), w.size());
-		CHECK(a && strstr(iam_lottie_warnings(a), "text layers") && strstr(iam_lottie_warnings(a), "expressions"), "warnings: %s", a ? iam_lottie_warnings(a) : "");
+		CHECK(a && strstr(iam_lottie_warnings(a), "text without embedded glyphs") && strstr(iam_lottie_warnings(a), "expressions"), "warnings: %s", a ? iam_lottie_warnings(a) : "");
 		iam_lottie_free(a);
 
 		char const* bad[] = { "", "{", "[1,2]", "{\"w\":1}", "{\"w\":100,\"h\":100,\"fr\":0,\"ip\":0,\"op\":10,\"layers\":[]}", "{\"a\":tru}", "{\"a\":1,}", "\"x" };
