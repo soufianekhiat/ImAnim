@@ -4406,6 +4406,89 @@ static void ShowInertiaDemo()
 }
 
 // ============================================================
+// SECTION: SVG Paths
+// ============================================================
+static void ShowSvgPathsDemo()
+{
+	float const fs = ImGui::GetFontSize();
+	float const k = fs / 13.0f;
+	static float built_k = 0.0f;
+	static ImGuiID const heart = ImHashStr("demo_svg_heart");
+	static ImGuiID const star = ImHashStr("demo_svg_star");
+	static ImGuiID const wave = ImHashStr("demo_svg_wave");
+	if (built_k != k) {
+		// Paths from SVG "d" attributes (coordinates in a 100x100 box), scaled to the font size
+		iam_path_from_svg(heart, "M50 88 C20 65 5 48 5 30 A22 22 0 0 1 50 22 A22 22 0 0 1 95 30 C95 48 80 65 50 88 Z", k);
+		iam_path_from_svg(star, "M50 5 L61 38 L95 38 L67 58 L78 92 L50 71 L22 92 L33 58 L5 38 L39 38 Z", k);
+		iam_path_from_svg(wave, "M0 50 q12.5 -40 25 0 t25 0 t25 0 t25 0", k);
+		built_k = k;
+	}
+	ImGui::TextWrapped("iam_path_from_svg() builds a path from SVG path data (here a heart with arcs, a star and a smooth "
+		"quadratic wave), ready for iam_path_draw(), iam_tween_path() and morphing.");
+	static float T = 0.0f;
+	T += GetSafeDeltaTime();
+	float draw_t = ImClamp(ImFmod(T, 3.0f) / 2.2f, 0.0f, 1.0f);
+	draw_t = iam_eval_preset(iam_ease_in_out_cubic, draw_t);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, 120.0f * k);
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	ImGuiID ids[3] = { heart, star, wave };
+	ImU32 cols[3] = { IM_COL32(204, 120, 88, 255), IM_COL32(230, 190, 90, 255), IM_COL32(91, 194, 231, 255) };
+	for (int i = 0; i < 3; i++) {
+		ImVec2 off(p.x + (10 + i * 120) * k, p.y + 10 * k);
+		iam_path_draw(dl, ids[i], 0.0f, 1.0f, IM_COL32(255, 255, 255, 25), 2.0f * k, off);
+		iam_path_draw(dl, ids[i], 0.0f, draw_t, cols[i], 3.0f * k, off);
+	}
+	// A dot travelling around the heart
+	ImVec2 hp = iam_path_evaluate_at_distance(heart, ImFmod(T * 0.35f, 1.0f) * iam_path_length(heart));
+	dl->AddCircleFilled(ImVec2(p.x + 10 * k + hp.x, p.y + 10 * k + hp.y), 4.0f * k, IM_COL32(255, 255, 255, 255));
+	ImGui::Dummy(size);
+}
+
+// ============================================================
+// SECTION: Text Scramble
+// ============================================================
+static void ShowTextScrambleDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped("iam_text_scramble() writes the text with unrevealed characters cycling through random symbols. "
+		"It is stateless: drive progress with any tween and use the result in any label.");
+	static int phrase = 0;
+	static char const* const phrases[] = { "ACCESS GRANTED", "Decoding transmission...", "Hello from ImAnim", "Animation engine for Dear ImGui" };
+	ImGuiID id = ImGui::GetID("scramble");
+	static float start_time = -1.0f;
+	if (ImGui::Button("Next phrase") || start_time < 0.0f) { phrase = (phrase + 1) % 4; start_time = (float)ImGui::GetTime(); }
+	ImGui::SameLine();
+	static bool random_order = false;
+	ImGui::Checkbox("Random order", &random_order);
+	float progress = ImClamp(((float)ImGui::GetTime() - start_time) / 1.2f, 0.0f, 1.0f);
+	iam_text_scramble_opts opts;
+	opts.random_order = random_order;
+	char buf[128];
+	iam_text_scramble(buf, sizeof(buf), phrases[phrase], progress, opts);
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.36f, 0.76f, 0.91f, 1.0f));
+	ImGui::TextUnformatted(buf);
+	ImGui::PopStyleColor();
+
+	// Hover to rescramble a button label
+	static bool was_hovered = false;
+	static float hover_start = -10.0f;
+	char label[64];
+	float hp = ImClamp(((float)ImGui::GetTime() - hover_start) / 0.5f, 0.0f, 1.0f);
+	iam_text_scramble_opts hopts;
+	hopts.seed = 3;
+	iam_text_scramble(label, sizeof(label), "Hover me", hp, hopts);
+	char full[96];
+	snprintf(full, sizeof(full), "%s###scramble_button", label);
+	ImGui::Button(full, ImVec2(ImGui::CalcTextSize("Hover me").x + ImGui::GetStyle().FramePadding.x * 2.0f, 0));
+	bool hovered = ImGui::IsItemHovered();
+	if (hovered && !was_hovered) hover_start = (float)ImGui::GetTime();
+	was_hovered = hovered;
+	(void)dt; (void)id;
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8074,6 +8157,10 @@ void ImAnimDemoWindow()
 	ImGui::Checkbox("Show Debug Window", &show_debug_window);
 	ImGui::SameLine();
 	ImGui::TextDisabled("(time scale, stats, profiler)");
+	ImGui::SameLine();
+	bool reduced = iam_get_reduced_motion();
+	if (ImGui::Checkbox("Reduced motion", &reduced)) iam_set_reduced_motion(reduced, 0.2f);
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("iam_set_reduced_motion(): transitions complete instantly, procedural motion at 20%%");
 
 	// Open/Close all sections (uses global s_open_all)
 	if (ImGui::Button("Open All")) {
@@ -8290,6 +8377,12 @@ void ImAnimDemoWindow()
 			ImGui::TreePop();
 		}
 
+		ApplyOpenAll();
+		if (ImGui::TreeNode("SVG Paths")) {
+			ShowSvgPathsDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
@@ -8333,6 +8426,12 @@ void ImAnimDemoWindow()
 	ApplyOpenAll();
 	if (ImGui::CollapsingHeader("Utilities")) {
 		iam_profiler_begin("Utilities");
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Text Scramble")) {
+			ShowTextScrambleDemo();
+			ImGui::TreePop();
+		}
 
 		ApplyOpenAll();
 		if (ImGui::TreeNode("ImDrawList Animations")) {
