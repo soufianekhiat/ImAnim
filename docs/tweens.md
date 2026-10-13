@@ -174,6 +174,40 @@ void AnimatedButton(const char* label) {
 }
 ```
 
+## Springs
+
+`iam_spring_*` channels are physically simulated instead of following a fixed
+duration. When the target changes mid-motion the value keeps its velocity, so
+interrupted or fast-changing targets (drag release, following the mouse,
+toggling quickly) never restart from rest.
+
+```cpp
+iam_spring_params sp = iam_spring_default();   // mass 1, stiffness 170, damping 26
+sp.stiffness = 300.0f;                          // snappier
+float x = iam_spring_float(id, ImHashStr("x"), hovered ? 40.0f : 0.0f, sp, dt);
+iam_vec2 p = iam_spring_vec2(id, ImHashStr("pos"), mouse_pos, sp, dt);
+iam_vec4 c = iam_spring_color(id, ImHashStr("col"), target_col, sp, iam_col_oklab, dt);
+```
+
+Lower damping overshoots and wobbles; higher damping glides in. Each
+(id, channel) is simulated once per frame, with `dt` scaled by the global time
+scale. `initial_velocity` applies when the channel is first created.
+
+## State Queries
+
+Read the state of any tween or spring channel (of any value type):
+
+```cpp
+bool  moving   = iam_tween_is_active(id, ch);       // animating, or a queued target is pending
+float progress = iam_tween_progress(id, ch);        // [0,1] time progress (1 when idle)
+float speed    = iam_tween_velocity_float(id, ch);  // units/second
+iam_vec2 v     = iam_tween_velocity_vec2(id, ch);
+iam_vec4 v4    = iam_tween_velocity_vec4(id, ch);   // also colors, in their blend space
+```
+
+Useful to skip work while idle, chain effects when a tween ends, or drive
+secondary motion (stretch, motion blur, tilt) from velocity.
+
 ## Memory Management
 
 ```cpp

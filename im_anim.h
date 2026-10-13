@@ -721,6 +721,28 @@ struct iam_spring_params {
 };
 
 // ----------------------------------------------------
+// Spring channels - physically simulated, no fixed duration
+// ----------------------------------------------------
+// Call every frame with the target. When the target changes mid-motion the value keeps its velocity
+// (no restart from rest), which suits drag release, follow-the-mouse and interrupted transitions.
+// Simulated once per frame per (id, channel); dt is scaled by iam_set_global_time_scale().
+// params.initial_velocity applies when the channel is created. Defaults: mass 1, stiffness 170, damping 26.
+static inline iam_spring_params iam_spring_default() { iam_spring_params p = { 1.0f, 170.0f, 26.0f, 0.0f }; return p; }
+IM_ANIM_API float    iam_spring_float(ImGuiID id, ImGuiID channel_id, float target, iam_spring_params const& params, float dt, float init_value = 0.0f);
+IM_ANIM_API iam_vec2 iam_spring_vec2(ImGuiID id, ImGuiID channel_id, iam_vec2 target, iam_spring_params const& params, float dt, iam_vec2 init_value = iam_v2(0, 0));
+IM_ANIM_API iam_vec4 iam_spring_vec4(ImGuiID id, ImGuiID channel_id, iam_vec4 target, iam_spring_params const& params, float dt, iam_vec4 init_value = iam_v4(0, 0, 0, 0));
+IM_ANIM_API iam_vec4 iam_spring_color(ImGuiID id, ImGuiID channel_id, iam_vec4 target_srgb, iam_spring_params const& params, int color_space, float dt, iam_vec4 init_value = iam_v4(1, 1, 1, 1)); // Simulated in color_space (oklab recommended; hue spaces move hue linearly).
+
+// ----------------------------------------------------
+// Tween state queries - work for iam_tween_* and iam_spring_* channels of any type
+// ----------------------------------------------------
+IM_ANIM_API bool     iam_tween_is_active(ImGuiID id, ImGuiID channel_id);       // True while animating (or a queued target is pending).
+IM_ANIM_API float    iam_tween_progress(ImGuiID id, ImGuiID channel_id);        // Time progress [0,1] of the current tween (1 when idle or unknown; springs: 0 moving, 1 settled).
+IM_ANIM_API float    iam_tween_velocity_float(ImGuiID id, ImGuiID channel_id);  // Units per second (0 when idle or unknown).
+IM_ANIM_API iam_vec2 iam_tween_velocity_vec2(ImGuiID id, ImGuiID channel_id);
+IM_ANIM_API iam_vec4 iam_tween_velocity_vec4(ImGuiID id, ImGuiID channel_id);   // Also for color channels (per component, in their blend space).
+
+// ----------------------------------------------------
 // Repeat with Variation - per-loop parameter changes
 // ----------------------------------------------------
 

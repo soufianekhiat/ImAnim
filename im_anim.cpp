@@ -847,7 +847,11 @@ void iam_update_begin_frame() {
 	iam_scroll_update_internal(ImGui::GetIO().DeltaTime);
 }
 
+static void iam_spring_gc(unsigned max_age);  // Spring channels section
+static void iam_spring_clear();
+
 void iam_gc(unsigned int max_age_frames) {
+	iam_spring_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -857,6 +861,7 @@ void iam_gc(unsigned int max_age_frames) {
 
 void iam_pool_clear() {
 	// Clean up all pools
+	iam_spring_clear();
 	iam_detail::g_float.pool.Clear();
 	iam_detail::g_vec2.pool.Clear();
 	iam_detail::g_vec4.pool.Clear();
@@ -1411,6 +1416,239 @@ void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt) {
 
 static ImVec4 iam_get_blended_color_impl(ImVec4 a_srgb, ImVec4 b_srgb, float t, int color_space) {
 	return iam_detail::color::lerp_color(a_srgb, b_srgb, t, color_space);
+}
+
+// ----------------------------------------------------
+// Spring channels
+// ----------------------------------------------------
+namespace iam_spring_detail {
+	struct spring_chan {
+		float x[4], v[4];
+		int space;               // color space for color springs (-1 otherwise)
+		unsigned last_seen_frame;
+		unsigned last_step_frame;
+		bool settled;
+		spring_chan() : space(-1), last_seen_frame(0), last_step_frame(0), settled(true) {
+			for (int i = 0; i < 4; i++) x[i] = v[i] = 0.0f;
+		}
+	};
+	static ImPool<spring_chan> g_springs;
+
+	// Distinct key per value type so a float and a vec2 spring can share (id, channel)
+	static ImGuiID key(ImGuiID id, ImGuiID channel, int n) {
+		ImGuiID k = iam_detail::make_key(id, channel);
+		return ImHashData(&n, sizeof(n), k);
+	}
+
+	static spring_chan* get(ImGuiID k, float const* init, int n, iam_spring_params const& p, bool* created) {
+		spring_chan* s = g_springs.GetByKey(k);
+		*created = (s == nullptr);
+		if (!s) {
+			s = g_springs.GetOrAddByKey(k);
+			for (int i = 0; i < n; i++) { s->x[i] = init[i]; s->v[i] = p.initial_velocity; }
+			s->settled = false;
+			s->last_step_frame = iam_detail::g_frame - 1;  // allow a step this frame
+		}
+		s->last_seen_frame = iam_detail::g_frame;
+		return s;
+	}
+
+	// Semi-implicit Euler with fixed substeps; once per frame
+	static void step(spring_chan* s, float const* target, int n, iam_spring_params const& p, float dt) {
+		bool moved_target = false;
+		for (int i = 0; i < n; i++) moved_target |= ImFabs(s->x[i] - target[i]) > 1e-6f;
+		if (s->settled && !moved_target) return;
+		if (s->last_step_frame == iam_detail::g_frame) return;
+		s->last_step_frame = iam_detail::g_frame;
+		dt *= iam_detail::g_time_scale;
+		if (dt <= 0.0f) return;
+		if (dt > 0.1f) dt = 0.1f;
+		float const m = p.mass > 1e-4f ? p.mass : 1e-4f;
+		float const k = p.stiffness > 0.0f ? p.stiffness : 0.0f;
+		float const c = p.damping > 0.0f ? p.damping : 0.0f;
+		int const substeps = ImClamp((int)ImCeil(dt / (1.0f / 240.0f)), 1, 32);
+		float const h = dt / substeps;
+		for (int s_i = 0; s_i < substeps; s_i++)
+			for (int i = 0; i < n; i++) {
+				float a = (-k * (s->x[i] - target[i]) - c * s->v[i]) / m;
+				s->v[i] += a * h;
+				s->x[i] += s->v[i] * h;
+			}
+		// Settle: close enough and slow enough -> snap to the target
+		float scale = 1e-3f;
+		for (int i = 0; i < n; i++) scale = ImMax(scale, ImFabs(target[i]) * 1e-4f);
+		bool settled = true;
+		for (int i = 0; i < n; i++) settled &= ImFabs(s->x[i] - target[i]) < scale && ImFabs(s->v[i]) < scale * 10.0f;
+		if (settled) for (int i = 0; i < n; i++) { s->x[i] = target[i]; s->v[i] = 0.0f; }
+		s->settled = settled;
+	}
+
+	// io: target in, value out
+	static void run(ImGuiID id, ImGuiID channel, float* io, float const* init, int n, iam_spring_params const& p, float dt) {
+		bool created;
+		spring_chan* s = get(key(id, channel, n), init, n, p, &created);
+		step(s, io, n, p, dt);
+		for (int i = 0; i < n; i++) io[i] = s->x[i];
+	}
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_springs.GetMapSize(); ++i) {
+			if (spring_chan* s = g_springs.TryGetMapData(i)) {
+				if (iam_detail::g_frame - s->last_seen_frame > max_age) {
+					ImGuiID k = g_springs.Map.Data[i].key;
+					g_springs.Remove(k, g_springs.GetIndex(s));
+				}
+			}
+		}
+	}
+
+	static spring_chan* find(ImGuiID id, ImGuiID channel, int* out_n) {
+		static int const ns[] = { 1, 2, 4, 5 };  // 5 = color
+		for (int i = 0; i < 4; i++) {
+			spring_chan* s = g_springs.GetByKey(key(id, channel, ns[i]));
+			if (s) { if (out_n) *out_n = ns[i] == 5 ? 4 : ns[i]; return s; }
+		}
+		return nullptr;
+	}
+} // namespace iam_spring_detail
+
+static void iam_spring_gc(unsigned max_age) { iam_spring_detail::gc(max_age); }
+static void iam_spring_clear() { iam_spring_detail::g_springs.Clear(); }
+
+float iam_spring_float(ImGuiID id, ImGuiID channel_id, float target, iam_spring_params const& params, float dt, float init_value) {
+	float v[1] = { target }, init[1] = { init_value };
+	iam_spring_detail::run(id, channel_id, v, init, 1, params, dt);
+	return v[0];
+}
+
+iam_vec2 iam_spring_vec2(ImGuiID id, ImGuiID channel_id, iam_vec2 target_in, iam_spring_params const& params, float dt, iam_vec2 init_in) {
+	ImVec2 t = IAM_VEC2_TO_IM(target_in), i0 = IAM_VEC2_TO_IM(init_in);
+	float v[2] = { t.x, t.y }, init[2] = { i0.x, i0.y };
+	iam_spring_detail::run(id, channel_id, v, init, 2, params, dt);
+	return IAM_VEC2_FROM_IM(ImVec2(v[0], v[1]));
+}
+
+iam_vec4 iam_spring_vec4(ImGuiID id, ImGuiID channel_id, iam_vec4 target_in, iam_spring_params const& params, float dt, iam_vec4 init_in) {
+	ImVec4 t = IAM_VEC4_TO_IM(target_in), i0 = IAM_VEC4_TO_IM(init_in);
+	float v[4] = { t.x, t.y, t.z, t.w }, init[4] = { i0.x, i0.y, i0.z, i0.w };
+	iam_spring_detail::run(id, channel_id, v, init, 4, params, dt);
+	return IAM_VEC4_FROM_IM(ImVec4(v[0], v[1], v[2], v[3]));
+}
+
+iam_vec4 iam_spring_color(ImGuiID id, ImGuiID channel_id, iam_vec4 target_srgb, iam_spring_params const& params, int color_space, float dt, iam_vec4 init_value) {
+	using namespace iam_spring_detail;
+	ImVec4 t = iam_detail::color::to_space(IAM_VEC4_TO_IM(target_srgb), color_space);
+	ImVec4 i0 = iam_detail::color::to_space(IAM_VEC4_TO_IM(init_value), color_space);
+	float v[4] = { t.x, t.y, t.z, t.w }, init[4] = { i0.x, i0.y, i0.z, i0.w };
+	bool created;
+	spring_chan* s = get(key(id, channel_id, 5), init, 4, params, &created);
+	if (!created && s->space >= 0 && s->space != color_space) {
+		// Color space changed: re-express the current value (velocity restarts)
+		ImVec4 cur = iam_detail::color::from_space(ImVec4(s->x[0], s->x[1], s->x[2], s->x[3]), s->space);
+		cur = iam_detail::color::to_space(cur, color_space);
+		s->x[0] = cur.x; s->x[1] = cur.y; s->x[2] = cur.z; s->x[3] = cur.w;
+		for (int i = 0; i < 4; i++) s->v[i] = 0.0f;
+		s->settled = false;
+	}
+	s->space = color_space;
+	step(s, v, 4, params, dt);
+	return IAM_VEC4_FROM_IM(iam_detail::color::from_space(ImVec4(s->x[0], s->x[1], s->x[2], s->x[3]), color_space));
+}
+
+// ----------------------------------------------------
+// Tween state queries
+// ----------------------------------------------------
+namespace iam_query_detail {
+	using namespace iam_detail;
+
+	// Slope of the ease curve at t (numeric, one-sided at the ends)
+	static float ease_slope(iam_ease_desc const& ez, float t) {
+		float const h = 1e-3f;
+		float a = ImMax(t - h, 0.0f), b = ImMin(t + h, 1.0f);
+		return (b > a) ? (eval(ez, b) - eval(ez, a)) / (b - a) : 0.0f;
+	}
+
+	static bool differs(float a, float b) { return ImFabs(a - b) > 1e-6f; }
+	static bool differs(int a, int b) { return a != b; }
+	static bool differs(ImVec2 a, ImVec2 b) { return differs(a.x, b.x) || differs(a.y, b.y); }
+	static bool differs(ImVec4 a, ImVec4 b) { return differs(a.x, b.x) || differs(a.y, b.y) || differs(a.z, b.z) || differs(a.w, b.w); }
+
+	// Running and actually moving (a finished tween may be restarted with start == target)
+	template<typename C> static bool chan_active(C* c) {
+		if (!c || c->sleeping) return false;
+		return (g_global_time - c->start_time) < c->dur && differs(c->start, c->target);
+	}
+	template<typename C> static float chan_progress(C* c) {
+		if (!chan_active(c)) return 1.0f;
+		return ImClamp((float)((g_global_time - c->start_time) / c->dur), 0.0f, 1.0f);
+	}
+	// d(value)/dt = (target - start) * chan_speed for a lerp(start, target, ease(t)) tween
+	template<typename C> static float chan_speed(C* c) {
+		if (!chan_active(c)) return 0.0f;
+		return ease_slope(c->ez, chan_progress(c)) / c->dur;
+	}
+} // namespace iam_query_detail
+
+bool iam_tween_is_active(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_query_detail;
+	ImGuiID k = make_key(id, channel_id);
+	float_chan* f = g_float.try_get(k); if (chan_active(f) || (f && f->has_pending)) return true;
+	vec2_chan* v2 = g_vec2.try_get(k);  if (chan_active(v2) || (v2 && v2->has_pending)) return true;
+	vec4_chan* v4 = g_vec4.try_get(k);  if (chan_active(v4) || (v4 && v4->has_pending)) return true;
+	int_chan* in = g_int.try_get(k);    if (chan_active(in) || (in && in->has_pending)) return true;
+	if (chan_active(g_color.try_get(k))) return true;
+	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, nullptr);
+	return s && !s->settled;
+}
+
+float iam_tween_progress(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_query_detail;
+	ImGuiID k = make_key(id, channel_id);
+	if (float_chan* c = g_float.try_get(k)) return chan_progress(c);
+	if (vec2_chan* c = g_vec2.try_get(k)) return chan_progress(c);
+	if (vec4_chan* c = g_vec4.try_get(k)) return chan_progress(c);
+	if (int_chan* c = g_int.try_get(k)) return chan_progress(c);
+	if (color_chan* c = g_color.try_get(k)) return chan_progress(c);
+	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, nullptr);
+	return (s && !s->settled) ? 0.0f : 1.0f;
+}
+
+float iam_tween_velocity_float(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_query_detail;
+	ImGuiID k = make_key(id, channel_id);
+	if (float_chan* c = g_float.try_get(k)) return (c->target - c->start) * chan_speed(c);
+	if (int_chan* c = g_int.try_get(k)) return (float)(c->target - c->start) * chan_speed(c);
+	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, nullptr);
+	return s ? s->v[0] : 0.0f;
+}
+
+iam_vec2 iam_tween_velocity_vec2(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_query_detail;
+	ImGuiID k = make_key(id, channel_id);
+	if (vec2_chan* c = g_vec2.try_get(k)) {
+		float sp = chan_speed(c);
+		return IAM_VEC2_FROM_IM(ImVec2((c->target.x - c->start.x) * sp, (c->target.y - c->start.y) * sp));
+	}
+	int n = 0;
+	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, &n);
+	return IAM_VEC2_FROM_IM(s && n >= 2 ? ImVec2(s->v[0], s->v[1]) : ImVec2(0, 0));
+}
+
+iam_vec4 iam_tween_velocity_vec4(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_query_detail;
+	ImGuiID k = make_key(id, channel_id);
+	if (vec4_chan* c = g_vec4.try_get(k)) {
+		float sp = chan_speed(c);
+		return IAM_VEC4_FROM_IM(ImVec4((c->target.x - c->start.x) * sp, (c->target.y - c->start.y) * sp, (c->target.z - c->start.z) * sp, (c->target.w - c->start.w) * sp));
+	}
+	if (color_chan* c = g_color.try_get(k)) {
+		ImVec4 a = color::to_space(c->start, c->space), b = color::to_space(c->target, c->space);
+		float sp = chan_speed(c);
+		return IAM_VEC4_FROM_IM(ImVec4((b.x - a.x) * sp, (b.y - a.y) * sp, (b.z - a.z) * sp, (b.w - a.w) * sp));
+	}
+	int n = 0;
+	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, &n);
+	return IAM_VEC4_FROM_IM(s && n == 4 ? ImVec4(s->v[0], s->v[1], s->v[2], s->v[3]) : ImVec4(0, 0, 0, 0));
 }
 
 // ============================================================
