@@ -7,13 +7,13 @@
 // glyphs), parenting, auto-orient, transforms (anchor, position incl. split and curved
 // motion paths, scale, rotation, skew, opacity), keyframes with bezier and hold easing,
 // rect / ellipse / star / path shapes and shape morphs, fill (non-zero / even-odd),
-// stroke (caps, joins, dashes), linear / radial gradients, trim paths, round corners,
-// pucker / bloat, zig-zag, merge paths, repeater, masks (add, subtract, intersect,
-// difference) and alpha track mattes (from the matte layer's geometry), time remap,
-// markers.
-// Not supported (reported by iam_lottie_warnings): expressions, effects, image layers,
-// text without embedded glyphs and text animators, blend modes, 3D, offset path and
-// twist, luma mattes (drawn as alpha mattes), gradient highlights.
+// stroke (caps, joins, dashes), linear / radial gradients (with highlight), trim paths,
+// round corners, pucker / bloat, zig-zag, offset path, merge paths, repeater, masks (add,
+// subtract, intersect, difference) and alpha track mattes (from the matte layer's
+// geometry), Fill and Tint effects, time remap, markers.
+// Not supported (reported by iam_lottie_warnings): expressions, other effects, image
+// layers, text without embedded glyphs and text animators, blend modes, 3D, twist, luma
+// mattes (drawn as alpha mattes).
 
 #pragma once
 

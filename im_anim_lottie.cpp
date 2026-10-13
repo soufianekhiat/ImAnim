@@ -177,7 +177,7 @@ struct xform_t { prop_t a, p, px, py, s, r, o, sk, sa, so, eo; int split; };
 
 enum {
 	SK_NONE, SK_GROUP, SK_PATH, SK_RECT, SK_ELLIPSE, SK_STAR,
-	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER, SK_PUCKER, SK_ZIGZAG, SK_MERGE
+	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER, SK_PUCKER, SK_ZIGZAG, SK_MERGE, SK_OFFSET
 };
 struct shape_t {
 	int kind, hidden, dir, rule, cap, join, mode, gcount;
@@ -198,7 +198,9 @@ struct layer_t {
 	float solid[3], sw, sh;
 	int mask, maskn;
 	int doc, docn;             // docs[] (text layers)
+	int fx, fxn;               // effects[]
 };
+struct effect_t { int kind; prop_t c0, c1, amount; };  // 1 fill (c0, opacity 0..1), 2 tint (black c0, white c1, amount %)
 struct comp_t { int layer, layern; };
 struct marker_t { int name; float t, dur; };
 struct font_t { int name, family, style; };        // strings[]
@@ -233,6 +235,7 @@ struct iam_lottie {
 	ImVector<font_t> fonts;
 	ImVector<glyph_t> glyphs;
 	ImVector<textdoc_t> docs;
+	ImVector<effect_t> effects;
 	ImVector<char> strings;
 	ImVector<char> warnings;
 	unsigned warn;
@@ -413,7 +416,8 @@ struct builder {
 					s.gcount = (int)D->num(g, "p", 0.0);
 					s.mode = (int)D->num(c, "t", 1.0);
 					s.rule = (int)D->num(c, "r", 1.0);
-					if (D->num(D->get(c, "h"), "k", 0.0) != 0.0) L->warn |= W_HIGHLIGHT;
+					s.p[5] = prop(D->get(c, "h"));  // radial highlight length (%) and angle
+					s.p[6] = prop(D->get(c, "a"));
 					if (stroke) { s.p[4] = prop(D->get(c, "w")); stroke_style(c, s); }
 				} else if (D->str_eq(ty, "tm")) {
 					s.kind = SK_TRIM; s.p[0] = prop(D->get(c, "s")); s.p[1] = prop(D->get(c, "e")); s.p[2] = prop(D->get(c, "o"));
@@ -428,6 +432,9 @@ struct builder {
 					s.kind = SK_REPEATER; s.p[0] = prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o"));
 					s.mode = (int)D->num(c, "m", 1.0);
 					s.tr = xform(D->get(c, "tr"));
+				} else if (D->str_eq(ty, "op")) {
+					s.kind = SK_OFFSET; s.p[0] = prop(D->get(c, "a"));
+					s.join = (int)D->num(c, "lj", 1.0); s.miter = (float)D->num(c, "ml", 4.0);
 				} else if (D->str_eq(ty, "mm")) {
 					s.kind = SK_MERGE; s.mode = (int)D->num(c, "mm", 1.0);
 				} else {
@@ -468,7 +475,7 @@ struct builder {
 				if (D->num(c, "ddd", 0.0) != 0.0) L->warn |= W_3D;
 				if (D->num(c, "bm", 0.0) != 0.0) L->warn |= W_BLEND;
 				ly.ao = D->num(c, "ao", 0.0) != 0.0;
-				if (D->count(D->get(c, "ef")) > 0) L->warn |= W_EFFECTS;
+				effects(D->get(c, "ef"), ly);
 				switch (ly.ty) {
 					case 0: {
 						int const ref = D->get(c, "refId");
@@ -585,6 +592,35 @@ struct builder {
 		bool bytes = false;
 		for (int k = 0; k < 3 && c >= 0; k++, c = D->n[c].next) { out[k] = (float)D->num(c, 0.0); if (out[k] > 1.0f) bytes = true; }
 		if (bytes) for (int k = 0; k < 3; k++) out[k] /= 255.0f;  // some exporters write 0..255
+	}
+
+	// Layer effects: Fill and Tint recolour the layer; expression controls (sliders, ...)
+	// draw nothing; anything else is reported
+	void effects(int arr, layer_t& ly) {
+		ly.fx = L->effects.Size;
+		if (D->type(arr) == J_ARR)
+			for (int e = D->n[arr].child; e >= 0; e = D->n[e].next) {
+				if (D->num(e, "en", 1.0) == 0.0) continue;  // disabled
+				int const ty = (int)D->num(e, "ty", 0.0);
+				int const mn = D->get(e, "mn");
+				if (ty == 5 && D->type(mn) == J_STR) {
+					char const* m = D->text + D->n[mn].str;
+					int const len = D->n[mn].str_len;
+					if (len > 13 && memcmp(m, "ADBE ", 5) == 0 && memcmp(m + len - 8, " Control", 8) == 0) continue;
+				}
+				int params[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+				int np = 0;
+				int const pe = D->get(e, "ef");
+				if (D->type(pe) == J_ARR)
+					for (int q = D->n[pe].child; q >= 0 && np < 8; q = D->n[q].next) params[np++] = D->get(q, "v");
+				effect_t fx;
+				memset(&fx, 0, sizeof(fx));
+				if (ty == 21 && np >= 7) { fx.kind = 1; fx.c0 = prop(params[2]); fx.amount = prop(params[6]); }
+				else if (ty == 20 && np >= 3) { fx.kind = 2; fx.c0 = prop(params[0]); fx.c1 = prop(params[1]); fx.amount = prop(params[2]); }
+				else { L->warn |= W_EFFECTS; continue; }
+				L->effects.push_back(fx);
+			}
+		ly.fxn = L->effects.Size - ly.fx;
 	}
 
 	// Text layer: the document keyframes (text, font, size, colours); animators are not supported
@@ -763,12 +799,14 @@ struct geom {
 	ImVector<ImVec2> pts;      // cubic chains: p0, (c1 c2 p) * n
 	ImVector<contour> cs;
 	int rule = -1;             // set by merge paths, overrides the style's rule
+	ImVector<ImVec2> soup;     // extra directed segments filled with the contours (offset path)
 	void begin(ImVec2 p) { contour c = { pts.Size, 1, false }; cs.push_back(c); pts.push_back(p); }
 	void cubic(ImVec2 c1, ImVec2 c2, ImVec2 p) { pts.push_back(c1); pts.push_back(c2); pts.push_back(p); cs.back().count += 3; }
 	void line(ImVec2 p) { ImVec2 const a = pts.back(); cubic(a, p, p); }  // Lottie convention: handles on the vertices
 	void append(geom const& g) {
 		for (int i = 0; i < g.cs.Size; i++) { contour c = g.cs[i]; c.first += pts.Size; cs.push_back(c); }
 		for (int i = 0; i < g.pts.Size; i++) pts.push_back(g.pts[i]);
+		for (int i = 0; i < g.soup.Size; i++) soup.push_back(g.soup[i]);
 	}
 	void polyline(ImVec2 const* p, int n, bool closed) {
 		if (n <= 0) return;
@@ -847,7 +885,7 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 	if (s > e) { float const t = s; s = e; e = t; }
 	if (e - s >= 1.0f) return;
 	geom out;
-	if (e - s <= 1e-6f) { out.rule = g.rule; g = out; return; }
+	if (e - s <= 1e-6f) { out.rule = g.rule; out.soup.swap(g.soup); g = out; return; }
 	float start = s + o;
 	start -= ImFloor(start);
 	float const end = start + (e - s);
@@ -883,7 +921,7 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 			out.polyline(piece.Data, piece.Size, false);
 		}
 	}
-	out.rule = g.rule; g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g = out;
 }
 
 // Contour as vertices with absolute handles (in = handle before the vertex, out = after)
@@ -926,7 +964,7 @@ static void pucker_bloat(geom& g, float amount) {
 		}
 		add_contour_vertices(out, v, vin, vout, g.cs[ci].closed);
 	}
-	out.rule = g.rule; g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g = out;
 }
 
 // Zig-zag: `ridges` points per segment (vertex to vertex), alternately pushed `size` to each
@@ -987,25 +1025,40 @@ static void zigzag(geom& g, float size, int ridges, bool smooth, float tol) {
 		}
 		add_contour_vertices(out, v, vin, vout, c.closed);
 	}
-	out.rule = g.rule; g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g = out;
+}
+
+// Reverses contour ci if needed so it fills with winding +1 (positive = true) or -1
+static void orient_contour(geom& g, int ci, bool positive, float tol, ImVector<ImVec2>& poly) {
+	flatten_contour(g, g.cs[ci], poly, tol);
+	float area = 0.0f;
+	for (int i = 0; i < poly.Size; i++) { ImVec2 const a = poly[i], b = poly[(i + 1) % poly.Size]; area += a.x * b.y - b.x * a.y; }
+	if ((area <= 0.0f) == positive) return;  // y down: negative shoelace area = winding +1
+	contour const& c = g.cs[ci];
+	for (int i = 0, j = c.count - 1; i < j; i++, j--) { ImVec2 const t = g.pts[c.first + i]; g.pts[c.first + i] = g.pts[c.first + j]; g.pts[c.first + j] = t; }
+}
+
+static void stroke_polyline(ImVector<ImVec2>& segs, ImVec2 const* in, int n_in, bool closed, float hw, int cap, int join, float miter, float tol);
+
+// Offset path: the shape grown (amount > 0) or shrunk by |amount|, as the shape plus or
+// minus a stroke of that half width (joins: 1 miter, 2 round, 3 bevel)
+static void offset_path(geom& g, float amount, int join, float miter, float tol) {
+	if (amount == 0.0f || g.cs.Size == 0) return;
+	ImVector<ImVec2> poly;
+	for (int ci = 0; ci < g.cs.Size; ci++) {
+		orient_contour(g, ci, amount < 0.0f, tol, poly);  // shortcut: holes become solid, upgrade if files offset outlines with holes
+		flatten_contour(g, g.cs[ci], poly, tol);
+		stroke_polyline(g.soup, poly.Data, poly.Size, true, ImFabs(amount), 1, join, miter, tol);  // pieces fill with winding -1
+	}
+	g.rule = amount > 0.0f ? 0 : 2;  // union under non-zero; shrink: winding >= 1 keeps the shape outside the stroke
 }
 
 // Merge paths (geometry so far in the group): 1 merge keeps the paths as they are; 2 add,
 // 3 subtract, 4 intersect, 5 exclude orient the contours and pick a fill rule
 static void merge_paths(geom& g, int mode, float tol) {
 	if (mode < 2 || mode > 5 || g.cs.Size == 0) return;
-	ImVector<ImVec2> poly, rev;
-	for (int ci = 0; ci < g.cs.Size; ci++) {
-		flatten_contour(g, g.cs[ci], poly, tol);
-		float area = 0.0f;
-		for (int i = 0; i < poly.Size; i++) { ImVec2 const a = poly[i], b = poly[(i + 1) % poly.Size]; area += a.x * b.y - b.x * a.y; }
-		bool const want_positive = !(mode == 3 && ci > 0);  // subtract: the first path minus the others
-		if ((area <= 0.0f) == want_positive) continue;  // y down: negative shoelace area = winding +1
-		contour const& c = g.cs[ci];
-		rev.resize(c.count);
-		for (int i = 0; i < c.count; i++) rev[i] = g.pts[c.first + c.count - 1 - i];  // reversed cubic chain
-		for (int i = 0; i < c.count; i++) g.pts[c.first + i] = rev[i];
-	}
+	ImVector<ImVec2> poly;
+	for (int ci = 0; ci < g.cs.Size; ci++) orient_contour(g, ci, !(mode == 3 && ci > 0), tol, poly);  // subtract: the first path minus the others
 	g.rule = mode == 2 ? 0 : mode == 3 ? 2 : mode == 4 ? g.cs.Size + 1 : 1;
 }
 
@@ -1045,7 +1098,7 @@ static void round_corners(geom& g, float r) {
 		if (c.closed) out.cubic(vout.back(), vin[0], v[0]);
 		out.cs.back().closed = c.closed;
 	}
-	out.rule = g.rule; g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g = out;
 }
 
 // ----------------------------------------------------------------------------
@@ -1063,6 +1116,7 @@ struct clip_t { ImVector<ImVec2> segs; int even_odd; ImRect bounds; };
 struct paint_t {
 	int type;                  // 1 linear, 2 radial
 	ImVec2 p0, p1;
+	ImVec2 focal;              // radial: highlight point (p0 when none)
 	int n;
 	float off[MAX_STOPS];
 	float rgba[MAX_STOPS][4];  // straight alpha
@@ -1089,7 +1143,17 @@ struct paint_eval {
 	}
 	float T(ImVec2 q) const {
 		float const dx = q.x - p->p0.x, dy = q.y - p->p0.y;
-		return p->type == 2 ? ImSqrt(dx * dx + dy * dy) * inv_r : (dx * dir.x + dy * dir.y) * inv_len2;
+		if (p->type != 2) return (dx * dir.x + dy * dir.y) * inv_len2;
+		if (p->focal.x == p->p0.x && p->focal.y == p->p0.y) return ImSqrt(dx * dx + dy * dy) * inv_r;
+		// Focal radial (SVG fx/fy): distance from the focal point over the distance from it
+		// to the circle along the same ray
+		float const qx = q.x - p->focal.x, qy = q.y - p->focal.y, ql = ImSqrt(qx * qx + qy * qy);
+		if (ql <= 1e-6f) return 0.0f;
+		float const r = inv_r > 0.0f ? 1.0f / inv_r : 0.0f;
+		float const ux = qx / ql, uy = qy / ql, fx = p->focal.x - p->p0.x, fy = p->focal.y - p->p0.y;
+		float const b = ux * fx + uy * fy, c = fx * fx + fy * fy - r * r;
+		float const L = -b + ImSqrt(ImMax(b * b - c, 0.0f));
+		return L > 1e-6f ? ql / L : 1.0f;
 	}
 	// Premultiplied RGBA at gradient parameter t (padded)
 	void color(float t, float out[4]) const {
@@ -1837,6 +1901,36 @@ struct ctx {
 	int nclips, overflow, depth;
 	ImVector<ImVec2>* collect;  // matte capture: fills / strokes append their outline here
 	ImVector<float> scratch;
+	struct active_fx { int first, count; float t; };
+	active_fx fx_stack[16];    // layers being drawn that carry effects, outermost first
+	int nfx;
+
+	// Colour through the active Fill / Tint effects, innermost layer first
+	void fx_color(float* rgb) {
+		if (collect) return;
+		for (int s = nfx - 1; s >= 0; s--)
+			for (int i = 0; i < fx_stack[s].count; i++) {
+				effect_t const& fx = L->effects[fx_stack[s].first + i];
+				float const t = fx_stack[s].t;
+				float c0[3], c1[3];
+				eval(L, fx.c0, t, scratch);
+				for (int k = 0; k < 3; k++) c0[k] = k < scratch.Size ? scratch[k] : 0.0f;
+				float target[3];
+				float amount;
+				if (fx.kind == 1) {
+					for (int k = 0; k < 3; k++) target[k] = c0[k];
+					amount = pv(fx.amount, t, 0, 1.0f);
+				} else {
+					eval(L, fx.c1, t, scratch);
+					for (int k = 0; k < 3; k++) c1[k] = k < scratch.Size ? scratch[k] : 1.0f;
+					float const luma = rgb[0] * 0.299f + rgb[1] * 0.587f + rgb[2] * 0.114f;
+					for (int k = 0; k < 3; k++) target[k] = c0[k] + (c1[k] - c0[k]) * luma;
+					amount = pv(fx.amount, t, 0, 100.0f) * 0.01f;
+				}
+				amount = ImSaturate(amount);
+				for (int k = 0; k < 3; k++) rgb[k] += (target[k] - rgb[k]) * amount;
+			}
+	}
 	float tol;
 
 	float pv(prop_t const& p, float t, int i, float def) {
@@ -2008,7 +2102,8 @@ struct ctx {
 					break;
 				case SK_ROUND: round_corners(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M)); break;
 				case SK_PUCKER: pucker_bloat(out, pv(sh.p[0], t, 0, 0.0f)); break;
-				case SK_MERGE: merge_paths(out, sh.mode, tol); break;  // shortcut: strokes still follow the original contours
+				case SK_MERGE: merge_paths(out, sh.mode, tol); break;
+				case SK_OFFSET: offset_path(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M), sh.join, sh.miter, tol); break;  // shortcut: strokes follow the original paths  // shortcut: strokes still follow the original contours
 				case SK_ZIGZAG:
 					zigzag(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M), ImClamp((int)pv(sh.p[1], t, 0, 0.0f), 0, 1000), pv(sh.p[2], t, 0, 1.0f) >= 1.5f, tol);
 					break;
@@ -2024,6 +2119,14 @@ struct ctx {
 		pt.type = sh.mode == 2 ? 2 : 1;
 		pt.p0 = apply(M, s[0], s[1]);
 		pt.p1 = apply(M, e[0], e[1]);
+		pt.focal = pt.p0;
+		float const h = ImClamp(pv(sh.p[5], t, 0, 0.0f) * 0.01f, -0.99f, 0.99f);
+		if (pt.type == 2 && h != 0.0f) {
+			// Highlight: along the start -> end direction turned by the angle, at h of the radius (lottie-web)
+			float const ang = ImAtan2(e[1] - s[1], e[0] - s[0]) + pv(sh.p[6], t, 0, 0.0f) * (IM_PI / 180.0f);
+			float const dist = ImSqrt((e[0] - s[0]) * (e[0] - s[0]) + (e[1] - s[1]) * (e[1] - s[1])) * h;
+			pt.focal = apply(M, s[0] + ImCos(ang) * dist, s[1] + ImSin(ang) * dist);
+		}
 		eval(L, sh.p[3], t, scratch);
 		int const n = ImMin(ImMin(sh.gcount, (int)MAX_STOPS), scratch.Size / 4);
 		pt.n = ImMax(n, 1);
@@ -2044,6 +2147,7 @@ struct ctx {
 			}
 			pt.rgba[i][3] = ImSaturate(a) * alpha;
 		}
+		for (int i = 0; i < pt.n; i++) fx_color(pt.rgba[i]);
 	}
 
 	void fill_geom(geom const& g, ImU32 col) {
@@ -2101,8 +2205,11 @@ struct ctx {
 			line = e + 1;
 		}
 		float const a = collect ? 1.0f : ImSaturate(alpha);
-		ImU32 const fc = ImGui::ColorConvertFloat4ToU32(ImVec4(d.fc[0], d.fc[1], d.fc[2], a));
-		ImU32 const sc = ImGui::ColorConvertFloat4ToU32(ImVec4(d.sc[0], d.sc[1], d.sc[2], a));
+		float fcol[3] = { d.fc[0], d.fc[1], d.fc[2] }, scol[3] = { d.sc[0], d.sc[1], d.sc[2] };
+		fx_color(fcol);
+		fx_color(scol);
+		ImU32 const fc = ImGui::ColorConvertFloat4ToU32(ImVec4(fcol[0], fcol[1], fcol[2], a));
+		ImU32 const sc = ImGui::ColorConvertFloat4ToU32(ImVec4(scol[0], scol[1], scol[2], a));
 		ImVector<ImVec2> poly, segs;
 		float const hw = d.sw * mat_scale(W) * 0.5f;
 		for (int pass = 0; pass < 2; pass++) {
@@ -2128,9 +2235,10 @@ struct ctx {
 		if (grad) gradient(sh, M, t, opacity, pt);
 		else {
 			eval(L, sh.p[0], t, scratch);
-			float const r = scratch.Size > 0 ? scratch[0] : 0.0f, gr = scratch.Size > 1 ? scratch[1] : 0.0f, b = scratch.Size > 2 ? scratch[2] : 0.0f;
+			float rgb[3] = { scratch.Size > 0 ? scratch[0] : 0.0f, scratch.Size > 1 ? scratch[1] : 0.0f, scratch.Size > 2 ? scratch[2] : 0.0f };
 			float const a = scratch.Size > 3 ? scratch[3] : 1.0f;
-			col = ImGui::ColorConvertFloat4ToU32(ImVec4(r, gr, b, ImSaturate(a) * ImSaturate(opacity)));
+			fx_color(rgb);
+			col = ImGui::ColorConvertFloat4ToU32(ImVec4(rgb[0], rgb[1], rgb[2], ImSaturate(a) * ImSaturate(opacity)));
 			if (collect) col |= IM_COL32_A_MASK;
 		}
 		ImVector<ImVec2> poly, segs;
@@ -2141,6 +2249,7 @@ struct ctx {
 				if (collect) { add_poly(segs, poly.Data, poly.Size); continue; }  // matte: union of positive outlines
 				for (int i = 0; i < poly.Size; i++) { segs.push_back(poly[i]); segs.push_back(poly[(i + 1) % poly.Size]); }
 			}
+			for (int i = 0; i < g.soup.Size; i++) segs.push_back(g.soup[i]);
 			fill(segs, col, g.rule >= 0 ? g.rule : sh.rule == 2 ? 1 : 0, grad ? &pt : nullptr);
 			return;
 		}
@@ -2283,13 +2392,17 @@ struct ctx {
 				pushed++;
 			}
 			pushed += push_masks(ly, W, lt);
+			bool const fx_pushed = ly.fxn > 0 && nfx < 16;
+			if (fx_pushed) { active_fx f = { ly.fx, ly.fxn, lt }; fx_stack[nfx++] = f; }
 			switch (ly.ty) {
 				case 4: render_group(ly.shapes, ly.shapesn, W, a, lt); break;
 				case 1: {
 					ImVec2 const r[4] = { apply(W, 0, 0), apply(W, ly.sw, 0), apply(W, ly.sw, ly.sh), apply(W, 0, ly.sh) };
 					ImVector<ImVec2> segs;
 					add_poly(segs, r, 4);
-					fill(segs, ImGui::ColorConvertFloat4ToU32(ImVec4(ly.solid[0], ly.solid[1], ly.solid[2], collect ? 1.0f : ImSaturate(a))), 0, nullptr);
+					float rgb[3] = { ly.solid[0], ly.solid[1], ly.solid[2] };
+					fx_color(rgb);
+					fill(segs, ImGui::ColorConvertFloat4ToU32(ImVec4(rgb[0], rgb[1], rgb[2], collect ? 1.0f : ImSaturate(a))), 0, nullptr);
 					break;
 				}
 				case 5: draw_text(ly, W, a, lt); break;
@@ -2298,6 +2411,7 @@ struct ctx {
 					break;
 				default: break;
 			}
+			if (fx_pushed) nfx--;
 		}
 		while (pushed-- > 0) pop_clip();
 		depth--;
@@ -2414,7 +2528,7 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	ctx C;
 	C.dl = dl;
 	C.L = anim;
-	C.nclips = C.overflow = C.depth = 0;
+	C.nclips = C.overflow = C.depth = C.nfx = 0;
 	C.collect = nullptr;
 	C.tol = 0.25f;
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);

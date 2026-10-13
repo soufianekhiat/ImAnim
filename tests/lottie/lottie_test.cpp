@@ -300,6 +300,50 @@ int main() {
 		iam_lottie_free(a);
 	}
 
+	// ---------------- Effects, offset path ----------------
+	{
+		std::string const fill_fx = "\"ef\":[{\"ty\":21,\"nm\":\"Fill\",\"mn\":\"ADBE Fill\",\"en\":1,\"ef\":[{\"ty\":10,\"v\":" + val("0") + "},{\"ty\":7,\"v\":" + val("0") +
+			"},{\"ty\":2,\"v\":" + val("[0,0,1,1]") + "},{\"ty\":7,\"v\":" + val("0") + "},{\"ty\":0,\"v\":" + val("0") + "},{\"ty\":0,\"v\":" + val("0") + "},{\"ty\":0,\"v\":" + val("1") + "}]}],";
+		float rgb[3];
+		iam_lottie* a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + fill(1, 0, 0)), fill_fx)), 0.0f);
+		cov_at(97, 103, rgb);
+		CHECK(rgb[2] > 0.99f && rgb[0] < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "Fill effect recolours the layer");
+		iam_lottie_free(a);
+		std::string const tint_fx = "\"ef\":[{\"ty\":20,\"nm\":\"Tint\",\"en\":1,\"ef\":[{\"ty\":2,\"v\":" + val("[0,0,0,1]") + "},{\"ty\":2,\"v\":" + val("[0,1,0,1]") + "},{\"ty\":0,\"v\":" + val("100") + "}]},"
+			"{\"ty\":5,\"nm\":\"Bounce\",\"mn\":\"ADBE Slider Control\",\"ef\":[{\"ty\":0,\"v\":" + val("3") + "}]}],";
+		a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + fill(1, 1, 1)), tint_fx)), 0.0f);
+		cov_at(97, 103, rgb);
+		CHECK(rgb[1] > 0.99f && rgb[0] < 0.01f && rgb[2] < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "Tint maps white to the white colour; slider controls are silent");
+		iam_lottie_free(a);
+		std::string const blur = "\"ef\":[{\"ty\":29,\"nm\":\"Blur\",\"mn\":\"ADBE Gaussian Blur 2\",\"ef\":[]}],";
+		std::string const blur_doc = doc(layer(group(rect(100, 100, 60, 60) + "," + fill(1, 1, 1)), blur));
+		a = iam_lottie_load_from_memory(blur_doc.data(), blur_doc.size());
+		CHECK(a && strstr(iam_lottie_warnings(a), "effects"), "other effects are reported");
+		iam_lottie_free(a);
+		auto radial = [](float h) {
+			char b[400];
+			snprintf(b, sizeof(b), "{\"ty\":\"gf\",\"o\":{\"a\":0,\"k\":100},\"r\":1,\"t\":2,\"s\":{\"a\":0,\"k\":[100,100]},\"e\":{\"a\":0,\"k\":[150,100]},"
+			         "\"h\":{\"a\":0,\"k\":%g},\"a\":{\"a\":0,\"k\":0},\"g\":{\"p\":2,\"k\":{\"a\":0,\"k\":[0,1,1,1,1,0,0,0]}}}", h);
+			return std::string(b);
+		};
+		float l[3], r[3];
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + radial(0)))), 0.0f);
+		cov_at(76, 103, l); cov_at(124, 103, r);
+		CHECK(fabsf(l[0] - r[0]) < 0.05f, "radial gradient without highlight is symmetric (%.2f %.2f)", l[0], r[0]);
+		iam_lottie_free(a);
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + radial(50)))), 0.0f);
+		cov_at(76, 103, l); cov_at(124, 103, r);
+		CHECK(r[0] > l[0] + 0.3f && r[0] > 0.9f && strcmp(iam_lottie_warnings(a), "") == 0, "highlight moves the centre of the radial gradient (%.2f %.2f)", l[0], r[0]);
+		iam_lottie_free(a);
+		auto offset = [](float amount) { char b[120]; snprintf(b, sizeof(b), "{\"ty\":\"op\",\"a\":{\"a\":0,\"k\":%g},\"lj\":1,\"ml\":4}", amount); return std::string(b); };
+		a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + offset(10) + "," + fill(1, 1, 1)))), 0.0f);
+		CHECK(cov_at(65, 103) > 0.99f && cov_at(97, 103) > 0.99f && cov_at(55, 103) < 0.01f && cov_at(63, 63) > 0.99f, "offset path grows the shape (miter corners)");
+		iam_lottie_free(a);
+		a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + offset(-10) + "," + fill(1, 1, 1)))), 0.0f);
+		CHECK(cov_at(75, 103) < 0.01f && cov_at(85, 103) > 0.99f && cov_at(97, 103) > 0.99f && cov_at(65, 103) < 0.01f, "offset path shrinks the shape");
+		iam_lottie_free(a);
+	}
+
 	// ---------------- Text layers with embedded glyphs ----------------
 	{
 		// Glyphs at size 100: 'A' a 60x70 box, 'B' a triangle, U+00E9 a small box; advance 70

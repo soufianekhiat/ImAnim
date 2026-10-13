@@ -41,9 +41,10 @@ if (iam_lottie_marker(anim, "success", &start, &dur))
 - Transforms: anchor, position (also split and curved motion paths), scale, rotation, skew, opacity
 - Keyframes: bezier easing (per component), hold keys, old (`e`) and new formats
 - Shapes: rect (rounded), ellipse, star / polygon (with roundness), paths and shape morphs, groups
-- Styles: fill with non-zero or even-odd rule, stroke (butt / round / square caps, miter / round / bevel joins, dashes), linear and radial gradients
-- Modifiers: trim paths (each path or all together), round corners, pucker / bloat, zig-zag (corner and smooth), merge paths (merge, add, subtract, intersect, exclude), repeater
+- Styles: fill with non-zero or even-odd rule, stroke (butt / round / square caps, miter / round / bevel joins, dashes), linear and radial gradients (with highlight)
+- Modifiers: trim paths (each path or all together), round corners, pucker / bloat, zig-zag (corner and smooth), offset path, merge paths (merge, add, subtract, intersect, exclude), repeater
 - Masks (add, subtract, intersect, difference, inverted) and alpha track mattes, markers
+- Effects: Fill and Tint recolour a layer (and the layers of a precomp); expression controls (sliders, checkboxes, ...) are ignored as they draw nothing
 - Text layers drawn from the glyph outlines the file embeds (`chars`): lines, justification, tracking, line height, fill and stroke colours
 
 Fills use an anti-aliased trapezoid sweep with exact non-zero / even-odd rules,
@@ -75,17 +76,18 @@ where the CPU fill fades across the edge.
 
 ## Limits
 
-Reported by `iam_lottie_warnings()` and skipped: expressions, effects, image
-layers, text without embedded glyphs (exported with system fonts) and text
-animators, blend modes, 3D layers, offset path and twist, gradient highlights. Also:
+Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than
+Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
+(exported with system fonts) and text animators, blend modes, 3D layers, twist. Also:
 
 - Mattes and masks clip by geometry: luma mattes act as alpha mattes, feather is
   ignored, and opacity is approximated (a single add mask's opacity and an alpha
   matte layer's own opacity scale the layer; the matte's fill opacity and gradients
   do not count). Difference masks XOR with the add masks before them, exact unless
   those overlap each other.
-- Merge paths (add, subtract, intersect, exclude) change how the merged shapes are
-  filled; a stroke after them still follows the original paths.
+- Merge paths (add, subtract, intersect, exclude) and offset path change how the
+  shapes are filled; a stroke after them still follows the original paths, and an
+  offset path fills the holes of the shapes it offsets.
 - Text boxes do not wrap; the text is laid out as point text.
 - Layer opacity is applied to each shape, not to the composited layer, so
   overlapping shapes of a translucent layer show through each other.
