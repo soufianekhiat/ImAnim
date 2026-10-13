@@ -4594,6 +4594,160 @@ static void ShowEaseEditorDemo()
 }
 
 // ============================================================
+// SECTION: Text Split & Glyph Callback
+// ============================================================
+static void TextSplitGlyphFx(iam_text_glyph* g, void* user)
+{
+	// Custom effect: each unit drops in with a little spin and a hue that follows the unit index
+	float t = g->t;
+	float time = *(float*)user;
+	ImVec2 off = IAM_VEC2_TO_IM(g->offset);
+	off.y += (1.0f - t) * -ImGui::GetFontSize() * 1.5f + ImSin(time * 4.0f + g->index * 0.5f) * 1.5f * t;
+	g->offset = IAM_VEC2_FROM_IM(off);
+	g->rotation = (1.0f - t) * 0.6f;
+	g->alpha = ImClamp(t * 1.5f, 0.0f, 1.0f);
+	ImVec4 col;
+	ImGui::ColorConvertHSVtoRGB(ImFmod(0.55f + g->unit * 0.09f, 1.0f), 0.55f, 1.0f, col.x, col.y, col.z);
+	col.w = 1.0f;
+	g->color = ImGui::ColorConvertFloat4ToU32(col);
+}
+
+static void ShowTextSplitDemo()
+{
+	ImGui::TextWrapped("iam_text_stagger_opts::split staggers by character, word or line ('\\n' starts a line), and "
+		"glyph_callback lets you write your own per-glyph effect (here: drop, spin and per-word hue).");
+	static int split = iam_text_split_words;
+	ImGui::RadioButton("Chars", &split, iam_text_split_chars); ImGui::SameLine();
+	ImGui::RadioButton("Words", &split, iam_text_split_words); ImGui::SameLine();
+	ImGui::RadioButton("Lines", &split, iam_text_split_lines); ImGui::SameLine();
+	static bool custom = true;
+	ImGui::Checkbox("Custom glyph callback", &custom);
+	static float T = 0.0f;
+	T += GetSafeDeltaTime();
+	char const* text = "Animate words, lines\nor single characters\nwith your own effect.";
+	iam_text_stagger_opts opts;
+	opts.split = split;
+	opts.effect = custom ? iam_text_fx_none : iam_text_fx_slide_up;
+	opts.char_delay = split == iam_text_split_chars ? 0.03f : (split == iam_text_split_words ? 0.12f : 0.35f);
+	opts.char_duration = 0.5f;
+	opts.ease = iam_ease_preset(iam_ease_out_back);
+	opts.line_spacing = ImGui::GetFontSize() * 0.3f;
+	if (custom) { opts.glyph_callback = TextSplitGlyphFx; opts.glyph_user = &T; }
+	float total = iam_text_stagger_duration(text, opts);
+	float progress = ImClamp(ImFmod(T, total + 1.2f) / total, 0.0f, 1.0f);
+	float const fs = ImGui::GetFontSize();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, fs * 6.5f);
+	ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	opts.pos = ImVec2(p.x + fs, p.y + fs * 1.2f);
+	iam_text_stagger(ImGui::GetID("split_text"), text, progress, opts);
+	ImGui::Dummy(size);
+}
+
+// ============================================================
+// SECTION: Stagger Values
+// ============================================================
+static void ShowStaggerValuesDemo()
+{
+	ImGui::TextWrapped("iam_stagger_value() spreads a value range over a grid with the same distance rules as the delays "
+		"(origin, axis, ease, reversed), plus random jitter. Here: size and hue from the chosen origin.");
+	static int from = iam_stagger_center;
+	static bool reversed = false;
+	static float jitter = 0.0f;
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
+	ImGui::Combo("From", &from, "First\0Last\0Center\0");
+	ImGui::SameLine();
+	ImGui::Checkbox("Reversed", &reversed);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+	ImGui::SliderFloat("Jitter", &jitter, 0.0f, 0.5f);
+	iam_stagger_grid_opts g;
+	g.cols = 12; g.rows = 5; g.from = from; g.reversed = reversed; g.ease = iam_ease_in_out_sine;
+	float const fs = ImGui::GetFontSize();
+	float cell = fs * 1.8f;
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	float t = (float)ImGui::GetTime();
+	for (int r = 0; r < g.rows; r++)
+		for (int c = 0; c < g.cols; c++) {
+			float size = iam_stagger_value(c, r, cell * 0.45f, cell * 0.12f, g, jitter * cell * 0.3f);
+			float hue = iam_stagger_value(c, r, 0.52f, 0.05f, g);
+			float pulse = 0.85f + 0.15f * ImSin(t * 3.0f - iam_stagger_value(c, r, 0.0f, 6.0f, g));
+			ImVec4 col;
+			ImGui::ColorConvertHSVtoRGB(hue, 0.6f, 0.95f, col.x, col.y, col.z);
+			col.w = 1.0f;
+			dl->AddCircleFilled(ImVec2(p.x + (c + 0.5f) * cell, p.y + (r + 0.5f) * cell), ImMax(size * pulse, 1.0f), ImGui::ColorConvertFloat4ToU32(col));
+		}
+	ImGui::Dummy(ImVec2(cell * g.cols, cell * g.rows));
+}
+
+// ============================================================
+// SECTION: State Blending
+// ============================================================
+static void ShowStateBlendingDemo()
+{
+	static ImGuiID const machine = ImHashStr("state_demo_machine");
+	static ImGuiID const S_IDLE = iam_id("btn_idle"), S_HOVER = iam_id("btn_hover"), S_PRESS = iam_id("btn_press");
+	static ImGuiID const CH_SCALE = iam_id("scale"), CH_GLOW = iam_id("glow"), CH_COL = iam_id("color");
+	static bool built = false;
+	if (!built) {
+		// Idle: slow breathing; hover: lifted and bright; press: squashed
+		iam_clip::begin(S_IDLE)
+			.key_float(CH_SCALE, 0.0f, 1.0f, iam_ease_in_out_sine).key_float(CH_SCALE, 1.2f, 1.03f, iam_ease_in_out_sine).key_float(CH_SCALE, 2.4f, 1.0f)
+			.key_float(CH_GLOW, 0.0f, 0.0f).key_float(CH_GLOW, 2.4f, 0.0f)
+			.key_color(CH_COL, 0.0f, ImVec4(0.30f, 0.34f, 0.45f, 1.0f)).key_color(CH_COL, 2.4f, ImVec4(0.30f, 0.34f, 0.45f, 1.0f))
+			.set_loop(true).end();
+		iam_clip::begin(S_HOVER)
+			.key_float(CH_SCALE, 0.0f, 1.12f, iam_ease_in_out_sine).key_float(CH_SCALE, 0.6f, 1.15f, iam_ease_in_out_sine).key_float(CH_SCALE, 1.2f, 1.12f)
+			.key_float(CH_GLOW, 0.0f, 0.6f, iam_ease_in_out_sine).key_float(CH_GLOW, 0.6f, 1.0f, iam_ease_in_out_sine).key_float(CH_GLOW, 1.2f, 0.6f)
+			.key_color(CH_COL, 0.0f, ImVec4(0.36f, 0.76f, 0.91f, 1.0f)).key_color(CH_COL, 1.2f, ImVec4(0.36f, 0.76f, 0.91f, 1.0f))
+			.set_loop(true).end();
+		iam_clip::begin(S_PRESS)
+			.key_float(CH_SCALE, 0.0f, 0.92f).key_float(CH_SCALE, 1.0f, 0.92f)
+			.key_float(CH_GLOW, 0.0f, 1.4f).key_float(CH_GLOW, 1.0f, 1.4f)
+			.key_color(CH_COL, 0.0f, ImVec4(0.80f, 0.47f, 0.35f, 1.0f)).key_color(CH_COL, 1.0f, ImVec4(0.80f, 0.47f, 0.35f, 1.0f))
+			.set_loop(true).end();
+		built = true;
+	}
+	ImGui::TextWrapped("iam_state_play() picks a clip per state every frame and crossfades between them when the state "
+		"changes: idle breathes, hover lifts and glows, press squashes. Values come from iam_state_get_*().");
+	static float crossfade = 0.25f;
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+	ImGui::SliderFloat("Crossfade", &crossfade, 0.0f, 1.0f, "%.2fs");
+
+	float const fs = ImGui::GetFontSize();
+	ImVec2 area(ImGui::GetContentRegionAvail().x, fs * 6.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 bsize(fs * 10.0f, fs * 2.6f);
+	ImVec2 c(p.x + area.x * 0.5f, p.y + area.y * 0.5f);
+	ImGui::SetCursorScreenPos(ImVec2(c.x - bsize.x * 0.5f, c.y - bsize.y * 0.5f));
+	ImGui::InvisibleButton("##state_button", bsize);
+	ImGuiID state = ImGui::IsItemActive() ? S_PRESS : (ImGui::IsItemHovered() ? S_HOVER : S_IDLE);
+	iam_state_play(machine, state, crossfade);
+
+	float scale = 1.0f, glow = 0.0f;
+	iam_vec4 colv = iam_v4(1, 1, 1, 1);
+	iam_state_get_float(machine, CH_SCALE, &scale);
+	iam_state_get_float(machine, CH_GLOW, &glow);
+	iam_state_get_color(machine, CH_COL, &colv);
+	ImVec4 col = IAM_VEC4_TO_IM(colv);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + area.x, p.y + area.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	ImVec2 h(bsize.x * 0.5f * scale, bsize.y * 0.5f * scale);
+	for (int i = 3; i >= 1; i--) {
+		float g = glow * i * fs * 0.25f;
+		dl->AddRectFilled(ImVec2(c.x - h.x - g, c.y - h.y - g), ImVec2(c.x + h.x + g, c.y + h.y + g), ImGui::ColorConvertFloat4ToU32(ImVec4(col.x, col.y, col.z, 0.08f * glow)), fs * 0.6f + g);
+	}
+	dl->AddRectFilled(ImVec2(c.x - h.x, c.y - h.y), ImVec2(c.x + h.x, c.y + h.y), ImGui::ColorConvertFloat4ToU32(col), fs * 0.6f);
+	char const* label = state == S_PRESS ? "pressed" : (state == S_HOVER ? "hover" : "idle");
+	ImVec2 ts = ImGui::CalcTextSize(label);
+	dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), IM_COL32(20, 22, 28, 255), label);
+	ImGui::SetCursorScreenPos(p);
+	ImGui::Dummy(area);
+	ImGui::Text("Current state weight: %.2f", iam_state_blend(machine));
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8432,6 +8586,12 @@ void ImAnimDemoWindow()
 			ImGui::TreePop();
 		}
 
+		ApplyOpenAll();
+		if (ImGui::TreeNode("State Blending")) {
+			ShowStateBlendingDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
@@ -8531,6 +8691,18 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Text Stagger")) {
 			ShowTextStaggerDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Text Split & Glyph Callback")) {
+			ShowTextSplitDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Stagger Values")) {
+			ShowStaggerValuesDemo();
 			ImGui::TreePop();
 		}
 
