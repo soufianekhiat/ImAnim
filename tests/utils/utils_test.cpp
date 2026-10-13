@@ -96,6 +96,32 @@ int main() {
 	for (int i = 0; i < 26; i++) revealed += buf[i] == 'a' + i;
 	CHECK(revealed >= 7 && revealed <= 20, "random order reveals about half (%d/26)", revealed);
 
+	// ---------------- Text outlines as paths ----------------
+	ImGui::NewFrame(); iam_update_begin_frame(); ImGui::Begin("tp");
+	ImGuiID const TXT = ImHashStr("txt");
+	int nc = iam_text_to_paths(TXT, "Hi", 40.0f, iam_v2(100, 50));
+	float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
+	bool all_exist = nc > 0;
+	for (int i = 0; i < nc; i++) {
+		ImGuiID pid = iam_text_path_id(TXT, i);
+		all_exist &= iam_path_exists(pid);
+		for (int k = 0; k <= 10; k++) { ImVec2 q = IAM_VEC2_TO_IM(iam_path_evaluate(pid, k / 10.0f)); minx = ImMin(minx, q.x); maxx = ImMax(maxx, q.x); miny = ImMin(miny, q.y); maxy = ImMax(maxy, q.y); }
+	}
+	CHECK(nc >= 2 && all_exist, "\"Hi\" gives contours as paths (%d)", nc);
+	CHECK(minx >= 100.0f && maxx < 160.0f && miny >= 50.0f && maxy <= 95.0f, "contours inside the text box (x %.1f..%.1f, y %.1f..%.1f)", minx, maxx, miny, maxy);
+	int no = iam_text_to_paths(ImHashStr("o"), "O", 40.0f);
+	CHECK(no >= 2, "\"O\" has an outer and an inner contour (%d)", no);
+	int n2 = iam_text_to_paths(ImHashStr("two"), "I\nI", 40.0f);
+	ImVec2 a0 = IAM_VEC2_TO_IM(iam_path_evaluate(iam_text_path_id(ImHashStr("two"), 0), 0.0f));
+	ImVec2 a1 = IAM_VEC2_TO_IM(iam_path_evaluate(iam_text_path_id(ImHashStr("two"), n2 - 1), 0.0f));
+	CHECK(n2 >= 2 && a1.y > a0.y + 30.0f, "'\n' starts a new line (%.1f -> %.1f)", a0.y, a1.y);
+	ImDrawList* tdl = ImGui::GetWindowDrawList();
+	int tv0 = tdl->VtxBuffer.Size;
+	iam_text_paths_draw(tdl, TXT, nc, 0.5f, IM_COL32_WHITE, 2.0f);
+	CHECK(tdl->VtxBuffer.Size > tv0, "iam_text_paths_draw draws");
+	CHECK(iam_text_to_paths(ImHashStr("none"), "", 40.0f) == 0 && iam_text_to_paths(ImHashStr("none"), "x", 0.0f) == 0, "empty text / zero size: no paths");
+	ImGui::End(); ImGui::Render();
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;

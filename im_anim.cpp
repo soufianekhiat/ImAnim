@@ -11,6 +11,64 @@
 #include <windows.h>
 #endif
 
+// stb_truetype for iam_text_to_paths (glyph outlines). Dear ImGui compiles its copy as static inside imgui_draw.cpp,
+// so ImAnim includes a private static copy too (same setup as imgui_draw.cpp). Define IAM_DISABLE_TEXT_PATHS to drop it.
+#ifndef IAM_DISABLE_TEXT_PATHS
+#ifndef __STB_INCLUDE_STB_TRUETYPE_H__  // not already included (e.g. unity build with imgui_draw.cpp)
+#ifndef STB_RECT_PACK_VERSION  // stb_truetype needs stb_rect_pack's stbrp_node (imgui_internal.h forward-declares it)
+#define STBRP_STATIC
+#define STBRP_ASSERT(x)     do { IM_ASSERT(x); } while (0)
+#define STB_RECT_PACK_IMPLEMENTATION
+#if defined(_MSC_VER)
+#pragma warning(push, 0)
+#endif
+#ifdef IMGUI_STB_RECT_PACK_FILENAME
+#include IMGUI_STB_RECT_PACK_FILENAME
+#else
+#include "imstb_rectpack.h"
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+#endif
+#define STBTT_malloc(x,u)   ((void)(u), IM_ALLOC(x))
+#define STBTT_free(x,u)     ((void)(u), IM_FREE(x))
+#define STBTT_assert(x)     do { IM_ASSERT(x); } while(0)
+#define STBTT_fmod(x,y)     ImFmod(x,y)
+#define STBTT_sqrt(x)       ImSqrt(x)
+#define STBTT_pow(x,y)      ImPow(x,y)
+#define STBTT_fabs(x)       ImFabs(x)
+#define STBTT_ifloor(x)     ((int)ImFloor(x))
+#define STBTT_iceil(x)      ((int)ImCeil(x))
+#define STBTT_strlen(x)     strlen(x)
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
+#if defined(_MSC_VER)
+#pragma warning(push, 0)
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wtype-limits"
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
+#ifdef IMGUI_STB_TRUETYPE_FILENAME
+#include IMGUI_STB_TRUETYPE_FILENAME
+#else
+#include "imstb_truetype.h"
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+#endif
+#endif // IAM_DISABLE_TEXT_PATHS
+
 #ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	// ImGuiStoragePair is nested in ImGuiStorage in Pre-1.92.0 versions
 #define IMGUI_STORAGE_PAIR ImGuiStorage::ImGuiStoragePair
@@ -2566,6 +2624,101 @@ bool iam_path_from_svg(ImGuiID path_id, char const* svg_d, float scale, iam_vec2
 	#undef IAM_SVG_TX
 	b.end();
 	return true;
+}
+
+// ----------------------------------------------------
+// Text outlines as paths
+// ----------------------------------------------------
+ImGuiID iam_text_path_id(ImGuiID base_id, int index) {
+	return ImHashData(&index, sizeof(index), base_id);
+}
+
+#ifndef IAM_DISABLE_TEXT_PATHS
+namespace iam_text_paths_detail {
+	// Build one path from a contour (screen-space points; ops as in iam_svg_detail)
+	static void build(ImGuiID id, ImVec2 start, ImVector<iam_svg_detail::op> const& ops) {
+		iam_path b = iam_path::begin(id, IAM_VEC2_FROM_IM(start));
+		for (int i = 0; i < ops.Size; i++) {
+			iam_svg_detail::op const& o = ops[i];
+			if (o.type == 0) b.line_to(IAM_VEC2_FROM_IM(o.p[0]));
+			else if (o.type == 1) b.quadratic_to(IAM_VEC2_FROM_IM(o.p[0]), IAM_VEC2_FROM_IM(o.p[1]));
+			else if (o.type == 2) b.cubic_to(IAM_VEC2_FROM_IM(o.p[0]), IAM_VEC2_FROM_IM(o.p[1]), IAM_VEC2_FROM_IM(o.p[2]));
+		}
+		b.end();
+	}
+} // namespace iam_text_paths_detail
+
+int iam_text_to_paths(ImGuiID base_id, char const* text, float size, iam_vec2 pos_in, ImFont* font) {
+	using iam_svg_detail::push;
+	if (!text || size <= 0.0f) return 0;
+	if (!font) font = ImGui::GetFont();
+	if (!font) return 0;
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+	ImFontConfig const* src = font->ConfigData;
+#else
+	ImFontConfig const* src = font->Sources.Size > 0 ? font->Sources[0] : nullptr;
+#endif
+	if (!src || !src->FontData) return 0;
+	unsigned char const* data = (unsigned char const*)src->FontData;
+	stbtt_fontinfo info;
+	int offset = stbtt_GetFontOffsetForIndex(data, src->FontNo);
+	if (offset < 0 || !stbtt_InitFont(&info, data, offset)) return 0;
+	float const scale = stbtt_ScaleForPixelHeight(&info, size);
+	int ascent = 0, descent = 0, line_gap = 0;
+	stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+	ImVec2 const pos = IAM_VEC2_TO_IM(pos_in);
+	float x = pos.x, baseline = pos.y + ascent * scale;
+	int count = 0, prev_glyph = 0;
+	ImVector<iam_svg_detail::op> ops;
+	for (char const* p = text; *p; ) {
+		unsigned int c;
+		int len = ImTextCharFromUtf8(&c, p, nullptr);
+		if (len == 0) break;
+		p += len;
+		if (c == '\n') { x = pos.x; baseline += (ascent - descent + line_gap) * scale; prev_glyph = 0; continue; }
+		int glyph = stbtt_FindGlyphIndex(&info, (int)c);
+		if (prev_glyph) x += stbtt_GetGlyphKernAdvance(&info, prev_glyph, glyph) * scale;
+		stbtt_vertex* v = nullptr;
+		int nv = stbtt_GetGlyphShape(&info, glyph, &v);
+		ImVec2 start(0, 0), cur(0, 0);
+		ops.resize(0);
+		for (int i = 0; i <= nv; i++) {
+			bool end_contour = (i == nv) || v[i].type == STBTT_vmove;
+			if (end_contour && ops.Size > 0) {  // close and emit the contour
+				if (cur.x != start.x || cur.y != start.y) push(ops, 0, start);
+				iam_text_paths_detail::build(iam_text_path_id(base_id, count++), start, ops);
+				ops.resize(0);
+			}
+			if (i == nv) break;
+			stbtt_vertex const& e = v[i];
+			ImVec2 pt(x + e.x * scale, baseline - e.y * scale);
+			if (e.type == STBTT_vmove) start = pt;
+			else if (e.type == STBTT_vline) push(ops, 0, pt);
+			else if (e.type == STBTT_vcurve) push(ops, 1, ImVec2(x + e.cx * scale, baseline - e.cy * scale), pt);
+			else if (e.type == STBTT_vcubic) push(ops, 2, ImVec2(x + e.cx * scale, baseline - e.cy * scale), ImVec2(x + e.cx1 * scale, baseline - e.cy1 * scale), pt);
+			cur = pt;
+		}
+		if (v) stbtt_FreeShape(&info, v);
+		int advance = 0, lsb = 0;
+		stbtt_GetGlyphHMetrics(&info, glyph, &advance, &lsb);
+		x += advance * scale;
+		prev_glyph = glyph;
+	}
+	return count;
+}
+#else
+int iam_text_to_paths(ImGuiID, char const*, float, iam_vec2, ImFont*) { return 0; }
+#endif
+
+void iam_text_paths_draw(ImDrawList* dl, ImGuiID base_id, int count, float progress, ImU32 col, float thickness, iam_vec2 offset, float overlap) {
+	if (!dl || count <= 0) return;
+	overlap = ImClamp(overlap, 0.0f, 1.0f);
+	float const d = 1.0f / (1.0f + (count - 1) * (1.0f - overlap));  // per-contour duration (fraction of progress)
+	for (int i = 0; i < count; i++) {
+		float start = i * (1.0f - overlap) * d;
+		float t = ImClamp((progress - start) / d, 0.0f, 1.0f);
+		if (t > 0.0f) iam_path_draw(dl, iam_text_path_id(base_id, i), 0.0f, t, col, thickness, offset);
+	}
 }
 
 // ----------------------------------------------------

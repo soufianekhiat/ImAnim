@@ -202,6 +202,23 @@ iam_trail_draw(dl, ImGui::GetID("cursor"), ImGui::GetMousePos(), 0.35f, col, 6.0
 iam_trail_clear(ImGui::GetID("cursor"));   // e.g. after a teleport
 ```
 
+## Text Outlines
+
+`iam_text_to_paths()` turns every glyph contour of a string into a path, so text
+can be written on like handwriting, traced or dashed:
+
+```cpp
+ImGuiID base = ImHashStr("title");
+int n = iam_text_to_paths(base, "ImAnim", 48.0f, iam_v2(0, 0), font);   // once (font: nullptr = current)
+iam_text_paths_draw(dl, base, n, progress, col, 2.0f, origin, 0.6f);     // overlap 0 = one by one, 1 = all at once
+ImGuiID first = iam_text_path_id(base, 0);                               // individual contours
+```
+
+Pixel fonts (like the default ProggyClean) give many small square contours; a
+vector font (e.g. `AddFontDefaultVector()` in Dear ImGui 1.92.6+, or any TTF)
+gives smooth outlines. ImAnim compiles its own static copy of Dear ImGui's
+`imstb_truetype.h` for this; define `IAM_DISABLE_TEXT_PATHS` to leave it out.
+
 ## Paths from SVG
 
 `iam_path_from_svg()` builds a path from SVG path data (the `d` attribute), so

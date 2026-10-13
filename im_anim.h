@@ -487,6 +487,15 @@ IM_ANIM_API void iam_trail_clear(ImGuiID id);  // Forget the history (e.g. after
 // transformed as p * scale + offset. Returns false (and builds nothing) if the data can't be parsed.
 IM_ANIM_API bool iam_path_from_svg(ImGuiID path_id, char const* svg_d, float scale = 1.0f, iam_vec2 offset = iam_v2(0, 0));
 
+// Text outlines as paths (for "handwriting" draw-on effects): every glyph contour of text becomes a path with id
+// iam_text_path_id(base_id, i), i in [0, count). Laid out at pos (top-left) with the given pixel size and the font's
+// kerning ('\n' starts a new line). font = nullptr: current font. Returns the contour count (0 if the font has no
+// outline data, or with IAM_DISABLE_TEXT_PATHS).
+IM_ANIM_API int     iam_text_to_paths(ImGuiID base_id, char const* text, float size, iam_vec2 pos = iam_v2(0, 0), ImFont* font = nullptr);
+IM_ANIM_API ImGuiID iam_text_path_id(ImGuiID base_id, int index);
+// Draw the contours on with progress [0,1]; overlap 0 = one after another, 1 = all at once.
+IM_ANIM_API void    iam_text_paths_draw(ImDrawList* dl, ImGuiID base_id, int count, float progress, ImU32 col, float thickness = 1.5f, iam_vec2 offset = iam_v2(0, 0), float overlap = 0.5f);
+
 // Get current morph blend value from a tween (for querying state)
 IM_ANIM_API float  iam_get_morph_blend(ImGuiID id, ImGuiID channel_id);
 

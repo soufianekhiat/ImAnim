@@ -4815,6 +4815,46 @@ static void ShowStrokesDemo()
 }
 
 // ============================================================
+// SECTION: Text Outlines
+// ============================================================
+static void ShowTextOutlinesDemo()
+{
+	ImGui::TextWrapped("iam_text_to_paths() turns glyph outlines into paths, so text can be written on like handwriting "
+		"with iam_text_paths_draw() (or traced, dashed, morphed... like any path). A vector font gives smooth outlines.");
+	float const fs = ImGui::GetFontSize();
+	ImFont* font = nullptr;
+#if IMGUI_VERSION_NUM >= 19261
+	font = GetLogoFont();  // embedded vector font when available
+#endif
+	static ImGuiID const base = ImHashStr("demo_text_outline");
+	static int count = 0;
+	static float built_size = 0.0f;
+	static ImFont* built_font = nullptr;
+	float const size = fs * 3.5f;
+	if (built_size != size || built_font != font) {
+		count = iam_text_to_paths(base, "ImAnim", size, iam_v2(0, 0), font);
+		built_size = size;
+		built_font = font;
+	}
+	static float overlap = 0.6f;
+	ImGui::SetNextItemWidth(fs * 10.0f);
+	ImGui::SliderFloat("Overlap", &overlap, 0.0f, 1.0f);
+	ImGui::SameLine();
+	ImGui::TextDisabled("%d contours", count);
+	static float T = 0.0f;
+	T += GetSafeDeltaTime();
+	float progress = ImClamp(ImFmod(T, 4.0f) / 3.0f, 0.0f, 1.0f);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 area(ImGui::GetContentRegionAvail().x, size * 1.4f);
+	dl->AddRectFilled(p, ImVec2(p.x + area.x, p.y + area.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	iam_vec2 off = iam_v2(p.x + fs, p.y + size * 0.15f);
+	iam_text_paths_draw(dl, base, count, 1.0f, IM_COL32(255, 255, 255, 18), 1.0f, off, 1.0f);
+	iam_text_paths_draw(dl, base, count, progress, IM_COL32(91, 194, 231, 255), 2.0f, off, overlap);
+	ImGui::Dummy(area);
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8724,6 +8764,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Dashes & Trails")) {
 			ShowStrokesDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Text Outlines")) {
+			ShowTextOutlinesDemo();
 			ImGui::TreePop();
 		}
 
