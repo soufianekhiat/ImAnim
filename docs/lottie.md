@@ -54,7 +54,7 @@ iam_lottie_marker(anim, "progress", &start, &dur);
 iam_lottie_draw(dl, anim, start + value * dur, pos, size);
 ```
 
-The demo's *Lottie Interactions* section shows a day / night switch (its progress
+The demo's *Lottie Interactions* section shows a 3D flip card, a day / night switch (its progress
 also tints the panel), a checkbox, a like button, a menu icon whose items follow
 the playhead, and a download ring driven by a tween then a "done" segment. These
 animations were made for the demo and ship under ImAnim's license.

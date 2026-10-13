@@ -5015,6 +5015,23 @@ static char const s_lottie_progress[] =
 	R"json(1},{"ty":"st","c":{"a":0,"k":[0.36,0.76,0.91,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":6},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","nm":"track","it":[{"ty)json"
 	R"json(":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[56,56]}},{"ty":"st","c":{"a":0,"k":[0.3,0.32,0.38,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":6},"lc":2,"lj":2)json"
 	R"json(},{"ty":"tr"}]}]}]})json";
+static char const s_lottie_card[] =
+	R"json({"v":"5.7.0","nm":"flip card","fr":60,"ip":0,"op":36,"w":160,"h":110,"layers":[{"ty":4,"nm":"front","ind":1,"ddd":1,"ip":0,"op":36,"st":0,"ks":{"p":{")json"
+	R"json(a":0,"k":[80,55,0]},"ry":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.3],"y":[1]}},{"t":32,"s":[180]}]},"s":{"a":1,"k":[{"t":0,"s":[)json"
+	R"json(100,100,100],"o":{"x":[0.5,0.5,0.5],"y":[0,0,0]},"i":{"x":[0.5,0.5,0.5],"y":[1,1,1]}},{"t":16,"s":[92,92,100],"o":{"x":[0.5,0.5,0.5],"y":[0,0,0]},"i":)json"
+	R"json({"x":[0.5,0.5,0.5],"y":[1,1,1]}},{"t":32,"s":[100,100,100]}]},"o":{"a":1,"k":[{"t":0,"s":[100],"h":1},{"t":13,"s":[0]}]}},"shapes":[{"ty":"gr","it":[{)json"
+	R"json("ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-11,-12],[0,-23],[11,-12],[0,1],[0,9]],"i":[[0,0],[-7,0],[0,-7],[6,-4],[0,0]],"o":[[0,-7],[7,0],[0,6],[0,0])json"
+	R"json(,[0,0]]}}},{"ty":"st","c":{"a":0,"k":[1,1,1,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":5},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","it":[{"ty":"el","p":{"a)json"
+	R"json(":0,"k":[0,21]},"s":{"a":0,"k":[7,7]}},{"ty":"fl","c":{"a":0,"k":[1,1,1,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr"}]},{"ty":"gr","it":[{"ty":"rc","p":{)json"
+	R"json("a":0,"k":[0,0]},"s":{"a":0,"k":[150,100]},"r":{"a":0,"k":12}},{"ty":"gf","o":{"a":0,"k":100},"r":1,"t":1,"s":{"a":0,"k":[-75,-50]},"e":{"a":0,"k":[75)json"
+	R"json(,50]},"g":{"p":2,"k":{"a":0,"k":[0,0.36,0.55,0.95,1,0.55,0.35,0.9]}}},{"ty":"tr"}]}]},{"ty":4,"nm":"back","ind":2,"ddd":1,"ip":0,"op":36,"st":0,"ks":{)json"
+	R"json("p":{"a":0,"k":[80,55,0]},"ry":{"a":1,"k":[{"t":0,"s":[-180],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.3],"y":[1]}},{"t":32,"s":[0]}]},"s":{"a":1,"k":[{"t":)json"
+	R"json(0,"s":[100,100,100],"o":{"x":[0.5,0.5,0.5],"y":[0,0,0]},"i":{"x":[0.5,0.5,0.5],"y":[1,1,1]}},{"t":16,"s":[92,92,100],"o":{"x":[0.5,0.5,0.5],"y":[0,0,0)json"
+	R"json(]},"i":{"x":[0.5,0.5,0.5],"y":[1,1,1]}},{"t":32,"s":[100,100,100]}]},"o":{"a":1,"k":[{"t":0,"s":[0],"h":1},{"t":13,"s":[100]}]}},"shapes":[{"ty":"gr",)json"
+	R"json("it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-18,0],[-6,12],[18,-12]],"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]]}}},{"ty":"st","c":{"a":0,"k)json"
+	R"json(":[1,1,1,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":7},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","it":[{"ty":"rc","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[150,)json"
+	R"json(100]},"r":{"a":0,"k":12}},{"ty":"gf","o":{"a":0,"k":100},"r":1,"t":1,"s":{"a":0,"k":[-75,-50]},"e":{"a":0,"k":[75,50]},"g":{"p":2,"k":{"a":0,"k":[0,0.)json"
+	R"json(25,0.78,0.5,1,0.1,0.6,0.55]}}},{"ty":"tr"}]}]}]})json";
 
 // Moves a Lottie playhead toward the end while `on`, back toward the start otherwise, at
 // the file's own speed: a toggle reverses smoothly from wherever it is
@@ -5031,14 +5048,16 @@ static void ShowLottieInteractionsDemo()
 	static iam_lottie* heart = nullptr;
 	static iam_lottie* menu = nullptr;
 	static iam_lottie* progress = nullptr;
+	static iam_lottie* card = nullptr;
 	if (!daynight) {
+		card = iam_lottie_load_from_memory(s_lottie_card, sizeof(s_lottie_card) - 1);
 		daynight = iam_lottie_load_from_memory(s_lottie_daynight, sizeof(s_lottie_daynight) - 1);
 		checkbox = iam_lottie_load_from_memory(s_lottie_checkbox, sizeof(s_lottie_checkbox) - 1);
 		heart = iam_lottie_load_from_memory(s_lottie_heart, sizeof(s_lottie_heart) - 1);
 		menu = iam_lottie_load_from_memory(s_lottie_menu, sizeof(s_lottie_menu) - 1);
 		progress = iam_lottie_load_from_memory(s_lottie_progress, sizeof(s_lottie_progress) - 1);
 	}
-	if (!daynight || !checkbox || !heart || !menu || !progress) { ImGui::TextDisabled("Failed to load the UI animations."); return; }
+	if (!daynight || !checkbox || !heart || !menu || !progress || !card) { ImGui::TextDisabled("Failed to load the UI animations."); return; }
 
 	ImGui::TextWrapped("The UI drives the Lottie timeline: a toggle plays forward or backward from wherever it is, "
 		"a tween drives a progress segment, and markers split a file into segments.");
@@ -5129,8 +5148,18 @@ static void ShowLottieInteractionsDemo()
 	char const* status = !downloading ? "Download" : value < 0.999f ? "Downloading" : "Done";
 	dl->AddText(ImVec2(p.x + (ring.x - ImGui::CalcTextSize(status).x) * 0.5f, p.y + ring.y + fs * 0.2f), text_col, status);
 
-	ImGui::SetCursorScreenPos(ImVec2(panel.x, panel.y + panel_size.y + fs * 0.4f));
-	ImGui::TextDisabled("Click the widgets. Time: night %.2fs, checkbox %.2fs, like %.2fs, menu %.2fs, ring %.2fs", t_night, t_check, t_like, t_menu, time);
+	// 3D card: two 3D layers turning around Y in perspective
+	ImGui::SetCursorScreenPos(ImVec2(panel.x, panel.y + panel_size.y + fs * 0.6f));
+	static bool flipped = false;
+	static float t_card = 0.0f;
+	p = ImGui::GetCursorScreenPos();
+	ImVec2 const card_size(fs * 9.0f, fs * 6.2f);
+	if (ImGui::InvisibleButton("##card", card_size)) flipped = !flipped;
+	t_card = LottiePlayhead(t_card, flipped, iam_lottie_duration(card));
+	iam_lottie_draw(dl, card, t_card, iam_v2(p.x, p.y), iam_v2(card_size.x, card_size.y));
+	ImGui::SameLine();
+	ImGui::TextWrapped("3D layers: the card is two 3D layers turning around Y, seen through the default After Effects camera. Click it to flip.");
+	ImGui::TextDisabled("Click the widgets. Time: night %.2fs, checkbox %.2fs, like %.2fs, menu %.2fs, ring %.2fs, card %.2fs", t_night, t_check, t_like, t_menu, time, t_card);
 }
 
 static void ShowLottieDemo()
