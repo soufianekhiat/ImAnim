@@ -229,6 +229,25 @@ animates. Reversing mid-way continues from the current value. To remove items
 from a list with an exit animation, mark them dead and erase them once
 `iam_presence()` returns false.
 
+## Layout Animation
+
+`iam_layout()` takes the rect the layout gives an item this frame and returns
+the animated rect to draw at, so reordering, inserting or resizing glides
+instead of jumping. It uses springs (velocity carries over if the layout
+changes again mid-motion) and snaps on first sight.
+
+```cpp
+ImVec2 slot = ImGui::GetCursorPos(), pos, size;       // window-relative: no lag on window drags
+iam_layout(ImGui::GetID("item"), slot, item_size, &pos, &size, dt);
+ImGui::SetCursorPos(pos);
+// ... draw the item at pos/size ...
+ImGui::SetCursorPos(slot);
+ImGui::Dummy(item_size);                              // keep the layout using the real slot
+```
+
+`iam_layout_opts` sets the spring (default stiffness 320, damping 36: fast,
+no overshoot) and whether position and size animate.
+
 ## Memory Management
 
 ```cpp

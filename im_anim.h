@@ -764,6 +764,59 @@ IM_ANIM_API bool iam_presence(ImGuiID id, bool visible, float* out_t, float dt, 
 IM_ANIM_API bool iam_presence_is_animating(ImGuiID id);  // True while entering or exiting.
 
 // ----------------------------------------------------
+// Layout animation - smooth position/size changes caused by layout (reorder, resize, insert)
+// ----------------------------------------------------
+// Pass the rect the layout wants this frame; get the animated rect to draw at. Springs keep velocity when
+// the layout changes again mid-motion. First sight snaps (no fly-in). Use window-relative coordinates if
+// the window can move, or items will lag behind window drags. Returns true while animating.
+//   ImVec2 slot = ImGui::GetCursorPos(), pos, size;
+//   iam_layout(id, slot, item_size, &pos, &size, dt);
+//   ImGui::SetCursorPos(pos); ...draw item...; ImGui::SetCursorPos(slot); ImGui::Dummy(item_size);
+struct iam_layout_opts {
+	iam_spring_params spring;   // Default: mass 1, stiffness 320, damping 36 (fast, critically damped: no overshoot)
+	bool animate_position;      // Default true
+	bool animate_size;          // Default true
+	iam_layout_opts() : animate_position(true), animate_size(true) { spring = iam_spring_default(); spring.stiffness = 320.0f; spring.damping = 36.0f; }
+};
+IM_ANIM_API bool iam_layout(ImGuiID id, iam_vec2 target_pos, iam_vec2 target_size, iam_vec2* out_pos, iam_vec2* out_size, float dt, iam_layout_opts const& opts = iam_layout_opts());
+
+// ----------------------------------------------------
+// Scroll-linked progress and triggers (current window, last submitted item)
+// ----------------------------------------------------
+enum iam_scroll_event {
+	iam_scroll_none    = 0,
+	iam_scroll_entered = 1 << 0,   // Became visible this frame
+	iam_scroll_left    = 1 << 1    // Stopped being visible this frame
+};
+IM_ANIM_API float iam_scroll_window_progress(int axis = 1);                        // Scroll position / max in [0,1] (axis 0 = x, 1 = y; 0 when not scrollable).
+IM_ANIM_API float iam_scroll_item_progress();                                     // 0 when the last item's top reaches the bottom of the visible area, 1 when its bottom passes the top.
+IM_ANIM_API bool  iam_scroll_item_visible(float min_fraction = 0.0f);             // Last item visible (more than min_fraction of its height) in the current window.
+IM_ANIM_API int   iam_scroll_trigger(ImGuiID id, float min_fraction = 0.0f, bool* out_visible = nullptr); // iam_scroll_event flags for the last item (enter/leave edges).
+
+// ----------------------------------------------------
+// Inertia - fling with friction, rubber-band bounds and snapping
+// ----------------------------------------------------
+// While held, the value follows pos and its velocity is tracked. On release it keeps moving and slows down
+// (friction), springs back inside bounds (rubber band), and with snapping lands on the snap target closest
+// to where it would have stopped. Returns the value to display.
+struct iam_inertia_opts {
+	float             decay_time;     // Velocity time constant in seconds (default 0.325, iOS-like); larger = glides further
+	bool              use_bounds;     // Clamp to [bounds_min, bounds_max] with rubber band (default false)
+	iam_vec2          bounds_min, bounds_max;
+	float             rubber_band;    // Resistance past bounds while held: 0 = hard stop, 1 = free (default 0.35)
+	iam_vec2          snap_grid;      // Snap spacing per axis (0 = none)
+	iam_vec2 const*   snap_points;    // Optional snap points (vec2 version; x only for the float version)
+	int               snap_points_count;
+	iam_spring_params spring;         // Spring for bounce-back and snapping (default stiffness 220, damping 26)
+	iam_inertia_opts() : decay_time(0.325f), use_bounds(false), bounds_min(iam_v2(0, 0)), bounds_max(iam_v2(0, 0)), rubber_band(0.35f),
+		snap_grid(iam_v2(0, 0)), snap_points(nullptr), snap_points_count(0) { spring = iam_spring_default(); spring.stiffness = 220.0f; spring.damping = 26.0f; }
+};
+IM_ANIM_API float    iam_inertia_float(ImGuiID id, float pos, bool held, float dt, iam_inertia_opts const& opts = iam_inertia_opts());   // Uses the .x of bounds/grid/points.
+IM_ANIM_API iam_vec2 iam_inertia_vec2(ImGuiID id, iam_vec2 pos, bool held, float dt, iam_inertia_opts const& opts = iam_inertia_opts());
+IM_ANIM_API bool     iam_inertia_is_moving(ImGuiID id);   // True while coasting, bouncing or snapping after release.
+IM_ANIM_API void     iam_inertia_set(ImGuiID id, iam_vec2 pos);  // Teleport and stop (e.g. programmatic jump).
+
+// ----------------------------------------------------
 // Tween state queries - work for iam_tween_* and iam_spring_* channels of any type
 // ----------------------------------------------------
 IM_ANIM_API bool     iam_tween_is_active(ImGuiID id, ImGuiID channel_id);       // True while animating (or a queued target is pending).

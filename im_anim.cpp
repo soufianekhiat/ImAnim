@@ -851,10 +851,13 @@ static void iam_spring_gc(unsigned max_age);  // Spring channels section
 static void iam_spring_clear();
 static void iam_presence_gc(unsigned max_age);  // Presence section
 static void iam_presence_clear();
+static void iam_inertia_gc(unsigned max_age);  // Inertia section
+static void iam_inertia_clear();
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
 	iam_presence_gc(max_age_frames);
+	iam_inertia_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -866,6 +869,7 @@ void iam_pool_clear() {
 	// Clean up all pools
 	iam_spring_clear();
 	iam_presence_clear();
+	iam_inertia_clear();
 	iam_detail::g_float.pool.Clear();
 	iam_detail::g_vec2.pool.Clear();
 	iam_detail::g_vec4.pool.Clear();
@@ -1783,6 +1787,268 @@ void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float b
 	float len = iam_path_length(path_a) + (iam_path_length(path_b) - iam_path_length(path_a)) * ImClamp(blend, 0.0f, 1.0f);
 	iam_path_draw_detail::draw(dl, t0, t1, len, col, thickness, IAM_VEC2_TO_IM(offset), segments,
 		[&](float t) { return iam_path_morph_impl(path_a, path_b, t, blend, opts); });
+}
+
+// ----------------------------------------------------
+// Layout animation
+// ----------------------------------------------------
+bool iam_layout(ImGuiID id, iam_vec2 target_pos, iam_vec2 target_size, iam_vec2* out_pos, iam_vec2* out_size, float dt, iam_layout_opts const& opts) {
+	static ImGuiID const ch_pos = ImHashStr("##iam_layout_pos");
+	static ImGuiID const ch_size = ImHashStr("##iam_layout_size");
+	bool animating = false;
+	iam_vec2 pos = target_pos, size = target_size;
+	if (opts.animate_position) {
+		pos = iam_spring_vec2(id, ch_pos, target_pos, opts.spring, dt, target_pos);  // init = target: first sight snaps
+		animating |= iam_tween_is_active(id, ch_pos);
+	}
+	if (opts.animate_size) {
+		size = iam_spring_vec2(id, ch_size, target_size, opts.spring, dt, target_size);
+		animating |= iam_tween_is_active(id, ch_size);
+	}
+	if (out_pos) *out_pos = pos;
+	if (out_size) *out_size = size;
+	return animating;
+}
+
+// ----------------------------------------------------
+// Scroll-linked progress and triggers
+// ----------------------------------------------------
+namespace iam_scroll_link_detail {
+	static ImGuiStorage g_trigger_state;  // id -> 0 unknown, 1 hidden, 2 visible
+
+	// Vertical extent of the visible area of the current window and of the last item, in screen space
+	static void ranges(float* view_top, float* view_bottom, float* item_top, float* item_bottom) {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		*view_top = window->InnerRect.Min.y;
+		*view_bottom = window->InnerRect.Max.y;
+		*item_top = ImGui::GetItemRectMin().y;
+		*item_bottom = ImGui::GetItemRectMax().y;
+	}
+
+	static float visible_fraction() {
+		float vt, vb, it, ib;
+		ranges(&vt, &vb, &it, &ib);
+		float h = ib - it;
+		float overlap = ImMin(ib, vb) - ImMax(it, vt);
+		if (h <= 0.0f) return (it >= vt && it <= vb) ? 1.0f : 0.0f;
+		return ImClamp(overlap / h, 0.0f, 1.0f);
+	}
+} // namespace iam_scroll_link_detail
+
+float iam_scroll_window_progress(int axis) {
+	float mx = axis == 0 ? ImGui::GetScrollMaxX() : ImGui::GetScrollMaxY();
+	if (mx <= 0.0f) return 0.0f;
+	return ImClamp((axis == 0 ? ImGui::GetScrollX() : ImGui::GetScrollY()) / mx, 0.0f, 1.0f);
+}
+
+float iam_scroll_item_progress() {
+	float vt, vb, it, ib;
+	iam_scroll_link_detail::ranges(&vt, &vb, &it, &ib);
+	float travel = (vb - vt) + (ib - it);
+	if (travel <= 0.0f) return 0.0f;
+	return ImClamp((vb - it) / travel, 0.0f, 1.0f);
+}
+
+bool iam_scroll_item_visible(float min_fraction) {
+	float f = iam_scroll_link_detail::visible_fraction();
+	return min_fraction <= 0.0f ? f > 0.0f : f >= min_fraction;
+}
+
+int iam_scroll_trigger(ImGuiID id, float min_fraction, bool* out_visible) {
+	bool visible = iam_scroll_item_visible(min_fraction);
+	if (out_visible) *out_visible = visible;
+	int prev = iam_scroll_link_detail::g_trigger_state.GetInt(id, 0);
+	int now = visible ? 2 : 1;
+	iam_scroll_link_detail::g_trigger_state.SetInt(id, now);
+	if (now == prev) return iam_scroll_none;
+	if (visible) return iam_scroll_entered;       // includes first sight while visible
+	return prev == 2 ? iam_scroll_left : iam_scroll_none;
+}
+
+// ----------------------------------------------------
+// Inertia
+// ----------------------------------------------------
+namespace iam_inertia_detail {
+	enum mode_t { mode_idle = 0, mode_held, mode_coast, mode_spring };
+	struct inertia_state {
+		float x[2], v[2], target[2];
+		int mode;
+		unsigned last_seen_frame, last_step_frame;
+	};
+	static ImPool<inertia_state> g_states;
+
+	static float snap_axis(float value, float grid, iam_vec2 const* points, int count, int axis, int n) {
+		float best = value;
+		float best_d = FLT_MAX;
+		bool any = false;
+		if (grid > 0.0f) { best = ImFloor(value / grid + 0.5f) * grid; best_d = ImFabs(best - value); any = true; }
+		(void)n;
+		if (points && count > 0 && n == 1) {
+			for (int i = 0; i < count; i++) {
+				ImVec2 p = IAM_VEC2_TO_IM(points[i]);
+				float c = axis == 0 ? p.x : p.y;
+				float d = ImFabs(c - value);
+				if (!any || d < best_d) { best = c; best_d = d; any = true; }
+			}
+		}
+		return best;
+	}
+
+	// Snap target for an n-dim projected landing point
+	static void snap_target(float const* projected, float* out, int n, iam_inertia_opts const& o) {
+		ImVec2 grid = IAM_VEC2_TO_IM(o.snap_grid);
+		for (int i = 0; i < n; i++) out[i] = snap_axis(projected[i], i == 0 ? grid.x : grid.y, o.snap_points, o.snap_points_count, i, n);
+		if (n == 2 && o.snap_points && o.snap_points_count > 0) {
+			// 2D points: nearest point overrides the grid
+			float best_d = FLT_MAX;
+			for (int i = 0; i < o.snap_points_count; i++) {
+				ImVec2 p = IAM_VEC2_TO_IM(o.snap_points[i]);
+				float dx = p.x - projected[0], dy = p.y - projected[1];
+				float d = dx * dx + dy * dy;
+				if (d < best_d) { best_d = d; out[0] = p.x; out[1] = p.y; }
+			}
+		}
+	}
+
+	static bool has_snap(iam_inertia_opts const& o) {
+		ImVec2 g = IAM_VEC2_TO_IM(o.snap_grid);
+		return g.x > 0.0f || g.y > 0.0f || (o.snap_points && o.snap_points_count > 0);
+	}
+
+	static void bounds(iam_inertia_opts const& o, int axis, float* mn, float* mx) {
+		ImVec2 a = IAM_VEC2_TO_IM(o.bounds_min), b = IAM_VEC2_TO_IM(o.bounds_max);
+		*mn = axis == 0 ? a.x : a.y;
+		*mx = axis == 0 ? b.x : b.y;
+	}
+
+	static void update(ImGuiID id, float const* pos, bool held, float dt, iam_inertia_opts const& o, int n, float* out) {
+		inertia_state* s = g_states.GetByKey(id);
+		if (!s) {
+			s = g_states.GetOrAddByKey(id);
+			for (int i = 0; i < 2; i++) { s->x[i] = i < n ? pos[i] : 0.0f; s->v[i] = 0.0f; s->target[i] = s->x[i]; }
+			s->mode = mode_idle;
+			s->last_step_frame = iam_detail::g_frame - 1;
+		}
+		s->last_seen_frame = iam_detail::g_frame;
+		bool const step = s->last_step_frame != iam_detail::g_frame;
+		s->last_step_frame = iam_detail::g_frame;
+		float const h = ImClamp(dt * iam_detail::g_time_scale, 0.0f, 0.1f);
+		float const tau = ImMax(o.decay_time, 0.01f);
+
+		if (held) {
+			if (step) {
+				for (int i = 0; i < n; i++) {
+					float d = pos[i] - s->x[i];
+					float nx = s->x[i] + d;
+					if (o.use_bounds) {
+						float mn, mx;
+						bounds(o, i, &mn, &mx);
+						if (d > 0.0f && nx > mx) { float inside = ImMax(0.0f, mx - s->x[i]); nx = s->x[i] + inside + (d - inside) * o.rubber_band; }
+						if (d < 0.0f && nx < mn) { float inside = ImMin(0.0f, mn - s->x[i]); nx = s->x[i] + inside + (d - inside) * o.rubber_band; }
+					}
+					float inst_v = h > 0.0f ? (nx - s->x[i]) / h : 0.0f;
+					float a = h > 0.0f ? 1.0f - expf(-h / 0.04f) : 0.0f;  // smooth the velocity estimate
+					if (s->mode != mode_held) s->v[i] = inst_v;
+					else s->v[i] += (inst_v - s->v[i]) * a;
+					s->x[i] = nx;
+				}
+			}
+			s->mode = mode_held;
+		} else {
+			if (s->mode == mode_held) {
+				// Release
+				if (has_snap(o)) {
+					float projected[2], tgt[2];
+					for (int i = 0; i < n; i++) projected[i] = s->x[i] + s->v[i] * tau;
+					snap_target(projected, tgt, n, o);
+					for (int i = 0; i < n; i++) {
+						if (o.use_bounds) { float mn, mx; bounds(o, i, &mn, &mx); tgt[i] = ImClamp(tgt[i], mn, mx); }
+						s->target[i] = tgt[i];
+					}
+					s->mode = mode_spring;
+				} else {
+					s->mode = mode_coast;
+				}
+			} else if (s->mode == mode_idle) {
+				for (int i = 0; i < n; i++) s->x[i] = pos[i];  // follow programmatic changes
+			}
+			if (step && h > 0.0f && s->mode == mode_coast) {
+				float k = expf(-h / tau);
+				bool slow = true, outside = false;
+				for (int i = 0; i < n; i++) {
+					s->x[i] += s->v[i] * tau * (1.0f - k);
+					s->v[i] *= k;
+					slow &= ImFabs(s->v[i]) < 2.0f;
+					if (o.use_bounds) {
+						float mn, mx;
+						bounds(o, i, &mn, &mx);
+						s->target[i] = ImClamp(s->x[i], mn, mx);
+						outside |= s->target[i] != s->x[i];
+					}
+				}
+				if (outside) s->mode = mode_spring;  // bounce back with the current velocity
+				else if (slow) { s->mode = mode_idle; for (int i = 0; i < n; i++) s->v[i] = 0.0f; }
+			}
+			if (step && h > 0.0f && s->mode == mode_spring) {
+				iam_spring_params const& sp = o.spring;
+				float const m = ImMax(sp.mass, 1e-4f), kk = ImMax(sp.stiffness, 0.0f), c = ImMax(sp.damping, 0.0f);
+				int const substeps = ImClamp((int)ImCeil(h / (1.0f / 240.0f)), 1, 32);
+				float const sh = h / substeps;
+				for (int it = 0; it < substeps; it++)
+					for (int i = 0; i < n; i++) {
+						float a = (-kk * (s->x[i] - s->target[i]) - c * s->v[i]) / m;
+						s->v[i] += a * sh;
+						s->x[i] += s->v[i] * sh;
+					}
+				bool settled = true;
+				for (int i = 0; i < n; i++) settled &= ImFabs(s->x[i] - s->target[i]) < 0.05f && ImFabs(s->v[i]) < 1.0f;
+				if (settled) { for (int i = 0; i < n; i++) { s->x[i] = s->target[i]; s->v[i] = 0.0f; } s->mode = mode_idle; }
+			}
+		}
+		for (int i = 0; i < n; i++) out[i] = s->x[i];
+	}
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_states.GetMapSize(); ++i) {
+			if (inertia_state* s = g_states.TryGetMapData(i)) {
+				if (iam_detail::g_frame - s->last_seen_frame > max_age) {
+					ImGuiID k = g_states.Map.Data[i].key;
+					g_states.Remove(k, g_states.GetIndex(s));
+				}
+			}
+		}
+	}
+} // namespace iam_inertia_detail
+
+static void iam_inertia_gc(unsigned max_age) { iam_inertia_detail::gc(max_age); }
+static void iam_inertia_clear() { iam_inertia_detail::g_states.Clear(); }
+
+float iam_inertia_float(ImGuiID id, float pos, bool held, float dt, iam_inertia_opts const& opts) {
+	float out[1];
+	iam_inertia_detail::update(id, &pos, held, dt, opts, 1, out);
+	return out[0];
+}
+
+iam_vec2 iam_inertia_vec2(ImGuiID id, iam_vec2 pos_in, bool held, float dt, iam_inertia_opts const& opts) {
+	ImVec2 p = IAM_VEC2_TO_IM(pos_in);
+	float pos[2] = { p.x, p.y }, out[2];
+	iam_inertia_detail::update(id, pos, held, dt, opts, 2, out);
+	return IAM_VEC2_FROM_IM(ImVec2(out[0], out[1]));
+}
+
+bool iam_inertia_is_moving(ImGuiID id) {
+	iam_inertia_detail::inertia_state* s = iam_inertia_detail::g_states.GetByKey(id);
+	return s && (s->mode == iam_inertia_detail::mode_coast || s->mode == iam_inertia_detail::mode_spring);
+}
+
+void iam_inertia_set(ImGuiID id, iam_vec2 pos_in) {
+	iam_inertia_detail::inertia_state* s = iam_inertia_detail::g_states.GetOrAddByKey(id);
+	ImVec2 p = IAM_VEC2_TO_IM(pos_in);
+	s->x[0] = s->target[0] = p.x; s->x[1] = s->target[1] = p.y;
+	s->v[0] = s->v[1] = 0.0f;
+	s->mode = iam_inertia_detail::mode_idle;
+	s->last_seen_frame = iam_detail::g_frame;
+	s->last_step_frame = iam_detail::g_frame - 1;
 }
 
 // ============================================================

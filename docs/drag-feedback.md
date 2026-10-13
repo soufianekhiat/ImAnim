@@ -182,6 +182,37 @@ void DraggableCard(int card_index, ImVec2* pos) {
 | `iam_drag_release(id, pos, opts, dt)` | Release drag with animated feedback |
 | `iam_drag_cancel(id)` | Cancel drag tracking |
 
+## Inertia (Fling)
+
+`iam_inertia_float()` / `iam_inertia_vec2()` add momentum to anything you drag.
+While held the value follows your input and its velocity is tracked; on
+release it keeps moving and slows down with friction, rubber-bands at bounds,
+and with snapping lands on the snap target nearest to where it would have
+stopped. Feed the returned value back as your state:
+
+```cpp
+static float offset = 0.0f;
+bool held = ImGui::IsItemActive();
+if (held) offset -= ImGui::GetIO().MouseDelta.x;
+
+iam_inertia_opts opts;
+opts.use_bounds = true;
+opts.bounds_max = iam_v2(card_step * (count - 1), 0);
+opts.snap_grid  = iam_v2(card_step, 0);              // land on a card
+offset = iam_inertia_float(ImGui::GetID("carousel"), offset, held, dt, opts);
+```
+
+| Option | Default | |
+|--------|---------|-|
+| `decay_time` | 0.325s | Velocity time constant; total glide = velocity x decay_time |
+| `use_bounds`, `bounds_min/max` | off | Clamp with bounce-back |
+| `rubber_band` | 0.35 | Resistance past bounds while held (0 hard stop, 1 free) |
+| `snap_grid`, `snap_points` | none | Snap targets (nearest to the projected landing point) |
+| `spring` | stiffness 220, damping 26 | Bounce-back and snap motion |
+
+`iam_inertia_is_moving(id)` is true while coasting or snapping;
+`iam_inertia_set(id, pos)` teleports and stops.
+
 ## See Also
 
 - [Tweens](tweens.md) - Basic value animation

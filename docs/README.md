@@ -41,7 +41,7 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 | **Transforms** | Position, rotation, scale with rotation modes |
 | **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise |
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
-| **Advanced** | Layering/blending, resolved tweens, drag feedback, scroll animation |
+| **Advanced** | Layering/blending, resolved tweens, layout animation, drag feedback with inertia, scroll animation and scroll-linked triggers |
 | **Tools** | Visual clip editor, debug inspector, profiler, save/load, memory management |
 
 ## Quick Integration

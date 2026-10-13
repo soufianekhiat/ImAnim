@@ -247,6 +247,28 @@ if (ImGui::Begin("Document")) {
 
 Default easing is `iam_ease_out_cubic` if not specified.
 
+## Scroll-Linked Progress and Triggers
+
+Query scroll state for the current window and the last submitted item:
+
+```cpp
+float page = iam_scroll_window_progress();          // 0..1 scroll position (axis 1 = y, 0 = x)
+
+ImGui::Dummy(card_size);
+float p = iam_scroll_item_progress();               // 0 when the item enters at the bottom, 1 when it leaves at the top
+bool  on_screen = iam_scroll_item_visible(0.3f);    // at least 30% of its height visible
+int   ev = iam_scroll_trigger(ImGui::GetID("card"), 0.3f);
+if (ev & iam_scroll_entered) iam_play(CLIP_REVEAL, ImGui::GetID("card"));   // also fires on first sight
+if (ev & iam_scroll_left)    { /* ... */ }
+```
+
+Combine with `iam_presence()` for reveal-on-scroll:
+
+```cpp
+float t;
+if (iam_presence(ImGui::GetID("row"), iam_scroll_item_visible(0.3f), &t, dt)) { /* draw with alpha t */ }
+```
+
 ## See Also
 
 - [Tweens](tweens.md) - Basic value animation
