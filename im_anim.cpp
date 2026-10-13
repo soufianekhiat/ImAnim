@@ -3189,6 +3189,9 @@ struct iam_clip_data {
 	// Named times (labels)
 	ImVector<iam_clip_detail::clip_label>	labels;
 
+	// Incremented when the clip is rebuilt (iam_clip::begin) or loaded; lets editors drop stale undo history
+	unsigned				generation;
+
 	// Loop delay
 	float					loop_delay;		// Delay between loop iterations (seconds)
 
@@ -3230,7 +3233,7 @@ struct iam_clip_data {
 	iam_variation_float		delay_var;
 	iam_variation_float		timescale_var;
 
-	iam_clip_data() : id(0), delay(0), duration(0), loop_count(0), direction(iam_dir_normal),
+	iam_clip_data() : id(0), delay(0), duration(0), loop_count(0), direction(iam_dir_normal), generation(0),
 		loop_delay(0),
 		cb_begin(nullptr), cb_update(nullptr), cb_complete(nullptr), cb_pause(nullptr), cb_loop(nullptr),
 		cb_begin_user(nullptr), cb_update_user(nullptr), cb_complete_user(nullptr),
@@ -4031,6 +4034,7 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	}
 
 	// Reset for building
+	clip->generation++;
 	clip->build_keys.clear();
 	clip->iam_tracks.clear();
 	clip->labels.clear();
@@ -5850,8 +5854,95 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Tracks: count + for each: channel, type, num_keys, keys...
 
 static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static int const IAM_CLIP_VERSION = 6;      // 4: + loop delay, track color space/anchor, key color space/value_ext; 5: + labels; 6: + curve eases
+static int const IAM_CLIP_VERSION = 7;      // 4: + loop delay, track color space/anchor, key color space/value_ext; 5: + labels; 6: + curve eases; 7: + key variations
 static int const IAM_CLIP_VERSION_MIN = 3;  // Oldest version iam_clip_load() accepts
+
+// Per-loop variation data (callbacks can't be serialized: callback mode is kept, the function pointer is not)
+static void write_var_float(FILE* f, iam_variation_float const& v) {
+	fwrite(&v.mode, sizeof(int), 1, f); fwrite(&v.amount, sizeof(float), 1, f);
+	fwrite(&v.min_clamp, sizeof(float), 1, f); fwrite(&v.max_clamp, sizeof(float), 1, f); fwrite(&v.seed, sizeof(unsigned), 1, f);
+}
+static bool read_var_float(FILE* f, iam_variation_float& v) {
+	memset(&v, 0, sizeof(v));
+	return fread(&v.mode, sizeof(int), 1, f) == 1 && fread(&v.amount, sizeof(float), 1, f) == 1 &&
+		fread(&v.min_clamp, sizeof(float), 1, f) == 1 && fread(&v.max_clamp, sizeof(float), 1, f) == 1 && fread(&v.seed, sizeof(unsigned), 1, f) == 1;
+}
+static void write_floats(FILE* f, float const* v, int n) { fwrite(v, sizeof(float), n, f); }
+static bool read_floats(FILE* f, float* v, int n) { return fread(v, sizeof(float), n, f) == (size_t)n; }
+
+static void write_key_variation(FILE* f, iam_clip_detail::keyframe const& kf, int type) {
+	int has = kf.has_variation ? 1 : 0;
+	fwrite(&has, sizeof(int), 1, f);
+	if (!has) return;
+	switch (type) {
+		case iam_chan_float: case iam_chan_float_rel: write_var_float(f, kf.var_float); break;
+		case iam_chan_int: {
+			iam_variation_int const& v = kf.var_int;
+			fwrite(&v.mode, sizeof(int), 1, f); fwrite(&v.amount, sizeof(int), 1, f); fwrite(&v.min_clamp, sizeof(int), 1, f); fwrite(&v.max_clamp, sizeof(int), 1, f); fwrite(&v.seed, sizeof(unsigned), 1, f);
+			break;
+		}
+		case iam_chan_vec2: case iam_chan_vec2_rel: {
+			iam_variation_vec2 const& v = kf.var_vec2;
+			ImVec2 a = IAM_VEC2_TO_IM(v.amount), mn = IAM_VEC2_TO_IM(v.min_clamp), mx = IAM_VEC2_TO_IM(v.max_clamp);
+			fwrite(&v.mode, sizeof(int), 1, f); write_floats(f, &a.x, 2); write_floats(f, &mn.x, 2); write_floats(f, &mx.x, 2); fwrite(&v.seed, sizeof(unsigned), 1, f);
+			write_var_float(f, v.x); write_var_float(f, v.y);
+			break;
+		}
+		case iam_chan_vec4: case iam_chan_vec4_rel: {
+			iam_variation_vec4 const& v = kf.var_vec4;
+			ImVec4 a = IAM_VEC4_TO_IM(v.amount), mn = IAM_VEC4_TO_IM(v.min_clamp), mx = IAM_VEC4_TO_IM(v.max_clamp);
+			fwrite(&v.mode, sizeof(int), 1, f); write_floats(f, &a.x, 4); write_floats(f, &mn.x, 4); write_floats(f, &mx.x, 4); fwrite(&v.seed, sizeof(unsigned), 1, f);
+			write_var_float(f, v.x); write_var_float(f, v.y); write_var_float(f, v.z); write_var_float(f, v.w);
+			break;
+		}
+		default: {
+			iam_variation_color const& v = kf.var_color;
+			ImVec4 a = IAM_VEC4_TO_IM(v.amount), mn = IAM_VEC4_TO_IM(v.min_clamp), mx = IAM_VEC4_TO_IM(v.max_clamp);
+			fwrite(&v.mode, sizeof(int), 1, f); write_floats(f, &a.x, 4); write_floats(f, &mn.x, 4); write_floats(f, &mx.x, 4);
+			fwrite(&v.color_space, sizeof(int), 1, f); fwrite(&v.seed, sizeof(unsigned), 1, f);
+			write_var_float(f, v.r); write_var_float(f, v.g); write_var_float(f, v.b); write_var_float(f, v.a);
+			break;
+		}
+	}
+}
+
+static bool read_key_variation(FILE* f, iam_clip_detail::keyframe& kf, int type) {
+	int has = 0;
+	if (fread(&has, sizeof(int), 1, f) != 1) return false;
+	kf.has_variation = (has != 0);
+	if (!has) return true;
+	switch (type) {
+		case iam_chan_float: case iam_chan_float_rel: return read_var_float(f, kf.var_float);
+		case iam_chan_int: {
+			iam_variation_int& v = kf.var_int;
+			memset(&v, 0, sizeof(v));
+			return fread(&v.mode, sizeof(int), 1, f) == 1 && fread(&v.amount, sizeof(int), 1, f) == 1 && fread(&v.min_clamp, sizeof(int), 1, f) == 1 &&
+				fread(&v.max_clamp, sizeof(int), 1, f) == 1 && fread(&v.seed, sizeof(unsigned), 1, f) == 1;
+		}
+		case iam_chan_vec2: case iam_chan_vec2_rel: {
+			iam_variation_vec2& v = kf.var_vec2;
+			ImVec2 a, mn, mx;
+			bool ok = fread(&v.mode, sizeof(int), 1, f) == 1 && read_floats(f, &a.x, 2) && read_floats(f, &mn.x, 2) && read_floats(f, &mx.x, 2) && fread(&v.seed, sizeof(unsigned), 1, f) == 1;
+			v.amount = IAM_VEC2_FROM_IM(a); v.min_clamp = IAM_VEC2_FROM_IM(mn); v.max_clamp = IAM_VEC2_FROM_IM(mx); v.callback = nullptr; v.user = nullptr;
+			return ok && read_var_float(f, v.x) && read_var_float(f, v.y);
+		}
+		case iam_chan_vec4: case iam_chan_vec4_rel: {
+			iam_variation_vec4& v = kf.var_vec4;
+			ImVec4 a, mn, mx;
+			bool ok = fread(&v.mode, sizeof(int), 1, f) == 1 && read_floats(f, &a.x, 4) && read_floats(f, &mn.x, 4) && read_floats(f, &mx.x, 4) && fread(&v.seed, sizeof(unsigned), 1, f) == 1;
+			v.amount = IAM_VEC4_FROM_IM(a); v.min_clamp = IAM_VEC4_FROM_IM(mn); v.max_clamp = IAM_VEC4_FROM_IM(mx); v.callback = nullptr; v.user = nullptr;
+			return ok && read_var_float(f, v.x) && read_var_float(f, v.y) && read_var_float(f, v.z) && read_var_float(f, v.w);
+		}
+		default: {
+			iam_variation_color& v = kf.var_color;
+			ImVec4 a, mn, mx;
+			bool ok = fread(&v.mode, sizeof(int), 1, f) == 1 && read_floats(f, &a.x, 4) && read_floats(f, &mn.x, 4) && read_floats(f, &mx.x, 4) &&
+				fread(&v.color_space, sizeof(int), 1, f) == 1 && fread(&v.seed, sizeof(unsigned), 1, f) == 1;
+			v.amount = IAM_VEC4_FROM_IM(a); v.min_clamp = IAM_VEC4_FROM_IM(mn); v.max_clamp = IAM_VEC4_FROM_IM(mx); v.callback = nullptr; v.user = nullptr;
+			return ok && read_var_float(f, v.r) && read_var_float(f, v.g) && read_var_float(f, v.b) && read_var_float(f, v.a);
+		}
+	}
+}
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	using namespace iam_clip_detail;
@@ -5912,6 +6003,7 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 			fwrite(kf.value, sizeof(float), 4, f);
 			fwrite(&kf.color_space, sizeof(int), 1, f);
 			fwrite(kf.value_ext, sizeof(float), 4, f);
+			write_key_variation(f, kf, trk.type);
 		}
 	}
 
@@ -6045,6 +6137,7 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 				fread(&kf.color_space, sizeof(int), 1, f);
 				fread(kf.value_ext, sizeof(float), 4, f);
 			}
+			if (version >= 7) read_key_variation(f, kf, trk.type);
 			kf.has_bezier = (has_bezier_i != 0);
 			kf.is_spring = (is_spring_i != 0);
 			kf.channel = trk.channel;
@@ -6054,6 +6147,7 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 	}
 
 	clip->labels.clear();
+	clip->generation++;
 	if (version >= 5) {
 		int label_count = 0;
 		if (fread(&label_count, sizeof(int), 1, f) == 1) {
@@ -10017,6 +10111,11 @@ namespace iam_clip_editor_detail {
 		ImVector<keyframe> keys;
 		float duration, delay;
 		int loop_count, direction;
+		ImVector<clip_label> labels;
+		ImVector<iam_marker> markers;
+		ImVector<ImGuiID> curve_ids;     // curves used by keys (flat storage: no nested ImVector)
+		ImVector<int> curve_counts;
+		ImVector<ImVec2> curve_pts;
 	};
 
 	struct editor_state {
@@ -10043,11 +10142,18 @@ namespace iam_clip_editor_detail {
 		double status_until;
 		bool modified;
 		bool ease_editing;                  // an ease editor drag is in progress (one undo step per drag)
+		unsigned generation;                // clip generation the undo history belongs to
+		int drag_track;                     // track being reordered (-1 = none)
+		int drag_label, drag_marker;        // ruler item being dragged (-1 = none)
+		int ctx_label, ctx_marker;          // ruler context menu target
+		float ctx_time;                     // ruler context menu time
+		char label_name[64];
 
 		editor_state() : clip_id(0), view_t0(0), view_len(1), view_fitted(false), snap(true), snap_step(0.05f),
 			drag_keys(false), drag_moved(false), drag_origin_t(0), box_active(false), box_start(0, 0),
-			add_type(0), status_until(0), modified(false), ease_editing(false) {
-			path[0] = add_name[0] = status[0] = 0;
+			add_type(0), status_until(0), modified(false), ease_editing(false), generation(0), drag_track(-1), drag_label(-1), drag_marker(-1),
+			ctx_label(-1), ctx_marker(-1), ctx_time(0) {
+			path[0] = add_name[0] = status[0] = label_name[0] = 0;
 		}
 		~editor_state() {
 			for (int i = 0; i < undo.Size; i++) IM_DELETE(undo[i]);
@@ -10104,8 +10210,22 @@ namespace iam_clip_editor_detail {
 			h.anchor_space = trk.anchor_space; h.anchor_axis = trk.anchor_axis;
 			h.key_count = trk.keys.Size; h.is_relative = trk.is_relative;
 			s->tracks.push_back(h);
-			for (int k = 0; k < trk.keys.Size; k++) s->keys.push_back(trk.keys[k]);
+			for (int k = 0; k < trk.keys.Size; k++) {
+				keyframe const& kf = trk.keys[k];
+				s->keys.push_back(kf);
+				if (kf.ease_type == iam_ease_curve) {
+					ImGuiID cid = iam_detail::curve_id_from(kf.bezier[0], kf.bezier[1]);
+					iam_detail::ease_curve* c = iam_detail::find_curve(cid);
+					if (c && !s->curve_ids.contains(cid)) {
+						s->curve_ids.push_back(cid);
+						s->curve_counts.push_back(c->pts.Size);
+						for (int i = 0; i < c->pts.Size; i++) s->curve_pts.push_back(c->pts[i]);
+					}
+				}
+			}
 		}
+		for (int i = 0; i < clip->labels.Size; i++) s->labels.push_back(clip->labels[i]);
+		for (int i = 0; i < clip->markers.Size; i++) s->markers.push_back(clip->markers[i]);
 		return s;
 	}
 
@@ -10125,6 +10245,16 @@ namespace iam_clip_editor_detail {
 		clip->delay = s->delay;
 		clip->loop_count = s->loop_count;
 		clip->direction = s->direction;
+		clip->labels.resize(0);
+		for (int i = 0; i < s->labels.Size; i++) clip->labels.push_back(s->labels[i]);
+		clip->markers.resize(0);
+		for (int i = 0; i < s->markers.Size; i++) clip->markers.push_back(s->markers[i]);
+		int pi = 0;
+		for (int c = 0; c < s->curve_ids.Size; c++) {
+			ImVector<iam_vec2> pts;
+			for (int i = 0; i < s->curve_counts[c]; i++) pts.push_back(IAM_VEC2_FROM_IM(s->curve_pts[pi++]));
+			iam_ease_curve_set(s->curve_ids[c], pts.Data, pts.Size);
+		}
 	}
 
 	static void push_undo(editor_state* st, iam_clip_data* clip) {
@@ -10287,6 +10417,72 @@ namespace iam_clip_editor_detail {
 		b.append(")");
 	}
 
+	// Variation aggregates for exported code
+	static char const* const k_var_enums[] = { "iam_var_none", "iam_var_increment", "iam_var_decrement", "iam_var_multiply", "iam_var_random", "iam_var_random_abs", "iam_var_pingpong", "iam_var_callback" };
+	static char const* var_enum(int m) { return (m >= 0 && m < 8) ? k_var_enums[m] : "iam_var_none"; }
+	static void append_flim(ImGuiTextBuffer& b, float v) {  // FLT_MAX-aware float literal
+		if (v >= 3.0e38f) b.append("FLT_MAX"); else if (v <= -3.0e38f) b.append("-FLT_MAX"); else b.append(fl(v));
+	}
+	static void append_var_float(ImGuiTextBuffer& b, iam_variation_float const& v) {
+		b.appendf("iam_variation_float{ %s, ", var_enum(v.mode)); append_flim(b, v.amount); b.append(", ");
+		append_flim(b, v.min_clamp); b.append(", "); append_flim(b, v.max_clamp); b.appendf(", %uu, nullptr, nullptr }", v.seed);
+	}
+	static void append_vec_lim(ImGuiTextBuffer& b, char const* ctor, float const* v, int n) {
+		b.appendf("%s(", ctor);
+		for (int i = 0; i < n; i++) { if (i) b.append(", "); append_flim(b, v[i]); }
+		b.append(")");
+	}
+	static bool export_variation(keyframe const& kf, int type) {
+		if (!kf.has_variation) return false;
+		switch (type) {
+			case iam_chan_float: return kf.var_float.mode != iam_var_callback;
+			case iam_chan_int: return kf.var_int.mode != iam_var_callback;
+			case iam_chan_vec2: return kf.var_vec2.mode != iam_var_callback;
+			case iam_chan_vec4: return kf.var_vec4.mode != iam_var_callback;
+			case iam_chan_color: return kf.var_color.mode != iam_var_callback;
+			default: return false;
+		}
+	}
+	static void append_variation(ImGuiTextBuffer& b, keyframe const& kf, int type) {
+		switch (type) {
+			case iam_chan_float: append_var_float(b, kf.var_float); break;
+			case iam_chan_int: {
+				iam_variation_int const& v = kf.var_int;
+				char mn[16], mx[16];
+				if (v.min_clamp == INT_MIN) snprintf(mn, sizeof(mn), "INT_MIN"); else snprintf(mn, sizeof(mn), "%d", v.min_clamp);
+				if (v.max_clamp == INT_MAX) snprintf(mx, sizeof(mx), "INT_MAX"); else snprintf(mx, sizeof(mx), "%d", v.max_clamp);
+				b.appendf("iam_variation_int{ %s, %d, %s, %s, %uu, nullptr, nullptr }", var_enum(v.mode), v.amount, mn, mx, v.seed);
+				break;
+			}
+			case iam_chan_vec2: {
+				iam_variation_vec2 const& v = kf.var_vec2;
+				ImVec2 a = IAM_VEC2_TO_IM(v.amount), mn = IAM_VEC2_TO_IM(v.min_clamp), mx = IAM_VEC2_TO_IM(v.max_clamp);
+				b.appendf("iam_variation_vec2{ %s, ", var_enum(v.mode)); append_vec_lim(b, "iam_v2", &a.x, 2); b.append(", ");
+				append_vec_lim(b, "iam_v2", &mn.x, 2); b.append(", "); append_vec_lim(b, "iam_v2", &mx.x, 2);
+				b.appendf(", %uu, nullptr, nullptr, ", v.seed); append_var_float(b, v.x); b.append(", "); append_var_float(b, v.y); b.append(" }");
+				break;
+			}
+			case iam_chan_vec4: {
+				iam_variation_vec4 const& v = kf.var_vec4;
+				ImVec4 a = IAM_VEC4_TO_IM(v.amount), mn = IAM_VEC4_TO_IM(v.min_clamp), mx = IAM_VEC4_TO_IM(v.max_clamp);
+				b.appendf("iam_variation_vec4{ %s, ", var_enum(v.mode)); append_vec_lim(b, "iam_v4", &a.x, 4); b.append(", ");
+				append_vec_lim(b, "iam_v4", &mn.x, 4); b.append(", "); append_vec_lim(b, "iam_v4", &mx.x, 4);
+				b.appendf(", %uu, nullptr, nullptr, ", v.seed);
+				append_var_float(b, v.x); b.append(", "); append_var_float(b, v.y); b.append(", "); append_var_float(b, v.z); b.append(", "); append_var_float(b, v.w); b.append(" }");
+				break;
+			}
+			default: {
+				iam_variation_color const& v = kf.var_color;
+				ImVec4 a = IAM_VEC4_TO_IM(v.amount), mn = IAM_VEC4_TO_IM(v.min_clamp), mx = IAM_VEC4_TO_IM(v.max_clamp);
+				b.appendf("iam_variation_color{ %s, ", var_enum(v.mode)); append_vec_lim(b, "iam_v4", &a.x, 4); b.append(", ");
+				append_vec_lim(b, "iam_v4", &mn.x, 4); b.append(", "); append_vec_lim(b, "iam_v4", &mx.x, 4);
+				b.appendf(", %s, %uu, nullptr, nullptr, ", (v.color_space >= 0 && v.color_space < 5) ? k_col_space_enums[v.color_space] : "iam_col_oklab", v.seed);
+				append_var_float(b, v.r); b.append(", "); append_var_float(b, v.g); b.append(", "); append_var_float(b, v.b); b.append(", "); append_var_float(b, v.a); b.append(" }");
+				break;
+			}
+		}
+	}
+
 	// Key needs an explicit params argument (bezier4) in exported code
 	static bool export_params(keyframe const& kf) {
 		if (kf.is_spring || kf.ease_type == iam_ease_curve) return false;
@@ -10343,18 +10539,20 @@ namespace iam_clip_editor_detail {
 						fl(kf.spring.mass), fl(kf.spring.stiffness), fl(kf.spring.damping), fl(kf.spring.initial_velocity));
 					continue;
 				}
-				b.appendf("\t.%s(", k_type_calls[trk.type < 9 ? trk.type : 0]);
+				bool const var = export_variation(kf, trk.type);
+				b.appendf(var ? "\t.%s_var(" : "\t.%s(", k_type_calls[trk.type < 9 ? trk.type : 0]);
 				append_id(b, trk.channel);
 				b.appendf(", %s, ", fl(kf.time));
 				char const* ease = ease_name(kf.ease_type);
 				switch (trk.type) {
-					case iam_chan_float: append_floats(b, "", kf.value, 1); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
-					case iam_chan_vec2: append_floats(b, "iam_v2", kf.value, 2); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
-					case iam_chan_vec4: append_floats(b, "iam_v4", kf.value, 4); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
-					case iam_chan_int: b.appendf("%d, iam_ease_%s", kf.get_int(), ease); break;
+					case iam_chan_float: append_floats(b, "", kf.value, 1); if (var) { b.append(", "); append_variation(b, kf, trk.type); } b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_vec2: append_floats(b, "iam_v2", kf.value, 2); if (var) { b.append(", "); append_variation(b, kf, trk.type); } b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_vec4: append_floats(b, "iam_v4", kf.value, 4); if (var) { b.append(", "); append_variation(b, kf, trk.type); } b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_int: b.appendf("%d", kf.get_int()); if (var) { b.append(", "); append_variation(b, kf, trk.type); } b.appendf(", iam_ease_%s", ease); break;
 					case iam_chan_color: {
 						int cs = kf.color_space;
 						append_floats(b, "iam_v4", kf.value, 4);
+						if (var) { b.append(", "); append_variation(b, kf, trk.type); }
 						b.appendf(", %s, iam_ease_%s%s", (cs >= 0 && cs < 5) ? k_col_space_enums[cs] : "iam_col_oklab", ease, bez_arg);
 						break;
 					}
@@ -10378,7 +10576,7 @@ namespace iam_clip_editor_detail {
 					default: break;
 				}
 				b.append(")");
-				if (kf.has_variation) b.append("  // note: per-loop variation not exported");
+				if (kf.has_variation && !var) b.append("  // note: callback / relative-track variation not exported");
 				b.append("\n");
 			}
 		}
@@ -10454,6 +10652,133 @@ namespace iam_clip_editor_detail {
 		st->selected.clear();
 	}
 
+	// Swap two tracks without copying their keys
+	static void swap_tracks(iam_track& a, iam_track& b) {
+		ImSwap(a.channel, b.channel); ImSwap(a.type, b.type); ImSwap(a.color_space, b.color_space);
+		ImSwap(a.is_relative, b.is_relative); ImSwap(a.anchor_space, b.anchor_space); ImSwap(a.anchor_axis, b.anchor_axis);
+		a.keys.swap(b.keys);
+	}
+
+	// Key clipboard (shared by all editors, so keys can be pasted into another clip)
+	static ImVector<keyframe> g_key_clipboard;         // times relative to the earliest copied key
+	static ImVector<track_header> g_key_clipboard_tracks;  // track settings per copied key
+
+	static void copy_selected(editor_state* st, iam_clip_data* clip) {
+		g_key_clipboard.resize(0);
+		g_key_clipboard_tracks.resize(0);
+		float t_min = FLT_MAX;
+		for (int i = 0; i < st->selected.Size; i++) { keyframe* kf = find_key(clip, st->selected[i]); if (kf) t_min = ImMin(t_min, kf->time); }
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			iam_track const& trk = clip->iam_tracks[t];
+			for (int k = 0; k < trk.keys.Size; k++) {
+				if (!st->is_selected(trk.keys[k].uid)) continue;
+				keyframe kf = trk.keys[k];
+				kf.time -= t_min;
+				g_key_clipboard.push_back(kf);
+				track_header h;
+				h.channel = trk.channel; h.type = trk.type; h.color_space = trk.color_space;
+				h.anchor_space = trk.anchor_space; h.anchor_axis = trk.anchor_axis; h.is_relative = trk.is_relative; h.key_count = 0;
+				g_key_clipboard_tracks.push_back(h);
+			}
+		}
+	}
+
+	// Paste the clipboard at time t (creates missing tracks); selects the pasted keys
+	static void paste_at(editor_state* st, iam_clip_data* clip, float t) {
+		if (g_key_clipboard.Size == 0) return;
+		push_undo(st, clip);
+		st->selected.clear();
+		for (int i = 0; i < g_key_clipboard.Size; i++) {
+			track_header const& h = g_key_clipboard_tracks[i];
+			iam_track* trk = nullptr;
+			for (int tt = 0; tt < clip->iam_tracks.Size; tt++)
+				if (clip->iam_tracks[tt].channel == h.channel && clip->iam_tracks[tt].type == h.type) trk = &clip->iam_tracks[tt];
+			if (!trk) {
+				clip->iam_tracks.push_back(iam_track());
+				trk = &clip->iam_tracks.back();
+				trk->channel = h.channel; trk->type = h.type; trk->color_space = h.color_space;
+				trk->anchor_space = h.anchor_space; trk->anchor_axis = h.anchor_axis; trk->is_relative = h.is_relative;
+			}
+			keyframe kf = g_key_clipboard[i];
+			kf.uid = ++g_keyframe_uid;
+			kf.time = ImMax(t + kf.time, 0.0f);
+			for (int k = trk->keys.Size - 1; k >= 0; k--)  // replace a key at the same time
+				if (ImFabs(trk->keys[k].time - kf.time) < 1e-5f) trk->keys.erase(trk->keys.Data + k);
+			trk->keys.push_back(kf);
+			st->select(kf.uid);
+		}
+	}
+
+	static void duplicate_selected(editor_state* st, iam_clip_data* clip) {
+		if (st->selected.Size == 0) return;
+		float t_min = FLT_MAX, t_max = -FLT_MAX;
+		for (int i = 0; i < st->selected.Size; i++) { keyframe* kf = find_key(clip, st->selected[i]); if (kf) { t_min = ImMin(t_min, kf->time); t_max = ImMax(t_max, kf->time); } }
+		copy_selected(st, clip);
+		float step = st->snap_step > 1e-4f ? st->snap_step : 0.05f;
+		paste_at(st, clip, t_max + ((t_max > t_min) ? step : step));  // right after the selection
+	}
+
+	// Variation editing (global mode only; callback / per-axis variations are shown, not edited)
+	static char const* const k_var_modes[] = { "none", "increment", "decrement", "multiply", "random", "random_abs", "pingpong", "callback" };
+	static bool edit_variation(keyframe& kf, iam_track const& trk, bool* activated) {
+		bool supported = trk.type == iam_chan_float || trk.type == iam_chan_int || trk.type == iam_chan_vec2 || trk.type == iam_chan_vec4 || trk.type == iam_chan_color;
+		if (!supported) return false;
+		bool changed = false;
+		bool on = kf.has_variation;
+		if (ImGui::Checkbox("Per-loop variation", &on)) { *activated = true; kf.has_variation = on; changed = true; }
+		if (!kf.has_variation) return changed;
+		int* mode = nullptr;
+		switch (trk.type) {
+			case iam_chan_float: mode = &kf.var_float.mode; break;
+			case iam_chan_int: mode = &kf.var_int.mode; break;
+			case iam_chan_vec2: mode = &kf.var_vec2.mode; break;
+			case iam_chan_vec4: mode = &kf.var_vec4.mode; break;
+			default: mode = &kf.var_color.mode; break;
+		}
+		if (*mode == iam_var_callback) { ImGui::TextDisabled("Custom callback variation (not editable)"); return changed; }
+		if (*mode == iam_var_none && trk.type != iam_chan_float && trk.type != iam_chan_int) {
+			bool per_axis = trk.type == iam_chan_vec2 ? (kf.var_vec2.x.mode != iam_var_none || kf.var_vec2.y.mode != iam_var_none)
+				: trk.type == iam_chan_vec4 ? (kf.var_vec4.x.mode != iam_var_none || kf.var_vec4.y.mode != iam_var_none || kf.var_vec4.z.mode != iam_var_none || kf.var_vec4.w.mode != iam_var_none)
+				: (kf.var_color.r.mode != iam_var_none || kf.var_color.g.mode != iam_var_none || kf.var_color.b.mode != iam_var_none || kf.var_color.a.mode != iam_var_none);
+			if (per_axis) { ImGui::TextDisabled("Per-axis variation (not editable here)"); return changed; }
+		}
+		int m = *mode;
+		if (ImGui::Combo("Variation", &m, k_var_modes, 7)) { *activated = true; *mode = m; changed = true; }
+		switch (trk.type) {
+			case iam_chan_float:
+				if (kf.var_float.max_clamp == 0.0f && kf.var_float.min_clamp == 0.0f) { kf.var_float.min_clamp = -FLT_MAX; kf.var_float.max_clamp = FLT_MAX; }
+				changed |= ImGui::DragFloat("Amount", &kf.var_float.amount, 0.01f); break;
+			case iam_chan_int:
+				if (kf.var_int.max_clamp == 0 && kf.var_int.min_clamp == 0) { kf.var_int.min_clamp = INT_MIN; kf.var_int.max_clamp = INT_MAX; }
+				changed |= ImGui::DragInt("Amount", &kf.var_int.amount); break;
+			case iam_chan_vec2: {
+				if (IAM_VEC2_TO_IM(kf.var_vec2.max_clamp).x == 0.0f && IAM_VEC2_TO_IM(kf.var_vec2.min_clamp).x == 0.0f) { kf.var_vec2.min_clamp = iam_v2(-FLT_MAX, -FLT_MAX); kf.var_vec2.max_clamp = iam_v2(FLT_MAX, FLT_MAX); }
+				ImVec2 a = IAM_VEC2_TO_IM(kf.var_vec2.amount);
+				if (ImGui::DragFloat2("Amount", &a.x, 0.1f)) { kf.var_vec2.amount = IAM_VEC2_FROM_IM(a); changed = true; }
+				break;
+			}
+			case iam_chan_vec4: {
+				if (IAM_VEC4_TO_IM(kf.var_vec4.max_clamp).x == 0.0f && IAM_VEC4_TO_IM(kf.var_vec4.min_clamp).x == 0.0f) { kf.var_vec4.min_clamp = iam_v4(-FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX); kf.var_vec4.max_clamp = iam_v4(FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX); }
+				ImVec4 a = IAM_VEC4_TO_IM(kf.var_vec4.amount);
+				if (ImGui::DragFloat4("Amount", &a.x, 0.01f)) { kf.var_vec4.amount = IAM_VEC4_FROM_IM(a); changed = true; }
+				break;
+			}
+			default: {
+				if (IAM_VEC4_TO_IM(kf.var_color.max_clamp).x == 0.0f) { kf.var_color.min_clamp = iam_v4(0, 0, 0, 0); kf.var_color.max_clamp = iam_v4(1, 1, 1, 1); kf.var_color.color_space = iam_col_oklab; }
+				ImVec4 a = IAM_VEC4_TO_IM(kf.var_color.amount);
+				if (ImGui::DragFloat4("Amount", &a.x, 0.005f)) { kf.var_color.amount = IAM_VEC4_FROM_IM(a); changed = true; }
+				break;
+			}
+		}
+		*activated |= ImGui::IsItemActivated();
+		unsigned* seed = trk.type == iam_chan_float ? &kf.var_float.seed : trk.type == iam_chan_int ? &kf.var_int.seed : trk.type == iam_chan_vec2 ? &kf.var_vec2.seed : trk.type == iam_chan_vec4 ? &kf.var_vec4.seed : &kf.var_color.seed;
+		int sd = (int)*seed;
+		if (ImGui::DragInt("Seed", &sd, 1.0f, 0, INT_MAX)) { *seed = (unsigned)ImMax(sd, 0); changed = true; }
+		*activated |= ImGui::IsItemActivated();
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("0 = shared random sequence, other = deterministic per key");
+		return changed;
+	}
+
 	// ---- Main editor body ----
 	static bool editor_body(ImGuiID clip_id, ImGuiID preview_instance_id) {
 		ImGuiIO& io = ImGui::GetIO();
@@ -10464,6 +10789,16 @@ namespace iam_clip_editor_detail {
 		}
 		editor_state* st = get_state(clip_id);
 		st->modified = false;
+		if (st->generation != clip->generation) {  // rebuilt or loaded outside the editor: old undo steps no longer apply
+			for (int i = 0; i < st->undo.Size; i++) IM_DELETE(st->undo[i]);
+			for (int i = 0; i < st->redo.Size; i++) IM_DELETE(st->redo[i]);
+			st->undo.clear();
+			st->redo.clear();
+			st->selected.clear();
+			st->drag_keys = st->box_active = false;
+			st->drag_track = st->drag_label = st->drag_marker = -1;
+			st->generation = clip->generation;
+		}
 		ImGuiID const preview_id = preview_instance_id ? preview_instance_id : ImHashData(&clip_id, sizeof(clip_id), ImHashStr("iam_clip_editor_preview"));
 		iam_instance preview(preview_id);
 		if (preview.valid()) {
@@ -10587,6 +10922,7 @@ namespace iam_clip_editor_detail {
 					for (int i = 0; i < st->redo.Size; i++) IM_DELETE(st->redo[i]);
 					st->redo.clear();
 					st->selected.clear();
+					st->generation = clip->generation;  // our own load: keep the undo step we just pushed
 					after_edit(st, clip, preview_id);
 					set_status(st, "Loaded %s", st->path);
 				}
@@ -10603,7 +10939,7 @@ namespace iam_clip_editor_detail {
 		ImGuiStyle const& style = ImGui::GetStyle();
 		float const row_h = ImGui::GetFrameHeight();
 		float const ruler_h = row_h;
-		float const inspector_h = ImGui::GetFrameHeightWithSpacing() * 6.0f;
+		float const inspector_h = ImGui::GetFrameHeightWithSpacing() * 8.0f;
 		float label_w = ImGui::CalcTextSize("0x00000000  vec4_rel").x + ImGui::GetFontSize() * 6.0f;
 		ImVec2 avail = ImGui::GetContentRegionAvail();
 		float const tl_w = ImMax(avail.x - label_w - style.ScrollbarSize, 50.0f);
@@ -10637,8 +10973,74 @@ namespace iam_clip_editor_detail {
 		{
 			ImGui::InvisibleButton("##ruler_pad", ImVec2(label_w, ruler_h));
 			ImGui::SameLine(0, 0);
-			ImGui::InvisibleButton("##ruler", ImVec2(tl_w, ruler_h));
-			bool ruler_active = ImGui::IsItemActive();
+			ImGui::InvisibleButton("##ruler", ImVec2(tl_w, ruler_h), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+			bool ruler_active = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+			bool const ruler_hovered = ImGui::IsItemHovered();
+			// Labels and markers under the mouse (within a few pixels)
+			int hov_label = -1, hov_marker = -1;
+			if (ruler_hovered || ImGui::IsItemActive()) {
+				float best = ImGui::GetFontSize() * 0.4f;
+				for (int l = 0; l < clip->labels.Size; l++) { float d = ImFabs(IAM_ED_T2X(clip->labels[l].time) - io.MousePos.x); if (d < best) { best = d; hov_label = l; } }
+				if (hov_label < 0)
+					for (int m = 0; m < clip->markers.Size; m++) { float d = ImFabs(IAM_ED_T2X(clip->markers[m].time) - io.MousePos.x); if (d < best) { best = d; hov_marker = m; } }
+			}
+			if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+				if (hov_label >= 0) { push_undo(st, clip); st->drag_label = hov_label; }
+				else if (hov_marker >= 0) { push_undo(st, clip); st->drag_marker = hov_marker; }
+			}
+			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) st->drag_label = st->drag_marker = -1;
+			if (st->drag_label >= 0 && st->drag_label < clip->labels.Size) {
+				clip->labels[st->drag_label].time = snap_time(st, IAM_ED_X2T(io.MousePos.x));
+				st->modified = true;
+				ruler_active = false;
+			} else if (st->drag_marker >= 0 && st->drag_marker < clip->markers.Size) {
+				clip->markers[st->drag_marker].time = snap_time(st, IAM_ED_X2T(io.MousePos.x));
+				recompute(clip);
+				st->modified = true;
+				ruler_active = false;
+			}
+			if (ruler_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+				st->ctx_label = hov_label;
+				st->ctx_marker = hov_marker;
+				st->ctx_time = snap_time(st, IAM_ED_X2T(io.MousePos.x));
+				char const* ln = hov_label >= 0 ? iam_get_id_name(clip->labels[hov_label].id) : nullptr;
+				snprintf(st->label_name, sizeof(st->label_name), "%s", ln ? ln : "");
+				ImGui::OpenPopup("##ruler_ctx");
+			}
+			if (ImGui::BeginPopup("##ruler_ctx")) {
+				if (st->ctx_label >= 0 && st->ctx_label < clip->labels.Size) {
+					ImGui::TextDisabled("Label at %.3fs", clip->labels[st->ctx_label].time);
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+					bool enter = ImGui::InputText("##rename", st->label_name, sizeof(st->label_name), ImGuiInputTextFlags_EnterReturnsTrue);
+					ImGui::SameLine();
+					if ((ImGui::Button("Rename") || enter) && st->label_name[0]) {
+						push_undo(st, clip);
+						clip->labels[st->ctx_label].id = iam_id(st->label_name);
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Delete label")) { push_undo(st, clip); clip->labels.erase(clip->labels.Data + st->ctx_label); }
+				} else if (st->ctx_marker >= 0 && st->ctx_marker < clip->markers.Size) {
+					ImGui::TextDisabled("Marker 0x%08X at %.3fs", clip->markers[st->ctx_marker].marker_id, clip->markers[st->ctx_marker].time);
+					if (ImGui::MenuItem("Delete marker")) { push_undo(st, clip); clip->markers.erase(clip->markers.Data + st->ctx_marker); }
+				} else {
+					ImGui::TextDisabled("New label at %.3fs", st->ctx_time);
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+					bool enter = ImGui::InputText("##newlabel", st->label_name, sizeof(st->label_name), ImGuiInputTextFlags_EnterReturnsTrue);
+					ImGui::SameLine();
+					if ((ImGui::Button("Add label") || enter) && st->label_name[0]) {
+						push_undo(st, clip);
+						iam_clip_detail::clip_label cl;
+						cl.id = iam_id(st->label_name);
+						cl.time = st->ctx_time;
+						clip->labels.push_back(cl);
+						ImGui::CloseCurrentPopup();
+					}
+					if (g_key_clipboard.Size > 0 && ImGui::MenuItem("Paste keys here", "Ctrl+V")) { paste_at(st, clip, st->ctx_time); after_edit(st, clip, preview_id); }
+				}
+				ImGui::EndPopup();
+			}
+			if (ruler_hovered && hov_label >= 0 && st->drag_label < 0) ImGui::SetTooltip("Label: drag to move, right-click to rename/delete");
+			else if (ruler_hovered && hov_marker >= 0 && st->drag_marker < 0) ImGui::SetTooltip("Marker 0x%08X: drag to move, right-click to delete", clip->markers[hov_marker].marker_id);
 			if (ruler_active && preview.valid()) {
 				if (ImGui::IsItemActivated() && preview.is_playing() && !preview.is_paused()) preview.pause();
 				float t = IAM_ED_X2T(io.MousePos.x);
@@ -10649,6 +11051,7 @@ namespace iam_clip_editor_detail {
 				preview = iam_play(clip_id, preview_id);
 				preview.pause();
 			}
+			(void)hov_marker;
 			dl->AddRectFilled(ruler_p, ImVec2(tl_x + tl_w, ruler_p.y + ruler_h), col_bg);
 			float step = nice_step(st->view_len * 70.0f / tl_w);
 			float first = ImFloor(st->view_t0 / step) * step;
@@ -10674,6 +11077,11 @@ namespace iam_clip_editor_detail {
 				ImVec2 ls = ImGui::CalcTextSize(ln);
 				dl->AddRectFilled(ImVec2(lt.x - 2, lt.y), ImVec2(lt.x + ls.x + 2, lt.y + ls.y), col_bg, 2.0f);  // readable over tick numbers
 				dl->AddText(lt, IM_COL32(230, 190, 90, 255), ln);
+			}
+			// Markers
+			for (int m = 0; m < clip->markers.Size; m++) {
+				float mx = IAM_ED_T2X(clip->markers[m].time), my = ruler_p.y + ruler_h * 0.78f, r = ruler_h * 0.18f;
+				dl->AddQuadFilled(ImVec2(mx, my - r), ImVec2(mx + r, my), ImVec2(mx, my + r), ImVec2(mx - r, my), IM_COL32(160, 120, 200, 255));
 			}
 			// Clip end + playhead handle
 			float end_x = IAM_ED_T2X(clip->duration);
@@ -10707,6 +11115,8 @@ namespace iam_clip_editor_detail {
 				ImGui::SetCursorScreenPos(ImVec2(lp.x, lp.y + row_h * t));
 				ImGui::PushID(t);
 				ImGui::InvisibleButton("##label", ImVec2(label_w, row_h));
+				if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f) && st->drag_track < 0) { push_undo(st, clip); st->drag_track = t; }
+				if (ImGui::IsItemHovered() && st->drag_track < 0) ImGui::SetTooltip("Drag to reorder, right-click for options");
 				if (ImGui::BeginPopupContextItem("##track_ctx")) {
 					char lbl[64];
 					track_label(trk, lbl, sizeof(lbl));
@@ -10724,11 +11134,14 @@ namespace iam_clip_editor_detail {
 						if (!io.KeyCtrl) st->selected.clear();
 						for (int k = 0; k < trk.keys.Size; k++) st->select(trk.keys[k].uid);
 					}
+					if (g_key_clipboard.Size > 0 && ImGui::MenuItem("Paste keys at playhead", "Ctrl+V")) { paste_at(st, clip, snap_time(st, play_t)); after_edit(st, clip, preview_id); }
+					if (ImGui::MenuItem("Move up", nullptr, false, t > 0)) { push_undo(st, clip); swap_tracks(clip->iam_tracks[t], clip->iam_tracks[t - 1]); }
+					if (ImGui::MenuItem("Move down", nullptr, false, t + 1 < clip->iam_tracks.Size)) { push_undo(st, clip); swap_tracks(clip->iam_tracks[t], clip->iam_tracks[t + 1]); }
 					ImGui::Separator();
 					if (ImGui::MenuItem("Delete track")) delete_track = t;
 					ImGui::EndPopup();
 				}
-				ImU32 lane_col = (t & 1) ? col_lane_alt : col_lane;
+				ImU32 lane_col = (t == st->drag_track) ? IM_COL32(70, 78, 98, 255) : ((t & 1) ? col_lane_alt : col_lane);
 				float y = lp.y + row_h * t;
 				ldl->AddRectFilled(ImVec2(lp.x, y), ImVec2(lp.x + label_w - 2, y + row_h - 1), lane_col);
 				char lbl[64];
@@ -10755,6 +11168,19 @@ namespace iam_clip_editor_detail {
 				if (right - tw > lp.x + style.FramePadding.x + ImGui::CalcTextSize(lbl).x + 6)
 					ldl->AddText(ImVec2(right - tw, ty), IM_COL32(120, 125, 140, 255), tn);
 				ImGui::PopID();
+			}
+			// Track reorder: move the dragged track to the row under the mouse
+			if (st->drag_track >= 0) {
+				if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || st->drag_track >= clip->iam_tracks.Size) st->drag_track = -1;
+				else {
+					int target = ImClamp((int)ImFloor((io.MousePos.y - lp.y) / row_h), 0, clip->iam_tracks.Size - 1);
+					while (target != st->drag_track) {
+						int next = st->drag_track + (target > st->drag_track ? 1 : -1);
+						swap_tracks(clip->iam_tracks[st->drag_track], clip->iam_tracks[next]);
+						st->drag_track = next;
+						st->modified = true;
+					}
+				}
 			}
 			if (delete_track >= 0) {
 				push_undo(st, clip);
@@ -10911,6 +11337,10 @@ namespace iam_clip_editor_detail {
 					}
 					ImGui::EndMenu();
 				}
+				if (ImGui::MenuItem("Copy", "Ctrl+C")) copy_selected(st, clip);
+				if (ImGui::MenuItem("Duplicate", "Ctrl+D")) { duplicate_selected(st, clip); after_edit(st, clip, preview_id); }
+				if (ImGui::MenuItem("Paste at playhead", "Ctrl+V", false, g_key_clipboard.Size > 0)) { paste_at(st, clip, snap_time(st, play_t)); after_edit(st, clip, preview_id); }
+				ImGui::Separator();
 				if (ImGui::MenuItem("Delete", "Del")) { delete_selected(st, clip); after_edit(st, clip, preview_id); }
 				ImGui::EndPopup();
 			}
@@ -10977,6 +11407,9 @@ namespace iam_clip_editor_detail {
 				for (int t = 0; t < clip->iam_tracks.Size; t++)
 					for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) st->select(clip->iam_tracks[t].keys[k].uid);
 			}
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && st->selected.Size) copy_selected(st, clip);
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && g_key_clipboard.Size) { paste_at(st, clip, snap_time(st, preview.valid() ? preview.time() : 0.0f)); after_edit(st, clip, preview_id); }
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && st->selected.Size) { duplicate_selected(st, clip); after_edit(st, clip, preview_id); }
 			bool undo_key = io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z);
 			bool redo_key =io.KeyCtrl && ((io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) || ImGui::IsKeyPressed(ImGuiKey_Y));
 			if (undo_key && st->undo.Size) { st->redo.push_back(take_snapshot(clip)); restore_snapshot(clip, st->undo.back()); IM_DELETE(st->undo.back()); st->undo.pop_back(); st->selected.clear(); refresh_preview(preview_id); st->modified = true; }
@@ -11034,7 +11467,7 @@ namespace iam_clip_editor_detail {
 						activated |= ImGui::IsItemActivated();
 					}
 				}
-				if (kf->has_variation) ImGui::TextDisabled("This key has per-loop variation (kept, not editable here).");
+				changed |= edit_variation(*kf, trk, &activated);
 				ImGui::PopItemWidth();
 				ImGui::EndGroup();
 

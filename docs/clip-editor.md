@@ -46,7 +46,11 @@ Both functions return `true` on frames where the clip changed.
 | Drag selected keys | Retime them (snaps to the step, hold Alt for free) |
 | Double-click a lane | Add a key there, valued on the existing curve |
 | Right-click a key | Set ease for the selection, delete |
-| Right-click a track label | Add key at playhead, select all keys, delete track |
+| Right-click a track label | Add key at playhead, select all keys, paste, move up/down, delete track |
+| Drag a track label | Reorder tracks |
+| Ctrl+C / Ctrl+V / Ctrl+D | Copy keys, paste at the playhead (works across clips, creates missing tracks), duplicate after the selection |
+| Drag a label / marker in the ruler | Retime it |
+| Right-click the ruler | Add a label there (or paste keys); on a label: rename / delete; on a marker: delete |
 | Del / Backspace | Delete selected keys |
 | Ctrl+A | Select all keys |
 | Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z | Undo, redo |
@@ -66,6 +70,11 @@ edited on a graph with the [ease editor](easing.md#ease-editor) (presets, steps,
 cubic-bezier handles, custom curves). Curve eases are exported by "Copy C++" and
 saved in clip files. With several keys selected you can set the
 ease for all of them or delete them.
+
+Keys with per-loop variation (float, int, vec2, vec4, color) can be edited in
+the inspector (mode, amount, seed); callback and per-axis variations are shown
+but not edited. Variations are exported by "Copy C++" (`key_*_var` calls) and
+saved in clip files.
 
 ## Toolbar
 
@@ -92,8 +101,8 @@ exported as hex (`0x1A2B3C4Du`).
 
 ## Notes
 
-- Keys with per-loop variation are kept and retimed, but their variation is not
-  editable in the editor nor exported.
-- Callbacks and markers are not touched by the editor.
+- Markers can be moved and deleted, not created (they carry callbacks). Undo covers keys, tracks,
+  labels, markers and the points of curve eases used by keys. Rebuilding the clip from code (or
+  loading it elsewhere) clears the editor's undo history.
 - Edits change the clip itself: if your code calls `iam_clip::begin()` on the
   same id again (e.g. every frame), it overwrites the edits. Build clips once.

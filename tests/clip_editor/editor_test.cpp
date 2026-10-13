@@ -87,14 +87,16 @@ static std::string export_cpp() {
 static int count_occ(std::string const& s, const char* sub) { int n = 0; for (size_t p = s.find(sub); p != std::string::npos; p = s.find(sub, p + 1)) n++; return n; }
 
 static int row_of(std::string const& code, const char* name) {
-	// Track order = order of first appearance in the export
+	// Track order = order of first appearance of a channel in the key lines ("\t.key_xxx(iam_id(\"name\")")
 	int row = 0; std::string seen;
 	size_t p = 0;
-	while ((p = code.find("iam_id(\"", p)) != std::string::npos) {
-		size_t e = code.find('"', p + 8);
-		std::string n = code.substr(p + 8, e - p - 8);
-		p = e;
-		if (n == "test_clip") continue;
+	while ((p = code.find("\t.key", p)) != std::string::npos) {
+		size_t q = code.find("(iam_id(\"", p);
+		size_t eol = code.find('\n', p);
+		p = (eol == std::string::npos) ? code.size() : eol;
+		if (q == std::string::npos || q > p) continue;
+		size_t e = code.find('"', q + 9);
+		std::string n = code.substr(q + 9, e - q - 9);
 		if (seen.find("|" + n + "|") != std::string::npos) continue;
 		if (n == name) return row;
 		seen += "|" + n + "|"; row++;
@@ -248,6 +250,10 @@ int main() {
 			.key_vec4_rel(iam_id("v4rel"), 0.0f, iam_v4(0.1f, 0.2f, 0.3f, 0.4f), iam_v4(1, 2, 3, 4), iam_anchor_last_item)
 			.key_color_rel(iam_id("crel"), 0.0f, iam_v4(0.1f, 0.2f, 0.3f, 1), iam_v4(0, 0, 0, 0), iam_col_hsv, iam_anchor_window_content)
 			.key_color(CH_C, 0.0f, iam_v4(1, 1, 1, 1), iam_col_srgb_linear, iam_ease_in_expo)
+			.key_float_var(iam_id("varied"), 0.0f, 0.0f, iam_varf_inc(5.0f))
+			.key_float(iam_id("varied"), 1.0f, 1.0f)
+			.key_vec2_var(iam_id("varied2"), 0.0f, iam_v2(0, 0), iam_varv2_rand(3.0f, 4.0f))
+			.key_vec2(iam_id("varied2"), 1.0f, iam_v2(1, 1))
 			.set_delay(0.125f)
 			.set_loop(true, iam_dir_alternate, 3)
 			.set_loop_delay(0.5f)
@@ -262,7 +268,79 @@ int main() {
 		CHECK(all.find("iam_ease_curve_set(iam_id(\"bump\"), curve_0, 7);") != std::string::npos, "export defines the curve");
 		CHECK(all.find("iam_ease_curve, iam_ease_curve_ref(iam_id(\"bump\"))") != std::string::npos, "export references the curve");
 		CHECK(all.find("iam_ease_steps, bezier_") != std::string::npos, "export keeps steps params");
+		CHECK(all.find(".key_float_var(iam_id(\"varied\"), 0.0f, 0.0f, iam_variation_float{ iam_var_increment, 5.0f") != std::string::npos, "export float variation as key_float_var");
+		CHECK(all.find(".key_vec2_var(iam_id(\"varied2\")") != std::string::npos && all.find("iam_variation_vec2{ iam_var_random, iam_v2(3.0f, 4.0f)") != std::string::npos, "export vec2 variation");
 		FILE* f2 = fopen("exported_clip2.inl", "wb"); if (f2) { fputs(all.c_str(), f2); fclose(f2); }
+	}
+
+	// ---------------- Copy / paste / duplicate, track reorder, ruler labels, curve undo, variation save ----------------
+	{
+		ImGuiID const A = iam_id("ka"), B = iam_id("kb"), CV = iam_id("cv_curve");
+		iam_vec2 const c1[] = { iam_v2(0, 0), iam_v2(0.3f, 0.0f), iam_v2(0.7f, 1.0f), iam_v2(1, 1) };
+		iam_ease_curve_set(CV, c1, 4);
+		iam_clip::begin(CLIP)
+			.key_float(A, 0.0f, 0.0f, iam_ease_curve, iam_ease_curve_ref(CV)).key_float(A, 1.0f, 1.0f)
+			.key_float(B, 0.0f, 5.0f).key_float(B, 2.0f, 6.0f)
+			.label(iam_id("cue"), 0.5f)
+			.end();
+		inst = iam_instance(INST);
+		iam_play(CLIP, INST).pause();
+		frames(40);
+		std::string code = export_cpp();
+		int ra = row_of(code, "ka"), rb = row_of(code, "kb");
+		CHECK(ra == 0 && rb == 1, "rows: ka %d, kb %d", ra, rb);
+		L = get_layout(2.0f);
+		// Select ka@1.0, copy, move the playhead to 1.5, paste
+		click(key_pos(L, ra, 1.0f));
+		key(ImGuiKey_C, true);
+		frames(30);
+		click(key_pos(L, rb, 1.5f));                   // empty lane space: moves the playhead
+		key(ImGuiKey_V, true);
+		code = export_cpp();
+		CHECK(count_occ(code, ".key_float(iam_id(\"ka\")") == 3 && code.find(".key_float(iam_id(\"ka\"), 1.5f, 1.0f") != std::string::npos, "Ctrl+C / Ctrl+V pastes at the playhead");
+		key(ImGuiKey_D, true);                         // duplicate the pasted key (selected) right after it
+		code = export_cpp();
+		CHECK(count_occ(code, ".key_float(iam_id(\"ka\")") == 4, "Ctrl+D duplicates the selection");
+		// Undo restores curve points captured with the keys
+		iam_vec2 const c2[] = { iam_v2(0, 0), iam_v2(0.1f, 0.9f), iam_v2(0.2f, 1.0f), iam_v2(1, 1) };
+		iam_ease_curve_set(CV, c2, 4);
+		key(ImGuiKey_Z, true);
+		iam_vec2 back[4]; iam_ease_curve_get(CV, back, 4);
+		CHECK(IAM_VEC2_TO_IM(back[1]).x == 0.3f, "undo restores the curve points (%.2f)", IAM_VEC2_TO_IM(back[1]).x);
+		// Track reorder: drag the ka label down to the kb row
+		frames(30);
+		L = get_layout(iam_clip_duration(CLIP));
+		ImVec2 lab(L.lanes_pos.x + 10.0f, L.lanes_pos.y + L.row_h * 0.5f);
+		mouse_to(lab); mouse_btn(0, true);
+		for (int i = 1; i <= 6; i++) mouse_to(ImVec2(lab.x, lab.y + L.row_h * 1.2f * i / 6.0f));
+		mouse_btn(0, false);
+		code = export_cpp();
+		CHECK(row_of(code, "kb") == 0 && row_of(code, "ka") == 1, "dragging a track label reorders tracks");
+		// Ruler: drag the "cue" label from 0.5s to ~1.0s
+		frames(30);
+		float d = iam_clip_duration(CLIP);
+		L = get_layout(d);
+		float ruler_y = L.lanes_pos.y - L.row_h * 0.5f;
+		ImVec2 lx(L.tl_x + (0.5f - L.t0) / L.len * L.tl_w, ruler_y);
+		mouse_to(lx); mouse_btn(0, true);
+		for (int i = 1; i <= 6; i++) mouse_to(ImVec2(lx.x + (0.5f / L.len * L.tl_w) * i / 6.0f, ruler_y));
+		mouse_btn(0, false);
+		CHECK(fabsf(iam_clip_label_time(CLIP, iam_id("cue")) - 1.0f) < 0.051f, "dragging a ruler label retimes it (%.3f)", iam_clip_label_time(CLIP, iam_id("cue")));
+		key(ImGuiKey_Z, true);
+		CHECK(iam_clip_label_time(CLIP, iam_id("cue")) == 0.5f, "undo restores the label time");
+
+		// Variations survive save/load (v7)
+		ImGuiID const VC = iam_id("var_clip");
+		iam_clip::begin(VC).key_float_var(1, 0.0f, 10.0f, iam_varf_inc(5.0f)).key_float(1, 1.0f, 10.0f).set_loop(true, iam_dir_normal, -1).end();
+		CHECK(iam_clip_save(VC, "var_clip.iamclip") == iam_ok, "save clip with variation");
+		iam_clip::begin(VC).key_float(1, 0.0f, 0.0f).end();
+		ImGuiID loaded = 0;
+		CHECK(iam_clip_load("var_clip.iamclip", &loaded) == iam_ok && loaded == VC, "load");
+		remove("var_clip.iamclip");
+		iam_instance vi = iam_play(VC, ImHashStr("vi"));
+		for (int f = 0; f < 70; f++) frame();            // second loop: start value 10 + 5
+		float vv = 0; vi.get_float(1, &vv);
+		CHECK(vv > 10.5f, "variation still applies after load (%.2f)", vv);
 	}
 
 	ImGui::DestroyContext();
