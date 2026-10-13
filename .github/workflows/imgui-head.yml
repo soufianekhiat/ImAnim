@@ -1,0 +1,44 @@
+name: Dear ImGui head
+
+# Build and test against the latest Dear ImGui (master and docking), also with obsolete
+# functions disabled, so upstream API changes are caught before they reach a release.
+on:
+  push:
+    branches: [ main, v2 ]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'   # weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  imgui-head:
+    runs-on: ubuntu-latest
+    name: imgui ${{ matrix.branch }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ master, docking ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui ${{ matrix.branch }}
+        run: git clone --depth 1 --branch ${{ matrix.branch }} https://github.com/ocornut/imgui.git imgui_head
+
+      - name: Compile with IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+        run: |
+          for f in im_anim.cpp im_anim_demo.cpp im_anim_doc.cpp im_anim_usecase.cpp; do
+            echo "== $f"
+            g++ -std=c++11 -fsyntax-only -DIMGUI_DISABLE_OBSOLETE_FUNCTIONS -Iimgui_head -I. $f
+          done
+
+      - name: Run tests
+        env:
+          IMGUI_DIR: imgui_head
+        run: |
+          for t in vec_types clip_editor springs presence motion utils clip_control ease extras; do
+            echo "== $t"
+            OUT_DIR=build/head_$t sh tests/$t/run.sh
+          done
