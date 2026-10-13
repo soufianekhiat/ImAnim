@@ -20,3 +20,17 @@ jobs:
 
       - name: Build and compare default vs custom vector types
         run: sh tests/vec_types/run.sh
+
+  clip-editor:
+    runs-on: ubuntu-latest
+    name: Clip editor (headless) and exported code
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Drive the editor and compile its exported code
+        run: sh tests/clip_editor/run.sh
