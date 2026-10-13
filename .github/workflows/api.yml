@@ -76,3 +76,17 @@ jobs:
 
       - name: Run
         run: sh tests/motion/run.sh
+
+  utils:
+    runs-on: ubuntu-latest
+    name: Reduced motion, velocity tracking, SVG import, text scramble
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/utils/run.sh
