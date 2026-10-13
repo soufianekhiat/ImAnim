@@ -170,6 +170,24 @@ ImVec2 offset = iam_path_evaluate(ImHashStr("orbit"), t);
 ImVec2 pos = ImVec2(center.x + offset.x, center.y + offset.y);
 ```
 
+## Drawing Paths
+
+`iam_path_draw()` strokes part of a path, `[t0, t1]` as a fraction of its arc
+length, so the stroke grows at constant speed:
+
+```cpp
+// Draw-on effect
+float t = iam_tween_float(id, ImHashStr("draw"), 1.0f, 1.2f, iam_ease_preset(iam_ease_in_out_cubic), iam_policy_crossfade, dt);
+iam_path_draw(dl, path_id, 0.0f, t, IM_COL32(91, 194, 231, 255), 3.0f, origin);
+
+// Segment running around a closed path (t1 < t0 wraps)
+float a = fmodf(time * 0.4f, 1.0f);
+iam_path_draw(dl, loop_id, a, fmodf(a + 0.25f, 1.0f), IM_COL32_WHITE, 4.0f, origin);
+```
+
+`iam_path_morph_draw()` does the same on a morph between two paths.
+`segments = 0` picks a segment count from the drawn length.
+
 ## See Also
 
 - [Text Along Paths](text-along-paths.md) - Render text along curves

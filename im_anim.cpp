@@ -849,9 +849,12 @@ void iam_update_begin_frame() {
 
 static void iam_spring_gc(unsigned max_age);  // Spring channels section
 static void iam_spring_clear();
+static void iam_presence_gc(unsigned max_age);  // Presence section
+static void iam_presence_clear();
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
+	iam_presence_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -862,6 +865,7 @@ void iam_gc(unsigned int max_age_frames) {
 void iam_pool_clear() {
 	// Clean up all pools
 	iam_spring_clear();
+	iam_presence_clear();
 	iam_detail::g_float.pool.Clear();
 	iam_detail::g_vec2.pool.Clear();
 	iam_detail::g_vec4.pool.Clear();
@@ -1649,6 +1653,136 @@ iam_vec4 iam_tween_velocity_vec4(ImGuiID id, ImGuiID channel_id) {
 	int n = 0;
 	iam_spring_detail::spring_chan* s = iam_spring_detail::find(id, channel_id, &n);
 	return IAM_VEC4_FROM_IM(s && n == 4 ? ImVec4(s->v[0], s->v[1], s->v[2], s->v[3]) : ImVec4(0, 0, 0, 0));
+}
+
+// ----------------------------------------------------
+// Presence (enter/exit)
+// ----------------------------------------------------
+namespace iam_presence_detail {
+	struct presence_state {
+		float from, to;        // current segment: value goes from -> to
+		float u;               // segment progress [0,1]
+		float dur;             // segment duration (scaled by distance)
+		float value;
+		bool  entering;        // segment direction (to == 1)
+		unsigned last_seen_frame;
+		unsigned last_step_frame;
+	};
+	static ImPool<presence_state> g_states;
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_states.GetMapSize(); ++i) {
+			if (presence_state* s = g_states.TryGetMapData(i)) {
+				if (iam_detail::g_frame - s->last_seen_frame > max_age) {
+					ImGuiID k = g_states.Map.Data[i].key;
+					g_states.Remove(k, g_states.GetIndex(s));
+				}
+			}
+		}
+	}
+} // namespace iam_presence_detail
+
+static void iam_presence_gc(unsigned max_age) { iam_presence_detail::gc(max_age); }
+static void iam_presence_clear() { iam_presence_detail::g_states.Clear(); }
+
+bool iam_presence(ImGuiID id, bool visible, float* out_t, float dt, iam_presence_opts const& opts) {
+	using namespace iam_presence_detail;
+	presence_state* s = g_states.GetByKey(id);
+	if (!s) {
+		s = g_states.GetOrAddByKey(id);
+		float v0 = (visible && !opts.animate_first) ? 1.0f : 0.0f;
+		s->from = s->to = s->value = v0;
+		s->u = 1.0f;
+		s->dur = 0.0f;
+		s->entering = visible;
+		s->last_step_frame = iam_detail::g_frame - 1;
+	}
+	s->last_seen_frame = iam_detail::g_frame;
+
+	// New direction: start a segment from the current value (continuous when reversing mid-way)
+	float target = visible ? 1.0f : 0.0f;
+	if (s->to != target) {
+		s->from = s->value;
+		s->to = target;
+		s->u = 0.0f;
+		s->entering = visible;
+		float full = visible ? opts.enter_duration : opts.exit_duration;
+		float dist = ImClamp(ImFabs(target - s->value), 0.0f, 1.0f);
+		s->dur = full * dist;
+	}
+
+	// Advance once per frame
+	if (s->last_step_frame != iam_detail::g_frame) {
+		s->last_step_frame = iam_detail::g_frame;
+		if (s->u < 1.0f) {
+			float step = dt * iam_detail::g_time_scale;
+			s->u = (s->dur <= 1e-6f) ? 1.0f : ImMin(s->u + step / s->dur, 1.0f);
+		}
+	}
+	float w = (s->u >= 1.0f) ? 1.0f : iam_detail::eval(s->entering ? opts.enter_ease : opts.exit_ease, s->u);
+	s->value = s->from + (s->to - s->from) * w;
+	if (s->u >= 1.0f) s->value = s->to;
+
+	if (out_t) *out_t = s->value;
+	return visible || s->u < 1.0f;
+}
+
+bool iam_presence_is_animating(ImGuiID id) {
+	iam_presence_detail::presence_state* s = iam_presence_detail::g_states.GetByKey(id);
+	return s && s->u < 1.0f;
+}
+
+// ----------------------------------------------------
+// Path drawing
+// ----------------------------------------------------
+namespace iam_path_draw_detail {
+	// Fill pts with positions at fractions [a, b] using sample(t); returns point count
+	template<typename F>
+	static int sample_range(ImVector<ImVec2>& pts, float a, float b, int n, ImVec2 offset, F sample) {
+		for (int i = 0; i <= n; i++) {
+			float t = a + (b - a) * (float)i / (float)n;
+			ImVec2 p = sample(t);
+			pts.push_back(ImVec2(p.x + offset.x, p.y + offset.y));
+		}
+		return n + 1;
+	}
+
+	// Handles wrapping (t1 < t0) by drawing [t0, 1] then [0, t1]
+	template<typename F>
+	static void draw(ImDrawList* dl, float t0, float t1, float length, ImU32 col, float thickness, ImVec2 offset, int segments, F sample) {
+		if (!dl || (col & IM_COL32_A_MASK) == 0) return;
+		t0 = ImClamp(t0, 0.0f, 1.0f);
+		t1 = ImClamp(t1, 0.0f, 1.0f);
+		float spans[2][2];
+		int span_count = 0;
+		if (t1 >= t0) { spans[0][0] = t0; spans[0][1] = t1; span_count = 1; }
+		else { spans[0][0] = t0; spans[0][1] = 1.0f; spans[1][0] = 0.0f; spans[1][1] = t1; span_count = 2; }
+		static ImVector<ImVec2> pts;
+		for (int s = 0; s < span_count; s++) {
+			float a = spans[s][0], b = spans[s][1];
+			if (b - a <= 1e-6f) continue;
+			int n = segments > 0 ? segments : ImClamp((int)(length * (b - a) / 4.0f), 8, 512);
+			pts.resize(0);
+			sample_range(pts, a, b, n, offset, sample);
+			dl->AddPolyline(pts.Data, pts.Size, col, 0, thickness);
+		}
+	}
+} // namespace iam_path_draw_detail
+
+void iam_path_draw(ImDrawList* dl, ImGuiID path_id, float t0, float t1, ImU32 col, float thickness, iam_vec2 offset, int segments) {
+	if (!iam_path_exists(path_id)) return;
+	float len = iam_path_length(path_id);
+	if (len <= 0.0f) return;
+	iam_path_draw_detail::draw(dl, t0, t1, len, col, thickness, IAM_VEC2_TO_IM(offset), segments,
+		[&](float t) { return iam_path_evaluate_at_distance_impl(path_id, t * len); });
+}
+
+void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float blend, float t0, float t1, ImU32 col, float thickness,
+                         iam_vec2 offset, iam_morph_opts const& opts, int segments) {
+	if (!iam_path_exists(path_a) || !iam_path_exists(path_b)) return;
+	float len = iam_path_length(path_a) + (iam_path_length(path_b) - iam_path_length(path_a)) * ImClamp(blend, 0.0f, 1.0f);
+	iam_path_draw_detail::draw(dl, t0, t1, len, col, thickness, IAM_VEC2_TO_IM(offset), segments,
+		[&](float t) { return iam_path_morph_impl(path_a, path_b, t, blend, opts); });
 }
 
 // ============================================================

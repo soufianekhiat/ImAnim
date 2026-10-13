@@ -208,6 +208,27 @@ iam_vec4 v4    = iam_tween_velocity_vec4(id, ch);   // also colors, in their ble
 Useful to skip work while idle, chain effects when a tween ends, or drive
 secondary motion (stretch, motion blur, tilt) from velocity.
 
+## Enter / Exit (Presence)
+
+`iam_presence()` animates an element in and out. It returns true while the
+element should be drawn, including during the exit animation, so you can keep
+drawing it until it is gone:
+
+```cpp
+float t;
+if (iam_presence(ImGui::GetID("toast"), show_toast, &t, dt)) {
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, t);
+    // ... draw the toast, e.g. offset by (1 - t) * 20 px ...
+    ImGui::PopStyleVar();
+}
+```
+
+`iam_presence_opts` sets separate enter/exit durations and eases (defaults:
+0.2s out_cubic in, 0.15s in_cubic out) and whether the first appearance
+animates. Reversing mid-way continues from the current value. To remove items
+from a list with an exit animation, mark them dead and erase them once
+`iam_presence()` returns false.
+
 ## Memory Management
 
 ```cpp

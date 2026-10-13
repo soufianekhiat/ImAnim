@@ -438,6 +438,13 @@ IM_ANIM_API iam_vec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiI
                             iam_ease_desc const& morph_ease, int policy, float dt,
                             iam_morph_opts const& opts = iam_morph_opts());
 
+// Path drawing - stroke part of a path, [t0, t1] as a fraction of its arc length (uniform speed).
+// Animate t1 from 0 to 1 for a "draw on" effect; t1 < t0 wraps around (marching segment on closed paths).
+// segments = 0 picks a count from the drawn length.
+IM_ANIM_API void iam_path_draw(ImDrawList* dl, ImGuiID path_id, float t0, float t1, ImU32 col, float thickness = 1.0f, iam_vec2 offset = iam_v2(0, 0), int segments = 0);
+IM_ANIM_API void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float blend, float t0, float t1, ImU32 col, float thickness = 1.0f,
+                                     iam_vec2 offset = iam_v2(0, 0), iam_morph_opts const& opts = iam_morph_opts(), int segments = 0);
+
 // Get current morph blend value from a tween (for querying state)
 IM_ANIM_API float  iam_get_morph_blend(ImGuiID id, ImGuiID channel_id);
 
@@ -732,6 +739,29 @@ IM_ANIM_API float    iam_spring_float(ImGuiID id, ImGuiID channel_id, float targ
 IM_ANIM_API iam_vec2 iam_spring_vec2(ImGuiID id, ImGuiID channel_id, iam_vec2 target, iam_spring_params const& params, float dt, iam_vec2 init_value = iam_v2(0, 0));
 IM_ANIM_API iam_vec4 iam_spring_vec4(ImGuiID id, ImGuiID channel_id, iam_vec4 target, iam_spring_params const& params, float dt, iam_vec4 init_value = iam_v4(0, 0, 0, 0));
 IM_ANIM_API iam_vec4 iam_spring_color(ImGuiID id, ImGuiID channel_id, iam_vec4 target_srgb, iam_spring_params const& params, int color_space, float dt, iam_vec4 init_value = iam_v4(1, 1, 1, 1)); // Simulated in color_space (oklab recommended; hue spaces move hue linearly).
+
+// ----------------------------------------------------
+// Presence - enter/exit animations
+// ----------------------------------------------------
+// Call every frame with the desired visibility. Returns true while the element should be drawn
+// (visible, or still animating out); *out_t goes 0 -> 1 on enter and 1 -> 0 on exit (may overshoot
+// with back/elastic eases). Reversing mid-way continues from the current value.
+//   float t;
+//   if (iam_presence(id, show_popup, &t, dt)) { ImGui::SetNextWindowBgAlpha(t); ... draw ... }
+struct iam_presence_opts {
+	float         enter_duration;   // Seconds for 0 -> 1 (default 0.2)
+	float         exit_duration;    // Seconds for 1 -> 0 (default 0.15)
+	iam_ease_desc enter_ease;       // Default out_cubic
+	iam_ease_desc exit_ease;        // Default in_cubic
+	bool          animate_first;    // Animate in when first seen visible (default true); false starts fully shown
+
+	iam_presence_opts() : enter_duration(0.2f), exit_duration(0.15f), animate_first(true) {
+		enter_ease.type = iam_ease_out_cubic; enter_ease.p0 = enter_ease.p1 = enter_ease.p2 = enter_ease.p3 = 0.0f;
+		exit_ease.type = iam_ease_in_cubic; exit_ease.p0 = exit_ease.p1 = exit_ease.p2 = exit_ease.p3 = 0.0f;
+	}
+};
+IM_ANIM_API bool iam_presence(ImGuiID id, bool visible, float* out_t, float dt, iam_presence_opts const& opts = iam_presence_opts());
+IM_ANIM_API bool iam_presence_is_animating(ImGuiID id);  // True while entering or exiting.
 
 // ----------------------------------------------------
 // Tween state queries - work for iam_tween_* and iam_spring_* channels of any type

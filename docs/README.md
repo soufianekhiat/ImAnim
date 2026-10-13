@@ -34,10 +34,10 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 
 | Category | Capabilities |
 |----------|-------------|
-| **Tweens** | Float, Vec2, Vec4, Int, Color with crossfade/cut/queue policies, velocity-preserving springs, state queries |
+| **Tweens** | Float, Vec2, Vec4, Int, Color with crossfade/cut/queue policies, velocity-preserving springs, enter/exit presence, state queries |
 | **Clips** | Timeline keyframes, looping, callbacks, chaining, stagger, variations |
 | **Easing** | Quad to Bounce presets, cubic-bezier, steps, spring physics, per-axis |
-| **Paths** | Bezier curves, Catmull-Rom splines, path morphing, text along paths |
+| **Paths** | Bezier curves, Catmull-Rom splines, path morphing, partial stroke drawing, text along paths |
 | **Transforms** | Position, rotation, scale with rotation modes |
 | **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise |
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
