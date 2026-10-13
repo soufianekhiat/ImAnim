@@ -86,6 +86,23 @@ static void DrawRotatedEllipse(ImDrawList* dl, ImVec2 ctr, ImVec2 radii, float a
 	dl->AddConvexPolyFilled(pts, segments, fill);
 }
 
+// Font for the large "ImAnim" logo text: the embedded scalable font (Dear ImGui 1.92.6+)
+// stays crisp at large sizes. Returns nullptr (= keep current font) when it can't be added.
+#if IMGUI_VERSION_NUM >= 19261
+static ImFont* GetLogoFont()
+{
+	static ImFont* font = nullptr;
+	static bool tried = false;
+	if (!tried) {
+		tried = true;
+		ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+		if (!atlas->Locked) // Locked when the renderer backend lacks ImGuiBackendFlags_RendererHasTextures
+			font = atlas->AddFontDefaultVector();
+	}
+	return font;
+}
+#endif
+
 static void ShowHeroAnimation()
 {
 	float dt = GetSafeDeltaTime();
@@ -538,6 +555,10 @@ static void ShowHeroAnimation()
 	// Hoverable with scale animation after reveal
 	// ================================================================
 	{
+#if IMGUI_VERSION_NUM >= 19261
+		ImFont* logo_font = GetLogoFont();
+		if (logo_font) ImGui::PushFont(logo_font, 0.0f); // Keep current size, swap glyphs
+#endif
 		const char* logo = "ImAnim";
 		float base_size = ImGui::GetFontSize();
 		float logo_scale = 3.2f;
@@ -675,6 +696,9 @@ static void ShowHeroAnimation()
 				}
 			}
 		}
+#if IMGUI_VERSION_NUM >= 19261
+		if (logo_font) ImGui::PopFont();
+#endif
 	}
 
 	// ================================================================
