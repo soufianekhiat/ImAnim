@@ -49,6 +49,29 @@ Fills use an anti-aliased trapezoid sweep with exact non-zero / even-odd rules,
 holes and self-intersections (adapted from DearWidgets). Strokes are outlined and
 filled once, so translucent strokes never darken where they overlap themselves.
 
+## GPU fill (optional, ImPlatform)
+
+Build `im_anim_lottie.cpp` with `IAM_LOTTIE_IMPLATFORM` defined, ImPlatform's
+`ImPlatform/` folder on the include path and `IM_CURRENT_GFX` set (the ImPlatform
+CMake targets export both). ImPlatform is not part of ImAnim; nothing changes
+without the define.
+
+Solid fills and strokes are then drawn by a winding-number pixel shader (adapted
+from DearWidgets): the CPU only builds the outline and the GPU does the coverage,
+one quad per horizontal band of at most 256 segments. On the sample files this cuts
+the CPU cost per draw 5-10x for stroke-heavy animations.
+
+```cpp
+iam_lottie_set_gpu(false);          // force the CPU fill (on by default)
+bool on = iam_lottie_gpu_active();  // compiled in, enabled and the shader compiled
+```
+
+It runs on the D3D10/11/12 backends (their custom-shader constant buffers hold the
+segments). Other backends, a failed shader compile, gradients and anything under a
+mask or matte use the CPU fill, so output is the same everywhere apart from
+anti-aliasing: the shader keeps the inside opaque and fades half a pixel outside,
+where the CPU fill fades across the edge.
+
 ## Limits
 
 Reported by `iam_lottie_warnings()` and skipped: expressions, effects, text and

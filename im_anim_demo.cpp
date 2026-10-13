@@ -4962,6 +4962,10 @@ static void ShowLottieDemo()
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
 	if (ImGui::SliderFloat("Time", &time, 0.0f, dur, "%.2fs")) paused = true;
+	static bool gpu = true;
+	if (ImGui::Checkbox("GPU fill", &gpu)) iam_lottie_set_gpu(gpu);
+	ImGui::SameLine();
+	ImGui::TextDisabled(iam_lottie_gpu_active() ? "(winding shader)" : "(CPU fill; the shader needs IAM_LOTTIE_IMPLATFORM on a D3D backend)");
 
 	float const fs = ImGui::GetFontSize();
 	ImVec2 const p = ImGui::GetCursorScreenPos();

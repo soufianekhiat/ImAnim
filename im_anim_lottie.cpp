@@ -9,6 +9,19 @@
 #include <string.h>
 #include <math.h>
 
+// Optional GPU fill through ImPlatform's custom shaders (the D3D backends take the large
+// constant buffer it needs; anything else keeps the CPU fill)
+#ifdef IAM_LOTTIE_IMPLATFORM
+#include "ImPlatform.h"
+#if defined(IM_CURRENT_GFX) && IMPLATFORM_GFX_SUPPORT_CUSTOM_SHADER && \
+	((IM_CURRENT_GFX == IM_GFX_DIRECTX10) || (IM_CURRENT_GFX == IM_GFX_DIRECTX11) || (IM_CURRENT_GFX == IM_GFX_DIRECTX12))
+#define IAM_LOTTIE_GPU 1
+#endif
+#endif
+#ifndef IAM_LOTTIE_GPU
+#define IAM_LOTTIE_GPU 0
+#endif
+
 namespace iam_lottie_detail {
 
 // ----------------------------------------------------------------------------
@@ -1256,6 +1269,146 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 }
 
 // ----------------------------------------------------------------------------
+// GPU fill (adapted from DearWidgets' winding-number stroke shader)
+// ----------------------------------------------------------------------------
+// One quad per horizontal band; the pixel shader casts a horizontal ray through the
+// band's segments for the winding number and fades the outside half pixel by distance.
+
+static bool s_gpu_enabled = true;
+
+#if IAM_LOTTIE_GPU
+static char const s_gpu_hlsl[] = R"(
+cbuffer vertexBuffer : register(b0) { float4x4 ProjMtx; };
+cbuffer lottieBuffer : register(b1) { float4 params; float4 fillColor; float4 bounds; float4 segments[1024]; };
+struct VS_INPUT { float2 pos : POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };
+struct PS_INPUT { float4 pos : SV_POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };
+PS_INPUT main_vs(VS_INPUT input) {
+	PS_INPUT o;
+	o.pos = mul(ProjMtx, float4(input.pos.xy, 0.f, 1.f));
+	o.col = input.col;
+	o.uv = input.uv;
+	return o;
+}
+float4 main_ps(PS_INPUT input) : SV_Target {
+	float2 P = lerp(bounds.xy, bounds.zw, input.uv.xy);
+	int num = (int)params.x;
+	int winding = 0;
+	float d2 = 1e10;
+	for (int i = 0; i < num; i++) {
+		float2 p0 = segments[i].xy, p1 = segments[i].zw;
+		float c = (p1.x - p0.x) * (P.y - p0.y) - (P.x - p0.x) * (p1.y - p0.y);
+		if (p0.y <= P.y) { if (p1.y > P.y && c > 0.0) winding++; }
+		else if (p1.y <= P.y && c < 0.0) winding--;
+		float2 d = p1 - p0;
+		float l2 = dot(d, d);
+		float t = l2 > 1e-8 ? saturate(dot(P - p0, d) / l2) : 0.0;
+		float2 q = P - (p0 + d * t);
+		d2 = min(d2, dot(q, q));
+	}
+	bool inside = params.y > 0.5 ? (winding & 1) != 0 : winding != 0;
+	// Inside is opaque so inner edges (stroke joins, overlaps) leave no seam
+	float a = inside ? 1.0 : saturate(0.5 - sqrt(d2));
+	if (a <= 0.0) discard;
+	return float4(fillColor.rgb, fillColor.a * a);
+}
+)";
+
+enum { GPU_MAX_SEGS = 1024, GPU_BAND_SEGS = 256 };
+static ImPlatform_ShaderProgram s_gpu_program = nullptr;
+static bool s_gpu_tried = false;
+
+static ImPlatform_ShaderProgram gpu_program() {
+	if (!s_gpu_enabled) return nullptr;
+	if (!s_gpu_tried) {
+		s_gpu_tried = true;  // a failed compile is not retried every frame
+		ImPlatform_ShaderDesc d;
+		memset(&d, 0, sizeof(d));
+		d.format = ImPlatform_ShaderFormat_HLSL;
+		d.source_code = s_gpu_hlsl;
+		d.stage = ImPlatform_ShaderStage_Vertex;
+		d.entry_point = "main_vs";
+		ImPlatform_Shader const vs = ImPlatform_CreateShader(&d);
+		d.stage = ImPlatform_ShaderStage_Fragment;
+		d.entry_point = "main_ps";
+		ImPlatform_Shader const ps = ImPlatform_CreateShader(&d);
+		if (vs && ps) s_gpu_program = ImPlatform_CreateShaderProgram(vs, ps);
+	}
+	return s_gpu_program;
+}
+
+// Callback data (copied by ImDrawList): program handle, then the constant buffer
+static void gpu_upload(ImDrawList const*, ImDrawCmd const* cmd) {
+	char const* d = (char const*)cmd->UserCallbackData;
+	ImPlatform_ShaderProgram prog;
+	memcpy(&prog, d, sizeof(prog));
+	ImPlatform_SetShaderUniform(prog, "lottieBuffer", d + 16, (unsigned int)cmd->UserCallbackDataSize - 16);
+}
+
+struct gpu_band { float y0, y1; int first, count; };
+
+// Splits [y0, y1] until each band holds few enough segments; false if it cannot
+static bool gpu_split(ImVec2 const* segs, ImVector<int> const& in, float y0, float y1, int depth, ImVector<gpu_band>& bands, ImVector<int>& idx) {
+	int const first = idx.Size;
+	for (int i = 0; i < in.Size; i++) {
+		ImVec2 const a = segs[in[i] * 2], b = segs[in[i] * 2 + 1];
+		if (ImMax(a.y, b.y) >= y0 - 1.0f && ImMin(a.y, b.y) <= y1 + 1.0f) idx.push_back(in[i]);  // +-1: the AA reach
+	}
+	int const count = idx.Size - first;
+	if (count > GPU_BAND_SEGS && y1 - y0 > 2.0f && depth < 16) {
+		ImVector<int> mine;
+		mine.resize(count);
+		memcpy(mine.Data, idx.Data + first, sizeof(int) * (size_t)count);
+		idx.resize(first);
+		float const mid = (y0 + y1) * 0.5f;
+		return gpu_split(segs, mine, y0, mid, depth + 1, bands, idx) && gpu_split(segs, mine, mid, y1, depth + 1, bands, idx);
+	}
+	if (count > GPU_MAX_SEGS) return false;
+	if (count > 0) { gpu_band b = { y0, y1, first, count }; bands.push_back(b); }
+	return true;
+}
+
+static bool gpu_fill(ImDrawList* dl, ImVec2 const* segs, int n, ImU32 col, int even_odd) {
+	ImPlatform_ShaderProgram const prog = gpu_program();
+	if (!prog || n <= 0) return false;
+	ImRect b(ImVec2(FLT_MAX, FLT_MAX), ImVec2(-FLT_MAX, -FLT_MAX));
+	for (int i = 0; i < n * 2; i++) b.Add(segs[i]);
+	b.Expand(1.0f);
+	ImVec4 const cr = dl->_CmdHeader.ClipRect;
+	b.ClipWithFull(ImRect(cr.x, cr.y, cr.z, cr.w));
+	if (b.Min.x >= b.Max.x || b.Min.y >= b.Max.y) return true;  // nothing visible
+	static ImVector<int> all, idx;
+	static ImVector<gpu_band> bands;
+	all.resize(n);
+	for (int i = 0; i < n; i++) all[i] = i;
+	idx.resize(0);
+	bands.resize(0);
+	if (!gpu_split(segs, all, b.Min.y, b.Max.y, 0, bands, idx)) return false;
+	ImVec4 const c = ImGui::ColorConvertU32ToFloat4(col);
+	static ImVector<char> buf;
+	for (int k = 0; k < bands.Size; k++) {
+		gpu_band const& bd = bands[k];
+		buf.resize(16 + 48 + bd.count * 16);
+		memset(buf.Data, 0, 64);
+		memcpy(buf.Data, &prog, sizeof(prog));
+		float* f = (float*)(void*)(buf.Data + 16);
+		f[0] = (float)bd.count; f[1] = even_odd ? 1.0f : 0.0f;
+		f[4] = c.x; f[5] = c.y; f[6] = c.z; f[7] = c.w;
+		f[8] = b.Min.x; f[9] = bd.y0; f[10] = b.Max.x; f[11] = bd.y1;
+		for (int i = 0; i < bd.count; i++) {
+			ImVec2 const p0 = segs[idx[bd.first + i] * 2], p1 = segs[idx[bd.first + i] * 2 + 1];
+			f[12 + i * 4] = p0.x; f[13 + i * 4] = p0.y; f[14 + i * 4] = p1.x; f[15 + i * 4] = p1.y;
+		}
+		dl->AddCallback(gpu_upload, buf.Data, (size_t)buf.Size);
+		ImPlatform_BeginCustomShader(dl, prog);
+		dl->AddImageQuad(ImGui::GetIO().Fonts->TexRef, ImVec2(b.Min.x, bd.y0), ImVec2(b.Max.x, bd.y0), ImVec2(b.Max.x, bd.y1), ImVec2(b.Min.x, bd.y1),
+		                 ImVec2(0, 0), ImVec2(1, 0), ImVec2(1, 1), ImVec2(0, 1), IM_COL32_WHITE);
+		ImPlatform_EndCustomShader(dl);
+	}
+	return true;
+}
+#endif
+
+// ----------------------------------------------------------------------------
 // Stroke outlines (pieces filled once with non-zero, so overlaps never darken)
 // ----------------------------------------------------------------------------
 
@@ -1481,6 +1634,9 @@ struct ctx {
 
 	void fill(ImVector<ImVec2> const& segs, ImU32 col, int even_odd, paint_t const* paint) {
 		if (collect) { for (int i = 0; i < segs.Size; i++) collect->push_back(segs[i]); return; }
+#if IAM_LOTTIE_GPU
+		if (!paint && nclips == 0 && gpu_fill(dl, segs.Data, segs.Size / 2, col, even_odd)) return;  // gradients and clips stay on the CPU
+#endif
 		fill_segments(dl, segs.Data, segs.Size / 2, col, even_odd, 1.0f, paint, clips, nclips);
 	}
 
@@ -1904,3 +2060,13 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);
 	C.render_comp(0, frame, M, 1.0f);
 }
+
+bool iam_lottie_gpu_active() {
+#if IAM_LOTTIE_GPU
+	return gpu_program() != nullptr;
+#else
+	return false;
+#endif
+}
+
+void iam_lottie_set_gpu(bool enabled) { s_gpu_enabled = enabled; }

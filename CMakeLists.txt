@@ -85,7 +85,8 @@ function(imanim_add_demo TARGET_NAME IMPLATFORM_LIB)
     add_executable(${TARGET_NAME} ${IMANIM_MAIN} ${IMANIM_SOURCES})
 
     target_include_directories(${TARGET_NAME} PRIVATE ${IMANIM_ROOT})
-    target_compile_definitions(${TARGET_NAME} PRIVATE IAM_DEMO_LOTTIE)
+    # The Lottie player uses ImPlatform custom shaders for its GPU fill where the backend allows
+    target_compile_definitions(${TARGET_NAME} PRIVATE IAM_DEMO_LOTTIE IAM_LOTTIE_IMPLATFORM)
     target_link_libraries(${TARGET_NAME} PRIVATE ${IMPLATFORM_LIB})
 
     if(WIN32)

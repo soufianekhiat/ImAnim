@@ -36,3 +36,10 @@ IM_ANIM_API bool         iam_lottie_marker(iam_lottie const* anim, char const* n
 // Draws the frame at `time` seconds (clamped to the animation; loop with fmodf) into
 // [pos, pos + size], keeping the aspect ratio. size 0 = composition size.
 IM_ANIM_API void         iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec2 pos, iam_vec2 size = iam_v2(0, 0));
+
+// GPU fill: build with IAM_LOTTIE_IMPLATFORM (and ImPlatform on the include path, with
+// IM_CURRENT_GFX defined) to fill solid shapes with a winding-number shader through
+// ImPlatform's custom shaders on the D3D10/11/12 backends. Gradients, masks and mattes,
+// other backends, or a failed shader compile use the CPU fill.
+IM_ANIM_API bool         iam_lottie_gpu_active();               // GPU fill compiled in, enabled and working
+IM_ANIM_API void         iam_lottie_set_gpu(bool enabled);      // on by default
