@@ -4939,6 +4939,200 @@ static char const s_demo_lottie[] = R"({"v":"5.7.0","fr":30,"ip":0,"op":60,"w":3
   {"ty":"tr","s":{"a":1,"k":[{"t":0,"s":[90,90],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":30,"s":[105,105],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":60,"s":[90,90]}]}}]}]}
 ]})";
 
+// UI animations made for this demo (same license as ImAnim)
+static char const s_lottie_daynight[] =
+	R"json({"v":"5.7.0","nm":"day night switch","fr":60,"ip":0,"op":40,"w":120,"h":60,"layers":[{"ty":4,"nm":"stars","ind":1,"ip":0,"op":40,"st":0,"ks":{},"shape)json"
+	R"json(s":[{"ty":"gr","it":[{"ty":"sr","sy":1,"p":{"a":0,"k":[0,0]},"or":{"a":0,"k":4.5},"ir":{"a":0,"k":1.6},"os":{"a":0,"k":0},"is":{"a":0,"k":0},"r":{"a":)json"
+	R"json(0,"k":0},"pt":{"a":0,"k":4}},{"ty":"fl","c":{"a":0,"k":[1,0.97,0.85,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[26,20]},"s":{"a":1,"k":[)json"
+	R"json({"t":22,"s":[0,0],"o":{"x":[0.3,0.3],"y":[0,0]},"i":{"x":[0.6,0.6],"y":[1.5,1.5]}},{"t":34,"s":[100,100]}]}}]},{"ty":"gr","it":[{"ty":"sr","sy":1,"p":)json"
+	R"json({"a":0,"k":[0,0]},"or":{"a":0,"k":3.5},"ir":{"a":0,"k":1.2},"os":{"a":0,"k":0},"is":{"a":0,"k":0},"r":{"a":0,"k":0},"pt":{"a":0,"k":4}},{"ty":"fl","c")json"
+	R"json(:{"a":0,"k":[1,0.97,0.85,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[40,36]},"s":{"a":1,"k":[{"t":26,"s":[0,0],"o":{"x":[0.3,0.3],"y":[0)json"
+	R"json(,0]},"i":{"x":[0.6,0.6],"y":[1.5,1.5]}},{"t":38,"s":[100,100]}]}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[3,3]}},{"ty":"fl)json"
+	R"json(","c":{"a":0,"k":[1,0.97,0.85,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[22,40]},"s":{"a":1,"k":[{"t":24,"s":[0,0],"o":{"x":[0.3,0.3],")json"
+	R"json(y":[0,0]},"i":{"x":[0.6,0.6],"y":[1.5,1.5]}},{"t":36,"s":[100,100]}]}}]}]},{"ty":4,"nm":"knob","ind":2,"ip":0,"op":40,"st":0,"ks":{"p":{"a":1,"k":[{"t)json"
+	R"json(":0,"s":[30,30],"o":{"x":0.6,"y":0},"i":{"x":0.3,"y":1}},{"t":30,"s":[90,30]}]},"r":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.6],"y":[0]},"i":{"x":[0.3],)json"
+	R"json("y":[1]}},{"t":30,"s":[-40]}]}},"shapes":[{"ty":"gr","nm":"craters","it":[{"ty":"el","p":{"a":0,"k":[-7,3]},"s":{"a":0,"k":[6,6]}},{"ty":"el","p":{"a")json"
+	R"json(:0,"k":[-2,9]},"s":{"a":0,"k":[4,4]}},{"ty":"el","p":{"a":0,"k":[-10,-5]},"s":{"a":0,"k":[3,3]}},{"ty":"fl","c":{"a":0,"k":[0.72,0.73,0.82,1]},"o":{"a)json"
+	R"json(":1,"k":[{"t":24,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.6],"y":[1]}},{"t":36,"s":[100]}]},"r":1},{"ty":"tr"}]},{"ty":"gr","nm":"body","it":[{"ty")json"
+	R"json(:"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[34,34]}},{"ty":"el","p":{"a":1,"k":[{"t":8,"s":[34,-12],"o":{"x":0.5,"y":0},"i":{"x":0.3,"y":1}},{"t":30,")json"
+	R"json(s":[10,-7]}]},"s":{"a":0,"k":[30,30]}},{"ty":"mm","mm":3},{"ty":"fl","c":{"a":1,"k":[{"t":6,"s":[1,0.8,0.22,1],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.5],)json"
+	R"json("y":[1]}},{"t":28,"s":[0.94,0.94,0.98,1]}]},"o":{"a":0,"k":100},"r":1},{"ty":"tr"}]},{"ty":"gr","nm":"rays","it":[{"ty":"rc","p":{"a":0,"k":[0,-23]},")json"
+	R"json(s":{"a":0,"k":[3,7]},"r":{"a":0,"k":1.5}},{"ty":"fl","c":{"a":0,"k":[1,0.86,0.35,1]},"o":{"a":0,"k":100},"r":1},{"ty":"rp","c":{"a":0,"k":8},"o":{"a":)json"
+	R"json(0,"k":0},"m":1,"tr":{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":45},"so":{"a":0,"k":100},"eo":{"a")json"
+	R"json(:0,"k":100}}},{"ty":"tr","s":{"a":1,"k":[{"t":0,"s":[100,100],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.7,0.7],"y":[1,1]}},{"t":12,"s":[0,0]}]},"r":{")json"
+	R"json(a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.7],"y":[1]}},{"t":12,"s":[90]}]}}]}]},{"ty":4,"nm":"clouds","ind":3,"ip":0,"op":40,"st":0)json"
+	R"json(,"ks":{"o":{"a":1,"k":[{"t":0,"s":[100],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.6],"y":[1]}},{"t":14,"s":[0]}]},"p":{"a":1,"k":[{"t":0,"s":[0,0],"o":{"x":)json"
+	R"json(0.4,"y":0},"i":{"x":0.6,"y":1}},{"t":14,"s":[0,12]}]}},"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[82,40]},"s":{"a":0,"k":[22,14]}},{"ty":"e)json"
+	R"json(l","p":{"a":0,"k":[93,35]},"s":{"a":0,"k":[20,18]}},{"ty":"el","p":{"a":0,"k":[102,41]},"s":{"a":0,"k":[18,12]}},{"ty":"mm","mm":2},{"ty":"fl","c":{"a)json"
+	R"json(":0,"k":[1,1,1,1]},"o":{"a":0,"k":95},"r":1},{"ty":"tr"}]}]},{"ty":4,"nm":"track","ind":4,"ip":0,"op":40,"st":0,"ks":{},"shapes":[{"ty":"gr","it":[{"t)json"
+	R"json(y":"rc","p":{"a":0,"k":[60,30]},"s":{"a":0,"k":[116,56]},"r":{"a":0,"k":28}},{"ty":"fl","c":{"a":1,"k":[{"t":0,"s":[0.42,0.73,0.98,1],"o":{"x":[0.5],")json"
+	R"json(y":[0]},"i":{"x":[0.5],"y":[1]}},{"t":30,"s":[0.13,0.14,0.32,1]}]},"o":{"a":0,"k":100},"r":1},{"ty":"tr"}]}]}]})json";
+static char const s_lottie_checkbox[] =
+	R"json({"v":"5.7.0","nm":"checkbox","fr":60,"ip":0,"op":28,"w":60,"h":60,"layers":[{"ty":4,"nm":"box","ind":1,"ip":0,"op":28,"st":0,"ks":{"p":{"a":0,"k":[30,)json"
+	R"json(30]}},"shapes":[{"ty":"gr","nm":"check","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-10,1],[-3,8],[11,-7]],"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0)json"
+	R"json(,0],[0,0]]}}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":8,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.2],"y":[1]}},{"t":24,"s":[100]}]},"o":{")json"
+	R"json(a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[1,1,1,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4.5},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","nm":"fill","i)json"
+	R"json(t":[{"ty":"rc","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[40,40]},"r":{"a":0,"k":9}},{"ty":"fl","c":{"a":0,"k":[0.36,0.76,0.91,1]},"o":{"a":0,"k":100},"r":)json"
+	R"json(1},{"ty":"tr","s":{"a":1,"k":[{"t":0,"s":[0,0],"o":{"x":[0.3,0.3],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1.4,1.4]}},{"t":14,"s":[100,100]}]}}]},{"ty":"gr")json"
+	R"json(,"nm":"frame","it":[{"ty":"rc","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[38,38]},"r":{"a":0,"k":8}},{"ty":"st","c":{"a":0,"k":[0.62,0.64,0.7,1]},"o":{"a":)json"
+	R"json(0,"k":100},"w":{"a":0,"k":3},"lc":2,"lj":2},{"ty":"tr"}]}]}]})json";
+static char const s_lottie_heart[] =
+	R"json({"v":"5.7.0","nm":"like heart","fr":60,"ip":0,"op":46,"w":80,"h":80,"layers":[{"ty":4,"nm":"heart","ind":1,"ip":0,"op":46,"st":0,"ks":{"p":{"a":0,"k":)json"
+	R"json([40,42]},"s":{"a":1,"k":[{"t":0,"s":[100,100],"o":{"x":[0.4,0.4],"y":[0,0]},"i":{"x":[0.8,0.8],"y":[1,1]}},{"t":7,"s":[0,0],"o":{"x":[0.2,0.2],"y":[0,)json"
+	R"json(0]},"i":{"x":[0.4,0.4],"y":[1,1]}},{"t":20,"s":[125,125],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":30,"s":[100,100]}]}},"shape)json"
+	R"json(s":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[-7,-4]},"s":{"a":0,"k":[18,18]}},{"ty":"el","p":{"a":0,"k":[7,-4]},"s":{"a":0,"k":[18,18]}},{"ty":"sh")json"
+	R"json(,"ks":{"a":0,"k":{"c":true,"v":[[-15.3,-1],[15.3,-1],[0,15]],"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]]}}},{"ty":"mm","mm":2},{"ty":"fl","c":{"a")json"
+	R"json(:1,"k":[{"t":0,"s":[0.62,0.64,0.7,1],"h":1},{"t":7,"s":[0.93,0.22,0.36,1]}]},"o":{"a":0,"k":100},"r":1},{"ty":"tr"}]}]},{"ty":4,"nm":"burst","ind":2,")json"
+	R"json(ip":0,"op":46,"st":0,"ks":{"p":{"a":0,"k":[40,40]}},"shapes":[{"ty":"gr","nm":"ring","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":1,"k":[{"t":7,"s")json"
+	R"json(:[0,0],"o":{"x":[0.2,0.2],"y":[0,0]},"i":{"x":[0.4,0.4],"y":[1,1]}},{"t":24,"s":[68,68]}]}},{"ty":"st","c":{"a":1,"k":[{"t":7,"s":[0.93,0.22,0.36,1],")json"
+	R"json(o":{"x":[0.5],"y":[0]},"i":{"x":[0.5],"y":[1]}},{"t":24,"s":[1,0.6,0.75,1]}]},"o":{"a":1,"k":[{"t":6,"s":[0],"h":1},{"t":7,"s":[100]}]},"w":{"a":1,"k")json"
+	R"json(:[{"t":7,"s":[10],"o":{"x":[0.3],"y":[0]},"i":{"x":[0.5],"y":[1]}},{"t":24,"s":[0]}]},"lc":1,"lj":1},{"ty":"tr"}]},{"ty":"gr","nm":"dots","it":[{"ty":)json"
+	R"json("el","p":{"a":1,"k":[{"t":14,"s":[0,-20],"o":{"x":0.2,"y":0},"i":{"x":0.4,"y":1}},{"t":36,"s":[0,-34]}]},"s":{"a":1,"k":[{"t":13,"s":[0,0],"h":1},{"t")json"
+	R"json(:14,"s":[6,6],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.7,0.7],"y":[1,1]}},{"t":36,"s":[0,0]}]}},{"ty":"fl","c":{"a":0,"k":[0.98,0.45,0.55,1]},"o":{"a)json"
+	R"json(":0,"k":100},"r":1},{"ty":"rp","c":{"a":0,"k":7},"o":{"a":0,"k":0},"m":1,"tr":{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[1)json"
+	R"json(00,100]},"r":{"a":0,"k":51.43},"so":{"a":0,"k":100},"eo":{"a":0,"k":100}}},{"ty":"tr","r":{"a":0,"k":15}}]}]}]})json";
+static char const s_lottie_menu[] =
+	R"json({"v":"5.7.0","nm":"menu close","fr":60,"ip":0,"op":24,"w":60,"h":60,"layers":[{"ty":4,"nm":"lines","ind":1,"ip":0,"op":24,"st":0,"ks":{},"shapes":[{"t)json"
+	R"json(y":"gr","nm":"top","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-14,0],[14,0]],"i":[[0,0],[0,0]],"o":[[0,0],[0,0]]}}},{"ty":"st","c":{"a":0,"k":[)json"
+	R"json(0.9,0.92,0.96,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":1,"k":[{"t":0,"s":[30,20],"o":{"x":0.5,"y":0},"i":{"x":0.5,)json"
+	R"json("y":1}},{"t":10,"s":[30,30]}]},"r":{"a":1,"k":[{"t":8,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.3],"y":[1.3]}},{"t":24,"s":[45]}]}}]},{"ty":"gr","nm)json"
+	R"json(":"middle","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-14,0],[14,0]],"i":[[0,0],[0,0]],"o":[[0,0],[0,0]]}}},{"ty":"st","c":{"a":0,"k":[0.9,0.92)json"
+	R"json(,0.96,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[30,30]},"s":{"a":1,"k":[{"t":0,"s":[100,100],"o":{"x":[0.5,0)json"
+	R"json(.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":10,"s":[0,100]}]},"o":{"a":1,"k":[{"t":0,"s":[100],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.5],"y":[1]}})json"
+	R"json(,{"t":10,"s":[0]}]}}]},{"ty":"gr","nm":"bottom","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-14,0],[14,0]],"i":[[0,0],[0,0]],"o":[[0,0],[0,0]]}})json"
+	R"json(},{"ty":"st","c":{"a":0,"k":[0.9,0.92,0.96,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":1,"k":[{"t":0,"s":[30,40],"o":)json"
+	R"json({"x":0.5,"y":0},"i":{"x":0.5,"y":1}},{"t":10,"s":[30,30]}]},"r":{"a":1,"k":[{"t":8,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.3],"y":[1.3]}},{"t":24,)json"
+	R"json("s":[-45]}]}}]}]}]})json";
+static char const s_lottie_progress[] =
+	R"json({"v":"5.7.0","nm":"progress done","fr":60,"ip":0,"op":124,"w":80,"h":80,"markers":[{"tm":0,"cm":"progress","dr":100},{"tm":100,"cm":"done","dr":24}],")json"
+	R"json(layers":[{"ty":4,"nm":"ring","ind":1,"ip":0,"op":124,"st":0,"ks":{"p":{"a":0,"k":[40,40]}},"shapes":[{"ty":"gr","nm":"check","it":[{"ty":"sh","ks":{"a)json"
+	R"json(":0,"k":{"c":false,"v":[[-11,1],[-3,9],[12,-8]],"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]]}}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":1)json"
+	R"json(06,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.2],"y":[1]}},{"t":122,"s":[100]}]},"o":{"a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[1,1,1,1]},"o":{")json"
+	R"json(a":0,"k":100},"w":{"a":0,"k":5},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","nm":"done fill","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[62,62])json"
+	R"json(}},{"ty":"fl","c":{"a":0,"k":[0.3,0.78,0.47,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","s":{"a":1,"k":[{"t":100,"s":[0,0],"o":{"x":[0.3,0.3],"y":[0,0]})json"
+	R"json(,"i":{"x":[0.5,0.5],"y":[1.3,1.3]}},{"t":114,"s":[100,100]}]}}]},{"ty":"gr","nm":"arc","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[56,56]}})json"
+	R"json(,{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0],"y":[0]},"i":{"x":[1],"y":[1]}},{"t":100,"s":[100]}]},"o":{"a":0,"k":0},"m":)json"
+	R"json(1},{"ty":"st","c":{"a":0,"k":[0.36,0.76,0.91,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":6},"lc":2,"lj":2},{"ty":"tr"}]},{"ty":"gr","nm":"track","it":[{"ty)json"
+	R"json(":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[56,56]}},{"ty":"st","c":{"a":0,"k":[0.3,0.32,0.38,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":6},"lc":2,"lj":2)json"
+	R"json(},{"ty":"tr"}]}]}]})json";
+
+// Moves a Lottie playhead toward the end while `on`, back toward the start otherwise, at
+// the file's own speed: a toggle reverses smoothly from wherever it is
+static float LottiePlayhead(float t, bool on, float duration, float back_speed = 1.0f)
+{
+	float const dt = iam_get_reduced_motion() ? duration : GetSafeDeltaTime();  // reduced motion: jump to the end state
+	return ImClamp(t + (on ? dt : -dt * back_speed), 0.0f, duration);
+}
+
+static void ShowLottieInteractionsDemo()
+{
+	static iam_lottie* daynight = nullptr;
+	static iam_lottie* checkbox = nullptr;
+	static iam_lottie* heart = nullptr;
+	static iam_lottie* menu = nullptr;
+	static iam_lottie* progress = nullptr;
+	if (!daynight) {
+		daynight = iam_lottie_load_from_memory(s_lottie_daynight, sizeof(s_lottie_daynight) - 1);
+		checkbox = iam_lottie_load_from_memory(s_lottie_checkbox, sizeof(s_lottie_checkbox) - 1);
+		heart = iam_lottie_load_from_memory(s_lottie_heart, sizeof(s_lottie_heart) - 1);
+		menu = iam_lottie_load_from_memory(s_lottie_menu, sizeof(s_lottie_menu) - 1);
+		progress = iam_lottie_load_from_memory(s_lottie_progress, sizeof(s_lottie_progress) - 1);
+	}
+	if (!daynight || !checkbox || !heart || !menu || !progress) { ImGui::TextDisabled("Failed to load the UI animations."); return; }
+
+	ImGui::TextWrapped("The UI drives the Lottie timeline: a toggle plays forward or backward from wherever it is, "
+		"a tween drives a progress segment, and markers split a file into segments.");
+	float const fs = ImGui::GetFontSize();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	// Day / night switch: its progress also tints the panel behind the widgets
+	static bool night = false;
+	static float t_night = 0.0f;
+	float const dn = iam_lottie_duration(daynight);
+	float const k_night = t_night / dn;
+	ImVec2 const panel = ImGui::GetCursorScreenPos();
+	ImVec2 const panel_size(ImGui::GetContentRegionAvail().x, fs * 8.0f);
+	ImVec4 const day_bg(0.86f, 0.91f, 0.97f, 1.0f), night_bg(0.08f, 0.09f, 0.16f, 1.0f);
+	dl->AddRectFilled(panel, ImVec2(panel.x + panel_size.x, panel.y + panel_size.y),
+		ImGui::ColorConvertFloat4ToU32(ImLerp(day_bg, night_bg, k_night)), 6.0f);
+	ImU32 const text_col = ImGui::ColorConvertFloat4ToU32(ImLerp(ImVec4(0.1f, 0.1f, 0.15f, 1.0f), ImVec4(0.9f, 0.92f, 0.96f, 1.0f), k_night));
+	ImGui::SetCursorScreenPos(ImVec2(panel.x + fs, panel.y + fs * 0.75f));
+
+	ImVec2 const sw_size(fs * 5.6f, fs * 2.8f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	if (ImGui::InvisibleButton("##daynight", sw_size)) night = !night;
+	t_night = LottiePlayhead(t_night, night, dn);
+	iam_lottie_draw(dl, daynight, t_night, iam_v2(p.x, p.y), iam_v2(sw_size.x, sw_size.y));
+	dl->AddText(ImVec2(p.x, p.y + sw_size.y + fs * 0.3f), text_col, night ? "Night" : "Day");
+
+	// Checkbox with its label: the whole row is the button
+	ImGui::SameLine(0.0f, fs * 1.5f);
+	static bool remember = false;
+	static float t_check = 0.0f;
+	p = ImGui::GetCursorScreenPos();
+	char const* label = "Remember me";
+	ImVec2 const box(fs * 2.6f, fs * 2.6f);
+	if (ImGui::InvisibleButton("##remember", ImVec2(box.x + fs * 0.3f + ImGui::CalcTextSize(label).x, box.y))) remember = !remember;
+	t_check = LottiePlayhead(t_check, remember, iam_lottie_duration(checkbox), 2.0f);
+	iam_lottie_draw(dl, checkbox, t_check, iam_v2(p.x, p.y), iam_v2(box.x, box.y));
+	dl->AddText(ImVec2(p.x + box.x + fs * 0.3f, p.y + (box.y - fs) * 0.5f), text_col, label);
+
+	// Like: plays the burst when liked, rewinds fast when unliked
+	ImGui::SameLine(0.0f, fs * 1.5f);
+	static bool liked = false;
+	static float t_like = 0.0f;
+	static int likes = 41;
+	p = ImGui::GetCursorScreenPos();
+	ImVec2 const icon(fs * 3.0f, fs * 3.0f);
+	if (ImGui::InvisibleButton("##like", icon)) { liked = !liked; likes += liked ? 1 : -1; }
+	t_like = LottiePlayhead(t_like, liked, iam_lottie_duration(heart), 4.0f);
+	iam_lottie_draw(dl, heart, t_like, iam_v2(p.x, p.y - fs * 0.2f), iam_v2(icon.x, icon.y));
+	char count[16];
+	snprintf(count, sizeof(count), "%d", likes);
+	dl->AddText(ImVec2(p.x + (icon.x - ImGui::CalcTextSize(count).x) * 0.5f, p.y + icon.y + fs * 0.1f), text_col, count);
+
+	// Menu: the icon morphs to a close button and the items follow its progress
+	ImGui::SameLine(0.0f, fs * 1.5f);
+	static bool open = false;
+	static float t_menu = 0.0f;
+	p = ImGui::GetCursorScreenPos();
+	if (ImGui::InvisibleButton("##menu", icon)) open = !open;
+	float const md = iam_lottie_duration(menu);
+	t_menu = LottiePlayhead(t_menu, open, md);
+	ImU32 const icon_bg = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 0.27f, 0.34f, 1.0f));
+	dl->AddRectFilled(p, ImVec2(p.x + icon.x, p.y + icon.y), icon_bg, fs * 0.4f);
+	iam_lottie_draw(dl, menu, t_menu, iam_v2(p.x, p.y), iam_v2(icon.x, icon.y));
+	char const* items[] = { "Profile", "Settings", "Sign out" };
+	for (int i = 0; i < 3; i++) {
+		float const k = ImSaturate((t_menu / md) * 3.0f - i * 0.6f);  // staggered from the playhead
+		if (k <= 0.0f) continue;
+		ImVec4 c = ImGui::ColorConvertU32ToFloat4(text_col);
+		c.w = k;
+		dl->AddText(ImVec2(p.x + icon.x + fs * 0.6f + (1.0f - k) * fs, p.y + i * fs * 1.1f - fs * 0.6f + icon.y * 0.5f - fs * 0.5f), ImGui::ColorConvertFloat4ToU32(c), items[i]);
+	}
+
+	// Progress: a tween drives the "progress" marker segment, then the "done" segment plays
+	ImGui::SetCursorScreenPos(ImVec2(panel.x + panel_size.x - fs * 6.0f, panel.y + fs * 0.9f));
+	static bool downloading = false;
+	static float done_t = 0.0f;
+	float seg_start = 0.0f, seg_dur = 1.0f, done_start = 1.0f, done_dur = 0.0f;
+	iam_lottie_marker(progress, "progress", &seg_start, &seg_dur);
+	iam_lottie_marker(progress, "done", &done_start, &done_dur);
+	p = ImGui::GetCursorScreenPos();
+	ImVec2 const ring(fs * 4.4f, fs * 4.4f);
+	if (ImGui::InvisibleButton("##download", ring)) { downloading = !downloading; done_t = 0.0f; }
+	float const value = iam_tween_float(ImGui::GetID("##download"), ImHashStr("value"), downloading ? 1.0f : 0.0f, downloading ? 2.5f : 0.4f,
+		iam_ease_preset(iam_ease_in_out_cubic), iam_policy_crossfade, GetSafeDeltaTime());
+	float time = seg_start + value * seg_dur;
+	if (downloading && value >= 0.999f) { done_t = LottiePlayhead(done_t, true, done_dur); time = done_start + done_t; }
+	iam_lottie_draw(dl, progress, time, iam_v2(p.x, p.y), iam_v2(ring.x, ring.y));
+	char const* status = !downloading ? "Download" : value < 0.999f ? "Downloading" : "Done";
+	dl->AddText(ImVec2(p.x + (ring.x - ImGui::CalcTextSize(status).x) * 0.5f, p.y + ring.y + fs * 0.2f), text_col, status);
+
+	ImGui::SetCursorScreenPos(ImVec2(panel.x, panel.y + panel_size.y + fs * 0.4f));
+	ImGui::TextDisabled("Click the widgets. Time: night %.2fs, checkbox %.2fs, like %.2fs, menu %.2fs, ring %.2fs", t_night, t_check, t_like, t_menu, time);
+}
+
 static void ShowLottieDemo()
 {
 	static iam_lottie* builtin = nullptr;
@@ -8864,6 +9058,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Lottie Player")) {
 			ShowLottieDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Lottie Interactions")) {
+			ShowLottieInteractionsDemo();
 			ImGui::TreePop();
 		}
 #endif

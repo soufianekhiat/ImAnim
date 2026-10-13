@@ -35,6 +35,30 @@ if (iam_lottie_marker(anim, "success", &start, &dur))
 | `iam_lottie_duration`, `iam_lottie_frame_rate`, `iam_lottie_size` | Seconds, fps, composition size |
 | `iam_lottie_warnings` | Unsupported features found in the file (`""` if none) |
 
+## UI interactions
+
+The player has no state: you own the playhead, so any UI can drive it.
+
+```cpp
+// Toggle (checkbox, switch, like): play toward the end while on, back while off,
+// at the file's speed; a click mid-way reverses from where it is
+static bool on = false;
+static float t = 0.0f;
+if (ImGui::InvisibleButton("##toggle", size)) on = !on;
+t = ImClamp(t + (on ? dt : -dt), 0.0f, iam_lottie_duration(anim));
+iam_lottie_draw(dl, anim, t, pos, size);
+
+// Progress: a value (download, slider, tween) mapped onto a marker segment
+float start, dur;
+iam_lottie_marker(anim, "progress", &start, &dur);
+iam_lottie_draw(dl, anim, start + value * dur, pos, size);
+```
+
+The demo's *Lottie Interactions* section shows a day / night switch (its progress
+also tints the panel), a checkbox, a like button, a menu icon whose items follow
+the playhead, and a download ring driven by a tween then a "done" segment. These
+animations were made for the demo and ship under ImAnim's license.
+
 ## What is supported
 
 - Layers: shape, solid, null, precomp (with time remap), text, parenting, auto-orient, in/out points, time stretch
