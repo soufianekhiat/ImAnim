@@ -173,6 +173,18 @@ IM_ANIM_API iam_ease_fn iam_get_custom_ease(int slot);                          
 IM_ANIM_API void iam_show_unified_inspector(bool* p_open = nullptr);                            // Show unified inspector (merges debug window + animation inspector).
 IM_ANIM_API void iam_show_debug_timeline(ImGuiID instance_id);                                  // Show debug timeline for a clip instance.
 
+// Clip editor - edit a clip's tracks and keyframes visually while it plays (edits apply live).
+// preview_instance_id: instance the playhead scrubs and controls (0 = the editor plays its own instance).
+// Keys: drag to retime, double-click a lane to add, Del to delete, Ctrl+Z/Ctrl+Y undo/redo, Ctrl+A select all,
+// Ctrl+wheel zoom, wheel/middle-drag pan. "Copy C++" puts an equivalent iam_clip::begin(...)...end() chain on the clipboard.
+IM_ANIM_API bool iam_show_clip_editor(ImGuiID clip_id, bool* p_open = nullptr, ImGuiID preview_instance_id = 0); // Editor window. Returns true if the clip changed this frame.
+IM_ANIM_API bool iam_clip_editor(ImGuiID clip_id, ImGuiID preview_instance_id = 0);             // Editor embedded in the current window. Returns true if the clip changed this frame.
+
+// Named IDs (optional) - lets the clip editor, debug timeline and "Copy C++" show names instead of hashes.
+IM_ANIM_API ImGuiID iam_id(char const* name);                                                   // Returns ImHashStr(name) and remembers the name. Use for clip and channel ids.
+IM_ANIM_API void iam_set_id_name(ImGuiID id, char const* name);                                 // Name an existing id.
+IM_ANIM_API char const* iam_get_id_name(ImGuiID id);                                            // Registered name, or nullptr.
+
 // Performance Profiler
 IM_ANIM_API void iam_profiler_enable(bool enable);                                              // Enable/disable the performance profiler.
 IM_ANIM_API bool iam_profiler_is_enabled();                                                     // Check if profiler is enabled.

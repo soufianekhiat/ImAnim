@@ -4035,6 +4035,80 @@ static void ShowColorKeyframeDemo()
 }
 
 // ============================================================
+// SECTION: Clip Editor
+// ============================================================
+static void ShowClipEditorDemo()
+{
+	static ImGuiID const clip_id = iam_id("editor_demo_card");
+	static ImGuiID const inst_id = ImHashStr("editor_demo_card_inst");
+	static ImGuiID const ch_x = iam_id("x");
+	static ImGuiID const ch_y = iam_id("y");
+	static ImGuiID const ch_scale = iam_id("scale");
+	static ImGuiID const ch_angle = iam_id("angle");
+	static ImGuiID const ch_color = iam_id("color");
+	static bool built = false;
+	if (!built) {
+		iam_clip::begin(clip_id)
+			.key_float(ch_x, 0.0f, 0.1f, iam_ease_out_cubic)
+			.key_float(ch_x, 0.8f, 0.5f, iam_ease_in_out_cubic)
+			.key_float(ch_x, 1.6f, 0.9f)
+			.key_float(ch_y, 0.0f, 0.5f, iam_ease_out_quad)
+			.key_float(ch_y, 0.4f, 0.2f, iam_ease_out_bounce)
+			.key_float(ch_y, 1.2f, 0.5f)
+			.key_float(ch_scale, 0.0f, 0.6f, iam_ease_out_back)
+			.key_float(ch_scale, 0.6f, 1.0f, iam_ease_in_out_sine)
+			.key_float(ch_scale, 1.6f, 0.8f)
+			.key_float(ch_angle, 0.0f, 0.0f, iam_ease_in_out_cubic)
+			.key_float(ch_angle, 1.6f, 6.2831f)
+			.key_color(ch_color, 0.0f, ImVec4(0.36f, 0.76f, 0.91f, 1.0f), iam_col_oklch, iam_ease_in_out_sine)
+			.key_color(ch_color, 1.6f, ImVec4(0.80f, 0.47f, 0.35f, 1.0f), iam_col_oklch)
+			.set_loop(true, iam_dir_alternate)
+			.end();
+		iam_play(clip_id, inst_id);
+		built = true;
+	}
+
+	ImGui::TextWrapped(
+		"iam_clip_editor() edits a clip while it plays: drag keys to retime them, double-click a lane to add a key, "
+		"pick eases and values in the inspector, scrub the ruler. \"Copy C++\" gives back the iam_clip code.");
+	static bool open_window = false;
+	ImGui::Checkbox("Open as window (iam_show_clip_editor)", &open_window);
+
+	// Preview: the card driven by the clip instance
+	iam_instance inst = iam_get_instance(inst_id);
+	float x = 0.5f, y = 0.5f, scale = 1.0f, angle = 0.0f;
+	ImVec4 color(1, 1, 1, 1);
+	if (inst.valid()) {
+		inst.get_float(ch_x, &x);
+		inst.get_float(ch_y, &y);
+		inst.get_float(ch_scale, &scale);
+		inst.get_float(ch_angle, &angle);
+		inst.get_color(ch_color, &color, iam_col_oklch);
+	}
+	ImVec2 size(ImGui::GetContentRegionAvail().x, 140.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	ImVec2 c(p.x + size.x * x, p.y + size.y * y);
+	float half = 26.0f * scale;
+	ImVec2 q[4];
+	for (int i = 0; i < 4; i++) {
+		float a = angle + IAM_PI * 0.25f + i * IAM_PI * 0.5f;
+		q[i] = ImVec2(c.x + ImCos(a) * half * 1.414f, c.y + ImSin(a) * half * 1.414f);
+	}
+	dl->AddQuadFilled(q[0], q[1], q[2], q[3], ImGui::ColorConvertFloat4ToU32(color));
+	ImGui::Dummy(size);
+
+	if (open_window) {
+		iam_show_clip_editor(clip_id, &open_window, inst_id);
+	} else {
+		ImGui::BeginChild("##clip_editor_demo", ImVec2(0, ImGui::GetFontSize() * 24.0f), true);
+		iam_clip_editor(clip_id, inst_id);
+		ImGui::EndChild();
+	}
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -7800,6 +7874,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Color Keyframes")) {
 			ShowColorKeyframeDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Clip Editor")) {
+			ShowClipEditorDemo();
 			ImGui::TreePop();
 		}
 

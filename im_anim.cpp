@@ -1419,8 +1419,11 @@ static ImVec4 iam_get_blended_color_impl(ImVec4 a_srgb, ImVec4 b_srgb, float t, 
 
 namespace iam_clip_detail {
 
+static unsigned g_keyframe_uid = 0;  // Source of keyframe::uid
+
 // keyframe data - using plain floats to avoid union constructor issues
 struct keyframe {
+	unsigned	uid;		// Unique per keyframe (stable across sorting), used by the clip editor selection
 	ImGuiID		channel;
 	float		time;
 	int			type;		// iam_channel_type
@@ -1441,7 +1444,7 @@ struct keyframe {
 	iam_variation_vec4	var_vec4;
 	iam_variation_color	var_color;
 
-	keyframe() : channel(0), time(0), type(0), ease_type(iam_ease_linear), color_space(iam_col_oklab), has_bezier(false), is_spring(false), has_variation(false) {
+	keyframe() : uid(++g_keyframe_uid), channel(0), time(0), type(0), ease_type(iam_ease_linear), color_space(iam_col_oklab), has_bezier(false), is_spring(false), has_variation(false) {
 		bezier[0] = bezier[1] = bezier[2] = bezier[3] = 0;
 		spring = { 1.0f, 120.0f, 20.0f, 0.0f };
 		value[0] = value[1] = value[2] = value[3] = 0;
@@ -3371,8 +3374,11 @@ void iam_clip_init(int initial_clip_cap, int initial_inst_cap) {
 	g_clip_sys.initialized = true;
 }
 
+static void iam_clip_editor_free_states();  // Clip editor section
+
 void iam_clip_shutdown() {
 	using namespace iam_clip_detail;
+	iam_clip_editor_free_states();
 	g_clip_sys.clips.clear();
 	g_clip_sys.instances.clear();
 	g_clip_sys.clip_map.Clear();
@@ -8013,6 +8019,1126 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 			dl->AddTriangleFilled(tri[0], tri[1], tri[2], playhead_color);
 		}
 	}
+}
+
+// ============================================================
+// NAMED IDS
+// ============================================================
+
+namespace iam_names_detail {
+	static ImGuiStorage g_names;  // id -> char* (ImStrdup'd, never moves)
+}
+
+void iam_set_id_name(ImGuiID id, char const* name) {
+	using namespace iam_names_detail;
+	if (!name) return;
+	char* cur = (char*)g_names.GetVoidPtr(id);
+	if (cur && strcmp(cur, name) == 0) return;
+	if (cur) IM_FREE(cur);
+	g_names.SetVoidPtr(id, ImStrdup(name));
+}
+
+char const* iam_get_id_name(ImGuiID id) {
+	return (char const*)iam_names_detail::g_names.GetVoidPtr(id);
+}
+
+ImGuiID iam_id(char const* name) {
+	ImGuiID id = ImHashStr(name);
+	if (!iam_names_detail::g_names.GetVoidPtr(id)) iam_set_id_name(id, name);
+	return id;
+}
+
+// ============================================================
+// CLIP EDITOR
+// ============================================================
+
+namespace iam_clip_editor_detail {
+	using namespace iam_clip_detail;
+
+	static char const* const k_ease_names[] = {
+		"linear",
+		"in_quad", "out_quad", "in_out_quad",
+		"in_cubic", "out_cubic", "in_out_cubic",
+		"in_quart", "out_quart", "in_out_quart",
+		"in_quint", "out_quint", "in_out_quint",
+		"in_sine", "out_sine", "in_out_sine",
+		"in_expo", "out_expo", "in_out_expo",
+		"in_circ", "out_circ", "in_out_circ",
+		"in_back", "out_back", "in_out_back",
+		"in_elastic", "out_elastic", "in_out_elastic",
+		"in_bounce", "out_bounce", "in_out_bounce",
+		"steps", "cubic_bezier", "spring", "custom"
+	};
+	static int const k_ease_count = (int)(sizeof(k_ease_names) / sizeof(k_ease_names[0]));
+	static char const* const k_type_names[] = { "float", "vec2", "vec4", "int", "color", "float_rel", "vec2_rel", "vec4_rel", "color_rel" };
+	static char const* const k_type_calls[] = { "key_float", "key_vec2", "key_vec4", "key_int", "key_color", "key_float_rel", "key_vec2_rel", "key_vec4_rel", "key_color_rel" };
+	static char const* const k_col_space_enums[] = { "iam_col_srgb", "iam_col_srgb_linear", "iam_col_hsv", "iam_col_oklab", "iam_col_oklch" };
+	static char const* const k_anchor_enums[] = { "iam_anchor_window_content", "iam_anchor_window", "iam_anchor_viewport", "iam_anchor_last_item" };
+	static char const* const k_dir_names[] = { "normal", "reverse", "alternate" };
+
+	static char const* ease_name(int e) { return (e >= 0 && e < k_ease_count) ? k_ease_names[e] : "?"; }
+	static char const* type_name(int t) { return (t >= 0 && t < 9) ? k_type_names[t] : "?"; }
+
+	// Undo snapshot of a clip's tracks
+	struct track_header {
+		ImGuiID channel;
+		int type, color_space, anchor_space, anchor_axis, key_count;
+		bool is_relative;
+	};
+	struct snapshot {
+		ImVector<track_header> tracks;
+		ImVector<keyframe> keys;
+		float duration, delay;
+		int loop_count, direction;
+	};
+
+	struct editor_state {
+		ImGuiID clip_id;
+		ImVector<unsigned> selected;        // keyframe uids
+		float view_t0, view_len;            // visible time range
+		bool view_fitted;
+		bool snap;
+		float snap_step;
+		// Key drag
+		bool drag_keys, drag_moved;
+		float drag_origin_t;
+		ImVector<float> drag_orig_times;    // parallel to selected
+		// Box select
+		bool box_active;
+		ImVec2 box_start;
+		// Undo
+		ImVector<snapshot*> undo, redo;
+		// UI
+		char path[256];
+		char add_name[64];
+		int add_type;
+		char status[160];
+		double status_until;
+		bool modified;
+
+		editor_state() : clip_id(0), view_t0(0), view_len(1), view_fitted(false), snap(true), snap_step(0.05f),
+			drag_keys(false), drag_moved(false), drag_origin_t(0), box_active(false), box_start(0, 0),
+			add_type(0), status_until(0), modified(false) {
+			path[0] = add_name[0] = status[0] = 0;
+		}
+		~editor_state() {
+			for (int i = 0; i < undo.Size; i++) IM_DELETE(undo[i]);
+			for (int i = 0; i < redo.Size; i++) IM_DELETE(redo[i]);
+		}
+		bool is_selected(unsigned uid) const { return selected.contains(uid); }
+		void select(unsigned uid) { if (!selected.contains(uid)) selected.push_back(uid); }
+		void deselect(unsigned uid) { selected.find_erase(uid); }
+	};
+
+	static ImGuiStorage g_states;  // clip_id -> editor_state*
+
+	static editor_state* get_state(ImGuiID clip_id) {
+		editor_state* s = (editor_state*)g_states.GetVoidPtr(clip_id);
+		if (!s) {
+			s = IM_NEW(editor_state)();
+			s->clip_id = clip_id;
+			char const* name = iam_get_id_name(clip_id);
+			if (name) snprintf(s->path, sizeof(s->path), "%s.iamclip", name);
+			else snprintf(s->path, sizeof(s->path), "clip_%08X.iamclip", clip_id);
+			g_states.SetVoidPtr(clip_id, s);
+		}
+		return s;
+	}
+
+	static void free_states() {
+		for (int i = 0; i < g_states.Data.Size; i++) {
+			editor_state* s = (editor_state*)g_states.Data[i].val_p;
+			if (s) IM_DELETE(s);
+		}
+		g_states.Clear();
+	}
+
+	static void set_status(editor_state* st, char const* fmt, ...) {
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(st->status, sizeof(st->status), fmt, args);
+		va_end(args);
+		st->status_until = ImGui::GetTime() + 4.0;
+	}
+
+	static void free_track_keys(iam_track& trk) { trk.keys.clear(); }
+
+	static snapshot* take_snapshot(iam_clip_data* clip) {
+		snapshot* s = IM_NEW(snapshot)();
+		s->duration = clip->duration;
+		s->delay = clip->delay;
+		s->loop_count = clip->loop_count;
+		s->direction = clip->direction;
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			iam_track& trk = clip->iam_tracks[t];
+			track_header h;
+			h.channel = trk.channel; h.type = trk.type; h.color_space = trk.color_space;
+			h.anchor_space = trk.anchor_space; h.anchor_axis = trk.anchor_axis;
+			h.key_count = trk.keys.Size; h.is_relative = trk.is_relative;
+			s->tracks.push_back(h);
+			for (int k = 0; k < trk.keys.Size; k++) s->keys.push_back(trk.keys[k]);
+		}
+		return s;
+	}
+
+	static void restore_snapshot(iam_clip_data* clip, snapshot const* s) {
+		for (int t = 0; t < clip->iam_tracks.Size; t++) free_track_keys(clip->iam_tracks[t]);
+		clip->iam_tracks.clear();
+		int key_i = 0;
+		for (int t = 0; t < s->tracks.Size; t++) {
+			track_header const& h = s->tracks[t];
+			clip->iam_tracks.push_back(iam_track());
+			iam_track& trk = clip->iam_tracks.back();
+			trk.channel = h.channel; trk.type = h.type; trk.color_space = h.color_space;
+			trk.anchor_space = h.anchor_space; trk.anchor_axis = h.anchor_axis; trk.is_relative = h.is_relative;
+			for (int k = 0; k < h.key_count; k++) trk.keys.push_back(s->keys[key_i++]);
+		}
+		clip->duration = s->duration;
+		clip->delay = s->delay;
+		clip->loop_count = s->loop_count;
+		clip->direction = s->direction;
+	}
+
+	static void push_undo(editor_state* st, iam_clip_data* clip) {
+		st->undo.push_back(take_snapshot(clip));
+		if (st->undo.Size > 100) { IM_DELETE(st->undo[0]); st->undo.erase(st->undo.Data); }
+		for (int i = 0; i < st->redo.Size; i++) IM_DELETE(st->redo[i]);
+		st->redo.clear();
+		st->modified = true;
+	}
+
+	// Sort keys (stable) and recompute the clip duration after an edit
+	static void recompute(iam_clip_data* clip) {
+		float dur = 0.0f;
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			ImVector<keyframe>& keys = clip->iam_tracks[t].keys;
+			for (int i = 1; i < keys.Size; i++) {
+				keyframe k = keys[i];
+				int j = i - 1;
+				while (j >= 0 && keys[j].time > k.time) { keys[j + 1] = keys[j]; j--; }
+				keys[j + 1] = k;
+			}
+			if (keys.Size > 0 && keys.back().time > dur) dur = keys.back().time;
+		}
+		clip->duration = dur;
+	}
+
+	static void refresh_preview(ImGuiID preview_id) {
+		iam_instance inst(preview_id);
+		if (inst.valid()) inst.refresh();
+	}
+
+	static void after_edit(editor_state* st, iam_clip_data* clip, ImGuiID preview_id) {
+		recompute(clip);
+		refresh_preview(preview_id);
+		st->modified = true;
+	}
+
+	static keyframe* find_key(iam_clip_data* clip, unsigned uid, int* out_track = nullptr) {
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			iam_track& trk = clip->iam_tracks[t];
+			for (int k = 0; k < trk.keys.Size; k++) {
+				if (trk.keys[k].uid == uid) {
+					if (out_track) *out_track = t;
+					return &trk.keys[k];
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	static float key_ease_weight(keyframe const& k0, int track_type, float u) {
+		if (k0.is_spring && track_type == iam_chan_float) return eval_clip_spring(u, k0.spring);
+		return eval_clip_ease(k0.ease_type, u, k0.bezier, k0.has_bezier);
+	}
+
+	// Interpolate raw key data at time t (used to insert a key without changing the curve)
+	static void sample_track(iam_track const& trk, float t, keyframe* out) {
+		if (trk.keys.Size == 0) return;
+		keyframe const* k0; keyframe const* k1;
+		if (!find_keys(trk, t, &k0, &k1) || !k0 || !k1) return;
+		unsigned uid = out->uid;
+		*out = *k0;
+		out->uid = uid;
+		out->time = t;
+		out->has_variation = false;
+		if (k0 == k1) return;
+		float u = (k1->time == k0->time) ? 1.0f : (t - k0->time) / (k1->time - k0->time);
+		float w = key_ease_weight(*k0, trk.type, u);
+		if (trk.type == iam_chan_int) {
+			out->set_int((int)ImFloor(k0->get_int() + (k1->get_int() - k0->get_int()) * w + 0.5f));
+			return;
+		}
+		for (int i = 0; i < 4; i++) {
+			out->value[i] = k0->value[i] + (k1->value[i] - k0->value[i]) * w;
+			out->value_ext[i] = k0->value_ext[i] + (k1->value_ext[i] - k0->value_ext[i]) * w;
+		}
+	}
+
+	static float snap_time(editor_state const* st, float t) {
+		if (st->snap && st->snap_step > 1e-5f && !ImGui::GetIO().KeyAlt) t = ImFloor(t / st->snap_step + 0.5f) * st->snap_step;
+		return t < 0.0f ? 0.0f : t;
+	}
+
+	static float nice_step(float min_step) {
+		static float const steps[] = { 0.001f, 0.002f, 0.005f, 0.01f, 0.02f, 0.05f, 0.1f, 0.2f, 0.25f, 0.5f, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600 };
+		for (int i = 0; i < (int)(sizeof(steps) / sizeof(steps[0])); i++) if (steps[i] >= min_step) return steps[i];
+		return 600.0f;
+	}
+
+	static void track_label(iam_track const& trk, char* buf, size_t buf_size) {
+		char const* name = iam_get_id_name(trk.channel);
+		if (name) snprintf(buf, buf_size, "%s", name);
+		else snprintf(buf, buf_size, "0x%08X", trk.channel);
+	}
+
+	// Current value of a track from the preview instance, as text
+	static void preview_value_text(ImGuiID preview_id, iam_track const& trk, char* buf, size_t buf_size) {
+		buf[0] = 0;
+		iam_instance inst(preview_id);
+		if (!inst.valid()) return;
+		switch (trk.type) {
+			case iam_chan_float: case iam_chan_float_rel: { float f; if (inst.get_float(trk.channel, &f)) snprintf(buf, buf_size, "%.3f", f); break; }
+			case iam_chan_int: { int i; if (inst.get_int(trk.channel, &i)) snprintf(buf, buf_size, "%d", i); break; }
+			case iam_chan_vec2: case iam_chan_vec2_rel: {
+				iam_vec2 v = iam_v2(0, 0);
+				if (inst.get_vec2(trk.channel, &v)) { ImVec2 x = IAM_VEC2_TO_IM(v); snprintf(buf, buf_size, "%.1f, %.1f", x.x, x.y); }
+				break;
+			}
+			case iam_chan_vec4: case iam_chan_vec4_rel: {
+				iam_vec4 v = iam_v4(0, 0, 0, 0);
+				if (inst.get_vec4(trk.channel, &v)) { ImVec4 x = IAM_VEC4_TO_IM(v); snprintf(buf, buf_size, "%.2f %.2f %.2f %.2f", x.x, x.y, x.z, x.w); }
+				break;
+			}
+			default: break;  // colors are shown as a swatch
+		}
+	}
+
+	static bool preview_color(ImGuiID preview_id, iam_track const& trk, ImVec4* out) {
+		iam_instance inst(preview_id);
+		if (!inst.valid() || (trk.type != iam_chan_color && trk.type != iam_chan_color_rel)) return false;
+		iam_vec4 v = iam_v4(0, 0, 0, 0);
+		if (!inst.get_color(trk.channel, &v, trk.color_space)) return false;
+		*out = IAM_VEC4_TO_IM(v);
+		return true;
+	}
+
+	// Draw an ease curve u in [0,1] -> weight inside rect (used in segments and the inspector)
+	static void draw_ease_curve(ImDrawList* dl, ImVec2 p0, ImVec2 p1, keyframe const& k0, int track_type, ImU32 col, float thickness) {
+		int const N = 32;
+		ImVec2 pts[N + 1];
+		for (int i = 0; i <= N; i++) {
+			float u = (float)i / N;
+			float w = key_ease_weight(k0, track_type, u);
+			pts[i] = ImVec2(p0.x + (p1.x - p0.x) * u, p1.y - (p1.y - p0.y) * w);
+		}
+		dl->AddPolyline(pts, N + 1, col, 0, thickness);
+	}
+
+	// ---- C++ export ----
+	static void append_id(ImGuiTextBuffer& b, ImGuiID id) {
+		char const* name = iam_get_id_name(id);
+		if (name) b.appendf("iam_id(\"%s\")", name);
+		else b.appendf("0x%08Xu", id);
+	}
+	// Float as a valid C++ literal ("1.0f", "0.25f"). Rotating buffers: up to 8 per expression.
+	static char const* fl(float v) {
+		static char bufs[8][40];
+		static int n = 0;
+		char* buf = bufs[n++ & 7];
+		snprintf(buf, 32, "%g", v);
+		if (!strpbrk(buf, ".eEn")) strcat(buf, ".0");  // n: inf/nan
+		strcat(buf, "f");
+		return buf;
+	}
+	static void append_floats(ImGuiTextBuffer& b, char const* ctor, float const* v, int n) {
+		if (n == 1) { b.append(fl(v[0])); return; }
+		b.appendf("%s(", ctor);
+		for (int i = 0; i < n; i++) b.appendf(i ? ", %s" : "%s", fl(v[i]));
+		b.append(")");
+	}
+
+	static void export_cpp(iam_clip_data* clip, ImGuiTextBuffer& b) {
+		int bez_count = 0;
+		for (int t = 0; t < clip->iam_tracks.Size; t++)
+			for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) {
+				keyframe const& kf = clip->iam_tracks[t].keys[k];
+				if (kf.has_bezier && !kf.is_spring) {
+					b.appendf("static float const bezier_%d[4] = { %s, %s, %s, %s };\n", bez_count++, fl(kf.bezier[0]), fl(kf.bezier[1]), fl(kf.bezier[2]), fl(kf.bezier[3]));
+				}
+			}
+		b.append("iam_clip::begin(");
+		append_id(b, clip->id);
+		b.append(")\n");
+		bez_count = 0;
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			iam_track const& trk = clip->iam_tracks[t];
+			for (int k = 0; k < trk.keys.Size; k++) {
+				keyframe const& kf = trk.keys[k];
+				char bez_arg[32] = "";
+				if (kf.has_bezier && !kf.is_spring) snprintf(bez_arg, sizeof(bez_arg), ", bezier_%d", bez_count++);
+				if (kf.is_spring && trk.type == iam_chan_float) {
+					b.append("\t.key_float_spring(");
+					append_id(b, trk.channel);
+					b.appendf(", %s, %s, iam_spring_params{ %s, %s, %s, %s })\n", fl(kf.time), fl(kf.value[0]),
+						fl(kf.spring.mass), fl(kf.spring.stiffness), fl(kf.spring.damping), fl(kf.spring.initial_velocity));
+					continue;
+				}
+				b.appendf("\t.%s(", k_type_calls[trk.type < 9 ? trk.type : 0]);
+				append_id(b, trk.channel);
+				b.appendf(", %s, ", fl(kf.time));
+				char const* ease = ease_name(kf.ease_type);
+				switch (trk.type) {
+					case iam_chan_float: append_floats(b, "", kf.value, 1); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_vec2: append_floats(b, "iam_v2", kf.value, 2); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_vec4: append_floats(b, "iam_v4", kf.value, 4); b.appendf(", iam_ease_%s%s", ease, bez_arg); break;
+					case iam_chan_int: b.appendf("%d, iam_ease_%s", kf.get_int(), ease); break;
+					case iam_chan_color: {
+						int cs = kf.color_space;
+						append_floats(b, "iam_v4", kf.value, 4);
+						b.appendf(", %s, iam_ease_%s%s", (cs >= 0 && cs < 5) ? k_col_space_enums[cs] : "iam_col_oklab", ease, bez_arg);
+						break;
+					}
+					case iam_chan_float_rel: {
+						int anchor = trk.anchor_space, axis = trk.anchor_axis;
+						b.appendf("%s, %s, %s, %d, iam_ease_%s%s", fl(kf.value[0]), fl(kf.value[1]), (anchor >= 0 && anchor < 4) ? k_anchor_enums[anchor] : "0", axis, ease, bez_arg);
+						break;
+					}
+					case iam_chan_vec2_rel:
+						append_floats(b, "iam_v2", kf.value, 2); b.append(", ");
+						append_floats(b, "iam_v2", kf.value + 2, 2);
+						b.appendf(", %s, iam_ease_%s%s", (trk.anchor_space >= 0 && trk.anchor_space < 4) ? k_anchor_enums[trk.anchor_space] : "0", ease, bez_arg);
+						break;
+					case iam_chan_vec4_rel:
+					case iam_chan_color_rel:
+						append_floats(b, "iam_v4", kf.value, 4); b.append(", ");
+						append_floats(b, "iam_v4", kf.value_ext, 4);
+						if (trk.type == iam_chan_color_rel) b.appendf(", %s", (trk.color_space >= 0 && trk.color_space < 5) ? k_col_space_enums[trk.color_space] : "iam_col_oklab");
+						b.appendf(", %s, iam_ease_%s%s", (trk.anchor_space >= 0 && trk.anchor_space < 4) ? k_anchor_enums[trk.anchor_space] : "0", ease, bez_arg);
+						break;
+					default: break;
+				}
+				b.append(")");
+				if (kf.has_variation) b.append("  // note: per-loop variation not exported");
+				b.append("\n");
+			}
+		}
+		if (clip->delay > 0.0f) b.appendf("\t.set_delay(%s)\n", fl(clip->delay));
+		if (clip->loop_count != 0) {
+			static char const* const dirs[] = { "iam_dir_normal", "iam_dir_reverse", "iam_dir_alternate" };
+			b.appendf("\t.set_loop(true, %s, %d)\n", (clip->direction >= 0 && clip->direction < 3) ? dirs[clip->direction] : "iam_dir_normal", clip->loop_count);
+		}
+		if (clip->loop_delay > 0.0f) b.appendf("\t.set_loop_delay(%s)\n", fl(clip->loop_delay));
+		b.append("\t.end();\n");
+	}
+
+	// Value widgets for one key; returns true when edited. *activated is set when an edit starts (for undo).
+	static bool edit_key_value(keyframe& kf, iam_track const& trk, bool* activated) {
+		bool changed = false;
+		ImGui::PushID("value");
+		switch (trk.type) {
+			case iam_chan_float: changed = ImGui::DragFloat("Value", &kf.value[0], 0.01f); break;
+			case iam_chan_vec2: changed = ImGui::DragFloat2("Value", kf.value, 0.5f); break;
+			case iam_chan_vec4: changed = ImGui::DragFloat4("Value", kf.value, 0.01f); break;
+			case iam_chan_int: { int v = kf.get_int(); if (ImGui::DragInt("Value", &v)) { kf.set_int(v); changed = true; } break; }
+			case iam_chan_color: changed = ImGui::ColorEdit4("Value", kf.value, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar); break;
+			case iam_chan_float_rel:
+				changed = ImGui::DragFloat("Percent", &kf.value[0], 0.005f);
+				*activated |= ImGui::IsItemActivated();
+				changed |= ImGui::DragFloat("Px bias", &kf.value[1], 0.5f);
+				break;
+			case iam_chan_vec2_rel:
+				changed = ImGui::DragFloat2("Percent", kf.value, 0.005f);
+				*activated |= ImGui::IsItemActivated();
+				changed |= ImGui::DragFloat2("Px bias", kf.value + 2, 0.5f);
+				break;
+			case iam_chan_vec4_rel:
+			case iam_chan_color_rel:
+				changed = ImGui::DragFloat4("Percent", kf.value, 0.005f);
+				*activated |= ImGui::IsItemActivated();
+				changed |= ImGui::DragFloat4("Px bias", kf.value_ext, 0.5f);
+				break;
+			default: break;
+		}
+		*activated |= ImGui::IsItemActivated();
+		ImGui::PopID();
+		return changed;
+	}
+
+	static bool ease_combo(char const* label, int* ease) {
+		bool changed = false;
+		if (ImGui::BeginCombo(label, ease_name(*ease))) {
+			for (int e = 0; e < k_ease_count; e++) {
+				if (e == iam_ease_spring || e == iam_ease_custom) continue;  // spring: use the Spring checkbox; custom needs a slot
+				bool sel = (e == *ease);
+				if (ImGui::Selectable(k_ease_names[e], sel)) { *ease = e; changed = true; }
+				if (sel) ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		return changed;
+	}
+
+	static void delete_selected(editor_state* st, iam_clip_data* clip) {
+		if (st->selected.Size == 0) return;
+		push_undo(st, clip);
+		for (int t = 0; t < clip->iam_tracks.Size; t++) {
+			ImVector<keyframe>& keys = clip->iam_tracks[t].keys;
+			for (int k = keys.Size - 1; k >= 0; k--)
+				if (st->is_selected(keys[k].uid)) keys.erase(keys.Data + k);
+		}
+		st->selected.clear();
+	}
+
+	// ---- Main editor body ----
+	static bool editor_body(ImGuiID clip_id, ImGuiID preview_instance_id) {
+		ImGuiIO& io = ImGui::GetIO();
+		iam_clip_data* clip = find_clip(clip_id);
+		if (!clip) {
+			ImGui::TextDisabled("Clip 0x%08X not found", clip_id);
+			return false;
+		}
+		editor_state* st = get_state(clip_id);
+		st->modified = false;
+		ImGuiID const preview_id = preview_instance_id ? preview_instance_id : ImHashData(&clip_id, sizeof(clip_id), ImHashStr("iam_clip_editor_preview"));
+		iam_instance preview(preview_id);
+		if (preview.valid()) {
+			iam_instance_data* pd = find_instance(preview_id);
+			if (pd && pd->clip_id != clip_id) preview = iam_instance();  // instance plays another clip: don't drive it
+		}
+		bool const focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+
+		ImGui::PushID((int)clip_id);
+
+		// ---------------- Toolbar ----------------
+		{
+			bool playing = preview.valid() && preview.is_playing() && !preview.is_paused();
+			if (ImGui::Button(playing ? "Pause" : "Play")) {
+				if (!preview.valid() || !preview.is_playing()) {
+					if (!preview_instance_id || !preview.valid()) preview = iam_play(clip_id, preview_id);
+					else preview.restart();
+				} else if (preview.is_paused()) preview.resume();
+				else preview.pause();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Restart")) {
+				if (preview.valid()) preview.restart();
+				else preview = iam_play(clip_id, preview_id);
+			}
+			ImGui::SameLine();
+			ImGui::Text("%.2f / %.2fs", preview.valid() ? preview.time() : 0.0f, clip->duration);
+			ImGui::SameLine();
+			ImGui::TextDisabled("|");
+			ImGui::SameLine();
+			bool loop = clip->loop_count != 0;
+			if (ImGui::Checkbox("Loop", &loop)) { push_undo(st, clip); clip->loop_count = loop ? -1 : 0; }
+			if (loop) {
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
+				int dir = clip->direction;
+				if (ImGui::Combo("##dir", &dir, k_dir_names, 3)) { push_undo(st, clip); clip->direction = dir; }
+			}
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.0f);
+			float delay = clip->delay;
+			if (ImGui::DragFloat("Delay", &delay, 0.01f, 0.0f, 60.0f, "%.2fs")) { clip->delay = delay < 0 ? 0 : delay; st->modified = true; }
+			if (ImGui::IsItemActivated()) push_undo(st, clip);
+			ImGui::SameLine();
+			ImGui::TextDisabled("|");
+			ImGui::SameLine();
+			ImGui::Checkbox("Snap", &st->snap);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.0f);
+			ImGui::DragFloat("##snapstep", &st->snap_step, 0.005f, 0.001f, 10.0f, "%.3fs");
+			ImGui::SameLine();
+			if (ImGui::Button("Fit")) st->view_fitted = false;
+
+			ImGui::BeginDisabled(st->undo.Size == 0);
+			if (ImGui::Button("Undo")) { st->redo.push_back(take_snapshot(clip)); restore_snapshot(clip, st->undo.back()); IM_DELETE(st->undo.back()); st->undo.pop_back(); st->selected.clear(); refresh_preview(preview_id); st->modified = true; }
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(st->redo.Size == 0);
+			if (ImGui::Button("Redo")) { st->undo.push_back(take_snapshot(clip)); restore_snapshot(clip, st->redo.back()); IM_DELETE(st->redo.back()); st->redo.pop_back(); st->selected.clear(); refresh_preview(preview_id); st->modified = true; }
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if (ImGui::Button("Add track")) ImGui::OpenPopup("##add_track");
+			if (ImGui::BeginPopup("##add_track")) {
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+				ImGui::InputText("Channel name", st->add_name, sizeof(st->add_name));
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+				ImGui::Combo("Type", &st->add_type, k_type_names, 5);
+				if (ImGui::Button("Add") && st->add_name[0]) {
+					ImGuiID ch = iam_id(st->add_name);
+					bool exists = false;
+					for (int t = 0; t < clip->iam_tracks.Size; t++) exists |= (clip->iam_tracks[t].channel == ch && clip->iam_tracks[t].type == st->add_type);
+					if (exists) set_status(st, "Track '%s' (%s) already exists", st->add_name, type_name(st->add_type));
+					else {
+						push_undo(st, clip);
+						clip->iam_tracks.push_back(iam_track());
+						iam_track& trk = clip->iam_tracks.back();
+						trk.channel = ch;
+						trk.type = st->add_type;
+						keyframe kf;
+						kf.channel = ch;
+						kf.type = trk.type;
+						kf.time = preview.valid() ? snap_time(st, preview.time()) : 0.0f;
+						if (trk.type == iam_chan_color) kf.set_color(ImVec4(1, 1, 1, 1));
+						trk.keys.push_back(kf);
+						st->selected.clear();
+						st->select(kf.uid);
+						after_edit(st, clip, preview_id);
+						st->add_name[0] = 0;
+						ImGui::CloseCurrentPopup();
+					}
+				}
+				ImGui::EndPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Copy C++")) {
+				ImGuiTextBuffer b;
+				export_cpp(clip, b);
+				ImGui::SetClipboardText(b.c_str());
+				int lines = 0;
+				for (char const* c = b.c_str(); *c; c++) lines += (*c == '\n');
+				set_status(st, "Copied %d lines of C++ to the clipboard", lines);
+			}
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+			ImGui::InputText("##path", st->path, sizeof(st->path));
+			ImGui::SameLine();
+			if (ImGui::Button("Save")) {
+				iam_result r = iam_clip_save(clip_id, st->path);
+				set_status(st, r == iam_ok ? "Saved %s" : "Could not save %s", st->path);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Load")) {
+				snapshot* before = take_snapshot(clip);
+				ImGuiID loaded = 0;
+				iam_result r = iam_clip_load(st->path, &loaded);
+				clip = find_clip(clip_id);  // loading may grow the clip array
+				if (r != iam_ok) { set_status(st, "Could not load %s", st->path); IM_DELETE(before); }
+				else if (loaded != clip_id) { set_status(st, "%s holds clip 0x%08X, not this one", st->path, loaded); IM_DELETE(before); }
+				else {
+					st->undo.push_back(before);
+					for (int i = 0; i < st->redo.Size; i++) IM_DELETE(st->redo[i]);
+					st->redo.clear();
+					st->selected.clear();
+					after_edit(st, clip, preview_id);
+					set_status(st, "Loaded %s", st->path);
+				}
+			}
+			if (st->status[0] && ImGui::GetTime() < st->status_until) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", st->status);
+			}
+		}
+
+		if (!clip) { ImGui::PopID(); return st->modified; }
+
+		// ---------------- Layout ----------------
+		ImGuiStyle const& style = ImGui::GetStyle();
+		float const row_h = ImGui::GetFrameHeight();
+		float const ruler_h = row_h;
+		float const inspector_h = ImGui::GetFrameHeightWithSpacing() * 6.0f;
+		float label_w = ImGui::CalcTextSize("0x00000000  vec4_rel").x + ImGui::GetFontSize() * 6.0f;
+		ImVec2 avail = ImGui::GetContentRegionAvail();
+		float const tl_w = ImMax(avail.x - label_w - style.ScrollbarSize, 50.0f);
+		float lanes_h = ImMax(avail.y - ruler_h - inspector_h - style.ItemSpacing.y * 2.0f, row_h * 3.0f);
+
+		if (!st->view_fitted) {
+			float d = clip->duration > 0.0f ? clip->duration : 1.0f;
+			st->view_t0 = -d * 0.02f;
+			st->view_len = d * 1.06f;
+			st->view_fitted = true;
+		}
+
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		ImU32 const col_bg = IM_COL32(30, 32, 40, 255);
+		ImU32 const col_lane = IM_COL32(40, 44, 55, 255);
+		ImU32 const col_lane_alt = IM_COL32(44, 48, 60, 255);
+		ImU32 const col_grid = IM_COL32(60, 65, 80, 255);
+		ImU32 const col_text = IM_COL32(180, 185, 195, 255);
+		ImU32 const col_playhead = IM_COL32(255, 255, 255, 220);
+		ImU32 const col_sel = IM_COL32(255, 255, 255, 255);
+		ImU32 const col_box = IM_COL32(91, 194, 231, 60);
+		ImU32 const col_box_border = IM_COL32(91, 194, 231, 200);
+
+		float const play_t = preview.valid() ? preview.time() : 0.0f;
+
+		// ---------------- Ruler ----------------
+		ImVec2 ruler_p = ImGui::GetCursorScreenPos();
+		float const tl_x = ruler_p.x + label_w;
+		#define IAM_ED_T2X(t) (tl_x + ((t) - st->view_t0) / st->view_len * tl_w)
+		#define IAM_ED_X2T(x) (st->view_t0 + ((x) - tl_x) / tl_w * st->view_len)
+		{
+			ImGui::InvisibleButton("##ruler_pad", ImVec2(label_w, ruler_h));
+			ImGui::SameLine(0, 0);
+			ImGui::InvisibleButton("##ruler", ImVec2(tl_w, ruler_h));
+			bool ruler_active = ImGui::IsItemActive();
+			if (ruler_active && preview.valid()) {
+				if (ImGui::IsItemActivated() && preview.is_playing() && !preview.is_paused()) preview.pause();
+				float t = IAM_ED_X2T(io.MousePos.x);
+				t = ImClamp(st->snap && io.KeyShift ? snap_time(st, t) : t, 0.0f, clip->duration);
+				preview.seek(t);
+				preview.refresh();
+			} else if (ruler_active && ImGui::IsItemActivated()) {
+				preview = iam_play(clip_id, preview_id);
+				preview.pause();
+			}
+			dl->AddRectFilled(ruler_p, ImVec2(tl_x + tl_w, ruler_p.y + ruler_h), col_bg);
+			float step = nice_step(st->view_len * 70.0f / tl_w);
+			float first = ImFloor(st->view_t0 / step) * step;
+			dl->PushClipRect(ImVec2(tl_x, ruler_p.y), ImVec2(tl_x + tl_w, ruler_p.y + ruler_h), true);
+			for (float t = first; t <= st->view_t0 + st->view_len; t += step) {
+				float x = IAM_ED_T2X(t);
+				dl->AddLine(ImVec2(x, ruler_p.y + ruler_h * 0.55f), ImVec2(x, ruler_p.y + ruler_h), col_grid);
+				float hx = IAM_ED_T2X(t + step * 0.5f);
+				dl->AddLine(ImVec2(hx, ruler_p.y + ruler_h * 0.8f), ImVec2(hx, ruler_p.y + ruler_h), col_grid);
+				char lbl[32];
+				snprintf(lbl, sizeof(lbl), step < 0.1f ? "%.2f" : (step < 1.0f ? "%.1f" : "%.0f"), t);
+				dl->AddText(ImVec2(x + 3, ruler_p.y + 1), col_text, lbl);
+			}
+			// Clip end + playhead handle
+			float end_x = IAM_ED_T2X(clip->duration);
+			dl->AddLine(ImVec2(end_x, ruler_p.y), ImVec2(end_x, ruler_p.y + ruler_h), AgedCopper, 2.0f);
+			float px = IAM_ED_T2X(play_t);
+			dl->AddTriangleFilled(ImVec2(px - 6, ruler_p.y + ruler_h - 10), ImVec2(px + 6, ruler_p.y + ruler_h - 10), ImVec2(px, ruler_p.y + ruler_h), col_playhead);
+			dl->PopClipRect();
+			char info[64];
+			snprintf(info, sizeof(info), "%d tracks", clip->iam_tracks.Size);
+			dl->AddText(ImVec2(ruler_p.x + style.FramePadding.x, ruler_p.y + style.FramePadding.y), col_text, info);
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Click/drag to scrub (Shift: snap)");
+			}
+		}
+
+		// ---------------- Lanes ----------------
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+		ImGui::BeginChild("##lanes", ImVec2(0, lanes_h), 0, ImGuiWindowFlags_NoScrollWithMouse);
+		ImGui::PopStyleVar(2);
+		{
+			ImDrawList* ldl = ImGui::GetWindowDrawList();
+			ImVec2 lp = ImGui::GetCursorScreenPos();
+			float const content_h = ImMax(row_h * (float)clip->iam_tracks.Size, lanes_h);
+			ldl->AddRectFilled(lp, ImVec2(lp.x + label_w + tl_w, lp.y + content_h), col_bg);
+
+			// Labels (one button per track for its context menu)
+			int delete_track = -1;
+			for (int t = 0; t < clip->iam_tracks.Size; t++) {
+				iam_track& trk = clip->iam_tracks[t];
+				ImGui::SetCursorScreenPos(ImVec2(lp.x, lp.y + row_h * t));
+				ImGui::PushID(t);
+				ImGui::InvisibleButton("##label", ImVec2(label_w, row_h));
+				if (ImGui::BeginPopupContextItem("##track_ctx")) {
+					char lbl[64];
+					track_label(trk, lbl, sizeof(lbl));
+					ImGui::TextDisabled("%s (%s)", lbl, type_name(trk.type));
+					if (ImGui::MenuItem("Add key at playhead")) {
+						push_undo(st, clip);
+						keyframe kf;
+						sample_track(trk, play_t, &kf);
+						kf.channel = trk.channel; kf.type = trk.type; kf.time = snap_time(st, play_t);
+						trk.keys.push_back(kf);
+						st->selected.clear(); st->select(kf.uid);
+						after_edit(st, clip, preview_id);
+					}
+					if (ImGui::MenuItem("Select all keys")) {
+						if (!io.KeyCtrl) st->selected.clear();
+						for (int k = 0; k < trk.keys.Size; k++) st->select(trk.keys[k].uid);
+					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Delete track")) delete_track = t;
+					ImGui::EndPopup();
+				}
+				ImU32 lane_col = (t & 1) ? col_lane_alt : col_lane;
+				float y = lp.y + row_h * t;
+				ldl->AddRectFilled(ImVec2(lp.x, y), ImVec2(lp.x + label_w - 2, y + row_h - 1), lane_col);
+				char lbl[64];
+				track_label(trk, lbl, sizeof(lbl));
+				float ty = y + (row_h - ImGui::GetFontSize()) * 0.5f;
+				ldl->AddText(ImVec2(lp.x + style.FramePadding.x, ty), col_text, lbl);
+				char val[64];
+				ImVec4 swatch;
+				float right = lp.x + label_w - style.FramePadding.x - 2;
+				if (preview_color(preview_id, trk, &swatch)) {
+					float sz = row_h - 8;
+					ldl->AddRectFilled(ImVec2(right - sz, y + 4), ImVec2(right, y + 4 + sz), ImGui::ColorConvertFloat4ToU32(swatch), 2.0f);
+					right -= sz + 4;
+				} else {
+					preview_value_text(preview_id, trk, val, sizeof(val));
+					if (val[0]) {
+						float vw = ImGui::CalcTextSize(val).x;
+						ldl->AddText(ImVec2(right - vw, ty), ZimaBlue, val);
+						right -= vw + 6;
+					}
+				}
+				char const* tn = type_name(trk.type);
+				float tw = ImGui::CalcTextSize(tn).x;
+				if (right - tw > lp.x + style.FramePadding.x + ImGui::CalcTextSize(lbl).x + 6)
+					ldl->AddText(ImVec2(right - tw, ty), IM_COL32(120, 125, 140, 255), tn);
+				ImGui::PopID();
+			}
+			if (delete_track >= 0) {
+				push_undo(st, clip);
+				free_track_keys(clip->iam_tracks[delete_track]);
+				clip->iam_tracks.erase(clip->iam_tracks.Data + delete_track);
+				st->selected.clear();
+				after_edit(st, clip, preview_id);
+			}
+
+			// Timeline canvas: one button for all mouse input
+			ImGui::SetCursorScreenPos(ImVec2(tl_x, lp.y));
+			ImGui::InvisibleButton("##canvas", ImVec2(tl_w, content_h), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+			bool const canvas_hovered = ImGui::IsItemHovered();
+			bool const canvas_active = ImGui::IsItemActive();
+			bool const canvas_activated = ImGui::IsItemActivated();
+#if IMGUI_VERSION_NUM >= 18950
+			if (canvas_hovered) {
+				ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
+				ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelX);
+			}
+#endif
+			ImVec2 mouse = io.MousePos;
+			float const mouse_t = IAM_ED_X2T(mouse.x);
+			int const mouse_row = (int)ImFloor((mouse.y - lp.y) / row_h);
+
+			// Zoom / pan
+			if (canvas_hovered || ImGui::IsWindowHovered()) {
+				if (io.MouseWheel != 0.0f && io.KeyCtrl) {
+					float f = ImPow(1.2f, -io.MouseWheel);
+					float nl = ImClamp(st->view_len * f, 0.02f, 3600.0f);
+					st->view_t0 = mouse_t - (mouse_t - st->view_t0) * (nl / st->view_len);
+					st->view_len = nl;
+				} else if (io.MouseWheel != 0.0f && io.KeyShift) {
+					st->view_t0 -= io.MouseWheel * st->view_len * 0.1f;
+				} else if (io.MouseWheelH != 0.0f) {
+					st->view_t0 -= io.MouseWheelH * st->view_len * 0.1f;
+				} else if (io.MouseWheel != 0.0f) {
+					ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseWheel * row_h * 2.0f);
+				}
+			}
+			if (canvas_active && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
+				st->view_t0 -= io.MouseDelta.x / tl_w * st->view_len;
+			}
+
+			// Hit test keys
+			unsigned hovered_uid = 0;
+			int hovered_track = -1;
+			float const key_r = row_h * 0.32f;
+			if (canvas_hovered && mouse_row >= 0 && mouse_row < clip->iam_tracks.Size) {
+				iam_track& trk = clip->iam_tracks[mouse_row];
+				float best = key_r + 3.0f;
+				for (int k = 0; k < trk.keys.Size; k++) {
+					float d = ImFabs(IAM_ED_T2X(trk.keys[k].time) - mouse.x);
+					if (d <= best) { best = d; hovered_uid = trk.keys[k].uid; hovered_track = mouse_row; }
+				}
+			}
+
+			// Mouse: left button
+			if (canvas_activated && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+				bool additive = io.KeyCtrl || io.KeyShift;
+				if (hovered_uid) {
+					if (additive && st->is_selected(hovered_uid)) st->deselect(hovered_uid);
+					else {
+						if (!additive && !st->is_selected(hovered_uid)) st->selected.clear();
+						st->select(hovered_uid);
+					}
+					st->drag_keys = st->is_selected(hovered_uid);
+					st->drag_moved = false;
+					st->drag_origin_t = mouse_t;
+					st->drag_orig_times.resize(st->selected.Size);
+					for (int i = 0; i < st->selected.Size; i++) {
+						keyframe* kf = find_key(clip, st->selected[i]);
+						st->drag_orig_times[i] = kf ? kf->time : 0.0f;
+					}
+				} else {
+					if (!additive) st->selected.clear();
+					st->box_active = true;
+					st->box_start = mouse;
+				}
+			}
+			if (st->drag_keys) {
+				if (canvas_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+					if (!st->drag_moved) { push_undo(st, clip); st->drag_moved = true; }
+					float dt = mouse_t - st->drag_origin_t;
+					for (int i = 0; i < st->selected.Size && i < st->drag_orig_times.Size; i++) {
+						keyframe* kf = find_key(clip, st->selected[i]);
+						if (kf) kf->time = snap_time(st, st->drag_orig_times[i] + dt);
+					}
+					after_edit(st, clip, preview_id);
+					ImGui::SetTooltip("%.3fs", find_key(clip, st->selected.Size ? st->selected[0] : 0) ? find_key(clip, st->selected[0])->time : 0.0f);
+				}
+				if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) st->drag_keys = false;
+			}
+			if (st->box_active) {
+				ImVec2 a = st->box_start, b = mouse;
+				ImVec2 bmin(ImMin(a.x, b.x), ImMin(a.y, b.y)), bmax(ImMax(a.x, b.x), ImMax(a.y, b.y));
+				bool dragged = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f) || (bmax.x - bmin.x) > 3.0f || (bmax.y - bmin.y) > 3.0f;
+				if (dragged) {
+					ldl->AddRectFilled(bmin, bmax, col_box);
+					ldl->AddRect(bmin, bmax, col_box_border);
+				}
+				if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+					if (dragged) {
+						for (int t = 0; t < clip->iam_tracks.Size; t++) {
+							float cy = lp.y + row_h * (t + 0.5f);
+							if (cy < bmin.y || cy > bmax.y) continue;
+							iam_track& trk = clip->iam_tracks[t];
+							for (int k = 0; k < trk.keys.Size; k++) {
+								float x = IAM_ED_T2X(trk.keys[k].time);
+								if (x >= bmin.x && x <= bmax.x) st->select(trk.keys[k].uid);
+							}
+						}
+					} else if (preview.valid() || iam_clip_exists(clip_id)) {
+						// Plain click on empty space: move the playhead
+						if (!preview.valid()) { preview = iam_play(clip_id, preview_id); }
+						if (preview.is_playing() && !preview.is_paused()) preview.pause();
+						preview.seek(ImClamp(mouse_t, 0.0f, clip->duration));
+						preview.refresh();
+					}
+					st->box_active = false;
+				}
+			}
+			// Double-click on a lane: add a key there (keeps the current curve)
+			if (canvas_hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !hovered_uid && mouse_row >= 0 && mouse_row < clip->iam_tracks.Size) {
+				push_undo(st, clip);
+				iam_track& trk = clip->iam_tracks[mouse_row];
+				float t = snap_time(st, mouse_t);
+				keyframe kf;
+				sample_track(trk, t, &kf);
+				kf.channel = trk.channel; kf.type = trk.type; kf.time = t;
+				trk.keys.push_back(kf);
+				st->selected.clear(); st->select(kf.uid);
+				st->box_active = false;
+				after_edit(st, clip, preview_id);
+			}
+			// Right-click: key context menu
+			if (canvas_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+				if (hovered_uid && !st->is_selected(hovered_uid)) { st->selected.clear(); st->select(hovered_uid); }
+				if (st->selected.Size > 0) ImGui::OpenPopup("##key_ctx");
+			}
+			if (ImGui::BeginPopup("##key_ctx")) {
+				ImGui::TextDisabled("%d key%s", st->selected.Size, st->selected.Size == 1 ? "" : "s");
+				if (ImGui::BeginMenu("Ease")) {
+					for (int e = 0; e < k_ease_count; e++) {
+						if (e == iam_ease_spring || e == iam_ease_custom || e == iam_ease_cubic_bezier) continue;
+						if (ImGui::MenuItem(k_ease_names[e])) {
+							push_undo(st, clip);
+							for (int i = 0; i < st->selected.Size; i++) {
+								keyframe* kf = find_key(clip, st->selected[i]);
+								if (kf) { kf->ease_type = e; kf->has_bezier = false; kf->is_spring = false; }
+							}
+							after_edit(st, clip, preview_id);
+						}
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::MenuItem("Delete", "Del")) { delete_selected(st, clip); after_edit(st, clip, preview_id); }
+				ImGui::EndPopup();
+			}
+
+			// Draw lanes, segments, keys
+			ldl->PushClipRect(ImVec2(tl_x, lp.y), ImVec2(tl_x + tl_w, lp.y + content_h), true);
+			float step = nice_step(st->view_len * 70.0f / tl_w);
+			for (float t = ImFloor(st->view_t0 / step) * step; t <= st->view_t0 + st->view_len; t += step) {
+				float x = IAM_ED_T2X(t);
+				ldl->AddLine(ImVec2(x, lp.y), ImVec2(x, lp.y + content_h), IM_COL32(50, 54, 66, 255));
+			}
+			for (int t = 0; t < clip->iam_tracks.Size; t++) {
+				iam_track& trk = clip->iam_tracks[t];
+				float y = lp.y + row_h * t;
+				ldl->AddRectFilled(ImVec2(tl_x, y), ImVec2(tl_x + tl_w, y + row_h - 1), (t & 1) ? col_lane_alt : col_lane);
+				ImU32 c_main = (t & 1) ? AgedCopper : ZimaBlue;
+				ImU32 c_dim = (c_main & 0x00FFFFFF) | (70u << 24);
+				ImU32 c_curve = (c_main & 0x00FFFFFF) | (200u << 24);
+				for (int k = 0; k + 1 < trk.keys.Size; k++) {
+					float x0 = IAM_ED_T2X(trk.keys[k].time), x1 = IAM_ED_T2X(trk.keys[k + 1].time);
+					if (x1 - x0 < 1.0f) continue;
+					ImVec2 a(x0, y + 3), b(x1, y + row_h - 4);
+					ldl->AddRectFilled(a, b, c_dim, 2.0f);
+					if (x1 - x0 > 12.0f) draw_ease_curve(ldl, ImVec2(a.x, a.y + 1), ImVec2(b.x, b.y - 1), trk.keys[k], trk.type, c_curve, 1.5f);
+				}
+				for (int k = 0; k < trk.keys.Size; k++) {
+					keyframe const& kf = trk.keys[k];
+					ImVec2 c(IAM_ED_T2X(kf.time), y + row_h * 0.5f);
+					bool sel = st->is_selected(kf.uid);
+					bool hov = (kf.uid == hovered_uid);
+					float r = key_r * (hov ? 1.2f : 1.0f);
+					ImU32 fill = sel ? col_sel : c_main;
+					ldl->AddQuadFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + r, c.y), ImVec2(c.x, c.y + r), ImVec2(c.x - r, c.y), fill);
+					if (sel || hov) ldl->AddQuad(ImVec2(c.x, c.y - r - 2), ImVec2(c.x + r + 2, c.y), ImVec2(c.x, c.y + r + 2), ImVec2(c.x - r - 2, c.y), c_main, 1.5f);
+					if (kf.is_spring) ldl->AddCircle(c, r * 0.45f, IM_COL32(30, 32, 40, 255), 0, 1.5f);
+				}
+			}
+			float end_x = IAM_ED_T2X(clip->duration);
+			ldl->AddLine(ImVec2(end_x, lp.y), ImVec2(end_x, lp.y + content_h), (AgedCopper & 0x00FFFFFF) | (140u << 24), 1.5f);
+			float px = IAM_ED_T2X(play_t);
+			ldl->AddLine(ImVec2(px, lp.y), ImVec2(px, lp.y + content_h), col_playhead, 1.5f);
+			ldl->PopClipRect();
+
+			if (hovered_uid && !st->drag_keys && !ImGui::IsPopupOpen("##key_ctx")) {
+				keyframe* kf = find_key(clip, hovered_uid);
+				if (kf) ImGui::SetTooltip("%.3fs  %s%s", kf->time, kf->is_spring ? "spring" : ease_name(kf->ease_type), kf->has_variation ? "  (variation)" : "");
+			}
+			if (clip->iam_tracks.Size == 0) {
+				ldl->AddText(ImVec2(tl_x + 8, lp.y + 6), col_text, "No tracks. Use \"Add track\".");
+			}
+			ImGui::SetCursorScreenPos(ImVec2(lp.x, lp.y + content_h));
+		}
+		ImGui::EndChild();
+		#undef IAM_ED_T2X
+		#undef IAM_ED_X2T
+
+		// ---------------- Shortcuts ----------------
+		if (focused && !ImGui::IsAnyItemActive() && !io.WantTextInput) {
+			if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+				if (st->selected.Size) { delete_selected(st, clip); after_edit(st, clip, preview_id); }
+			}
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_A)) {
+				st->selected.clear();
+				for (int t = 0; t < clip->iam_tracks.Size; t++)
+					for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) st->select(clip->iam_tracks[t].keys[k].uid);
+			}
+			bool undo_key = io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z);
+			bool redo_key =io.KeyCtrl && ((io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) || ImGui::IsKeyPressed(ImGuiKey_Y));
+			if (undo_key && st->undo.Size) { st->redo.push_back(take_snapshot(clip)); restore_snapshot(clip, st->undo.back()); IM_DELETE(st->undo.back()); st->undo.pop_back(); st->selected.clear(); refresh_preview(preview_id); st->modified = true; }
+			if (redo_key && st->redo.Size) { st->undo.push_back(take_snapshot(clip)); restore_snapshot(clip, st->redo.back()); IM_DELETE(st->redo.back()); st->redo.pop_back(); st->selected.clear(); refresh_preview(preview_id); st->modified = true; }
+			if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
+				if (!preview.valid() || !preview.is_playing()) preview = iam_play(clip_id, preview_id);
+				else if (preview.is_paused()) preview.resume();
+				else preview.pause();
+			}
+		}
+
+		// ---------------- Inspector ----------------
+		ImGui::Separator();
+		ImGui::BeginChild("##inspector", ImVec2(0, 0), 0, 0);
+		{
+			// Drop selected uids that no longer exist (undo, delete, reload)
+			for (int i = st->selected.Size - 1; i >= 0; i--) if (!find_key(clip, st->selected[i])) st->selected.erase(st->selected.Data + i);
+
+			if (st->selected.Size == 0) {
+				ImGui::TextDisabled("Select a key to edit it. Double-click a lane to add one, drag keys to retime them.");
+			} else if (st->selected.Size == 1) {
+				int ti = -1;
+				keyframe* kf = find_key(clip, st->selected[0], &ti);
+				iam_track& trk = clip->iam_tracks[ti];
+				bool activated = false, changed = false;
+				char lbl[64];
+				track_label(trk, lbl, sizeof(lbl));
+
+				float const curve_w = ImGui::GetFontSize() * 9.0f;
+				ImGui::BeginGroup();
+				ImGui::Text("%s", lbl);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(%s)  key %d/%d", type_name(trk.type), (int)(kf - trk.keys.Data) + 1, trk.keys.Size);
+				ImGui::PushItemWidth(ImMax(ImGui::GetContentRegionAvail().x - curve_w - ImGui::GetFontSize() * 6.0f, ImGui::GetFontSize() * 8.0f));
+				float time = kf->time;
+				if (ImGui::DragFloat("Time", &time, 0.005f, 0.0f, 3600.0f, "%.3fs")) { kf->time = time < 0 ? 0 : time; changed = true; }
+				activated |= ImGui::IsItemActivated();
+				changed |= edit_key_value(*kf, trk, &activated);
+				if (trk.type == iam_chan_color) {
+					int cs = kf->color_space;
+					static char const* const cs_names[] = { "sRGB", "sRGB linear", "HSV", "OKLAB", "OKLCH" };
+					if (ImGui::Combo("Blend space", &cs, cs_names, 5)) { activated = true; kf->color_space = cs; changed = true; }
+				}
+				if (!kf->is_spring) {
+					int ease = kf->ease_type;
+					if (ease_combo("Ease", &ease)) {
+						activated = true;
+						kf->ease_type = ease;
+						if (ease == iam_ease_cubic_bezier && !kf->has_bezier) { kf->has_bezier = true; kf->bezier[0] = 0.25f; kf->bezier[1] = 0.1f; kf->bezier[2] = 0.25f; kf->bezier[3] = 1.0f; }
+						else if (ease != iam_ease_cubic_bezier) kf->has_bezier = false;
+						changed = true;
+					}
+					if (kf->ease_type == iam_ease_cubic_bezier) {
+						changed |= ImGui::DragFloat4("Bezier", kf->bezier, 0.005f, -2.0f, 3.0f, "%.3f");
+						activated |= ImGui::IsItemActivated();
+						kf->bezier[0] = ImClamp(kf->bezier[0], 0.0f, 1.0f);
+						kf->bezier[2] = ImClamp(kf->bezier[2], 0.0f, 1.0f);
+					}
+				}
+				if (trk.type == iam_chan_float) {
+					bool spring = kf->is_spring;
+					if (ImGui::Checkbox("Spring", &spring)) { activated = true; kf->is_spring = spring; changed = true; }
+					if (kf->is_spring) {
+						float sp[4] = { kf->spring.mass, kf->spring.stiffness, kf->spring.damping, kf->spring.initial_velocity };
+						if (ImGui::DragFloat4("Mass/Stiff/Damp/V0", sp, 0.1f)) {
+							kf->spring.mass = ImMax(sp[0], 0.001f); kf->spring.stiffness = ImMax(sp[1], 0.001f);
+							kf->spring.damping = ImMax(sp[2], 0.0f); kf->spring.initial_velocity = sp[3];
+							changed = true;
+						}
+						activated |= ImGui::IsItemActivated();
+					}
+				}
+				if (kf->has_variation) ImGui::TextDisabled("This key has per-loop variation (kept, not editable here).");
+				ImGui::PopItemWidth();
+				ImGui::EndGroup();
+
+				// Curve preview of the segment starting at this key
+				ImGui::SameLine();
+				ImVec2 cp = ImGui::GetCursorScreenPos();
+				float ch = ImMin(ImGui::GetContentRegionAvail().y, curve_w * 0.6f);
+				if (ch > 20.0f) {
+					ImDrawList* idl = ImGui::GetWindowDrawList();
+					ImVec2 c1(cp.x + curve_w, cp.y + ch);
+					idl->AddRectFilled(cp, c1, col_bg, 3.0f);
+					float pad = 6.0f;
+					ImVec2 a(cp.x + pad, cp.y + ch * 0.2f), b(c1.x - pad, c1.y - ch * 0.2f);
+					idl->AddLine(ImVec2(a.x, b.y), ImVec2(b.x, b.y), col_grid);
+					idl->AddLine(ImVec2(a.x, a.y), ImVec2(b.x, a.y), col_grid);
+					idl->PushClipRect(cp, c1, true);
+					draw_ease_curve(idl, a, b, *kf, trk.type, ZimaBlue, 2.0f);
+					idl->PopClipRect();
+					ImGui::Dummy(ImVec2(curve_w, ch));
+				}
+
+				if (activated) push_undo(st, clip);
+				if (changed) after_edit(st, clip, preview_id);
+			} else {
+				ImGui::Text("%d keys selected", st->selected.Size);
+				int ease = -1;
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+				if (ease_combo("Set ease", &ease) && ease >= 0) {
+					push_undo(st, clip);
+					for (int i = 0; i < st->selected.Size; i++) {
+						keyframe* kf = find_key(clip, st->selected[i]);
+						if (!kf) continue;
+						kf->ease_type = ease;
+						kf->is_spring = false;
+						if (ease == iam_ease_cubic_bezier && !kf->has_bezier) { kf->has_bezier = true; kf->bezier[0] = 0.25f; kf->bezier[1] = 0.1f; kf->bezier[2] = 0.25f; kf->bezier[3] = 1.0f; }
+						else if (ease != iam_ease_cubic_bezier) kf->has_bezier = false;
+					}
+					after_edit(st, clip, preview_id);
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Delete")) { delete_selected(st, clip); after_edit(st, clip, preview_id); }
+			}
+		}
+		ImGui::EndChild();
+
+		ImGui::PopID();
+		return st->modified;
+	}
+} // namespace iam_clip_editor_detail
+
+static void iam_clip_editor_free_states() { iam_clip_editor_detail::free_states(); }
+
+bool iam_clip_editor(ImGuiID clip_id, ImGuiID preview_instance_id) {
+	return iam_clip_editor_detail::editor_body(clip_id, preview_instance_id);
+}
+
+bool iam_show_clip_editor(ImGuiID clip_id, bool* p_open, ImGuiID preview_instance_id) {
+	char title[96];
+	char const* name = iam_get_id_name(clip_id);
+	if (name) snprintf(title, sizeof(title), "Clip Editor - %s###iam_clip_editor_%08X", name, clip_id);
+	else snprintf(title, sizeof(title), "Clip Editor - 0x%08X###iam_clip_editor_%08X", clip_id, clip_id);
+	ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 60.0f, ImGui::GetFontSize() * 26.0f), ImGuiCond_FirstUseEver);
+	bool modified = false;
+	if (ImGui::Begin(title, p_open)) modified = iam_clip_editor_detail::editor_body(clip_id, preview_instance_id);
+	ImGui::End();
+	return modified;
 }
 
 #undef IMGUI_STORAGE_PAIR

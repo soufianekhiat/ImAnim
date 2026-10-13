@@ -42,7 +42,7 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 | **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise |
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
 | **Advanced** | Layering/blending, resolved tweens, drag feedback, scroll animation |
-| **Tools** | Debug inspector, profiler, save/load, memory management |
+| **Tools** | Visual clip editor, debug inspector, profiler, save/load, memory management |
 
 ## Quick Integration
 
@@ -155,7 +155,7 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 
 ### Core Animation
 - [Tweens](tweens.md) - Immediate-mode animation
-- [Clips](clips.md) - Timeline-based keyframe animation
+- [Clips](clips.md) - Timeline-based keyframe animation (see also the [Clip Editor](clip-editor.md))
 - [Easing](easing.md) - All 30+ easing functions
 
 ### Motion & Paths
@@ -185,6 +185,7 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 - [Scroll Animation](scroll-animation.md) - Smooth scrolling
 
 ### Tools & Debug
+- [Clip Editor](clip-editor.md) - Edit clips visually while they play, export to C++
 - [Debug](debug.md) - Inspector and debugging tools
 - [Advanced](advanced.md) - Profiler, persistence, memory management
 
