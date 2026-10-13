@@ -62,3 +62,17 @@ jobs:
 
       - name: Run
         run: sh tests/presence/run.sh
+
+  motion:
+    runs-on: ubuntu-latest
+    name: Layout, scroll triggers and inertia
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/motion/run.sh
