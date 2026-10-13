@@ -4,7 +4,7 @@
 // when you want it. Draws straight into an ImDrawList (no texture, no shader).
 //
 // Supported: shape / solid / null / precomp / text layers (text from the file's embedded
-// glyphs), parenting, auto-orient, transforms (anchor, position incl. split and curved
+// glyphs), 3D layers and cameras, parenting, auto-orient, transforms (anchor, position incl. split and curved
 // motion paths, scale, rotation, skew, opacity), keyframes with bezier and hold easing,
 // rect / ellipse / star / path shapes and shape morphs, fill (non-zero / even-odd),
 // stroke (caps, joins, dashes), linear / radial gradients (with highlight), trim paths,
@@ -12,8 +12,9 @@
 // subtract, intersect, difference) and alpha track mattes (from the matte layer's
 // geometry), Fill and Tint effects, time remap, markers.
 // Not supported (reported by iam_lottie_warnings): expressions, other effects, image
-// layers, text without embedded glyphs and text animators, blend modes, 3D, twist, luma
-// mattes (drawn as alpha mattes).
+// layers, text without embedded glyphs and text animators, blend modes, twist, luma
+// mattes (drawn as alpha mattes). Older Bodymovin exports (0..255 colours, ...) are
+// upgraded on load like lottie-web does.
 
 #pragma once
 

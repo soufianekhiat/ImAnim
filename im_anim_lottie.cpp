@@ -173,7 +173,7 @@ struct keyframe_t {
 	float to[2], ti[2];
 };
 struct prop_t { int v, vn, k, kn; };  // static value floats[v, v+vn) or keys[k, k+kn); both 0 = absent
-struct xform_t { prop_t a, p, px, py, s, r, o, sk, sa, so, eo; int split; };
+struct xform_t { prop_t a, p, px, py, pz, s, r, o, sk, sa, so, eo, rx, ry, orient; int split; };
 
 enum {
 	SK_NONE, SK_GROUP, SK_PATH, SK_RECT, SK_ELLIPSE, SK_STAR,
@@ -190,7 +190,7 @@ struct shape_t {
 struct dash_t { int kind; prop_t v; };  // 0 dash, 1 gap, 2 offset
 struct mask_t { char mode; int inv; prop_t pt, o; };
 struct layer_t {
-	int ty, ind, parent, hidden, td, tt, tp, matte, comp, ao;
+	int ty, ind, parent, hidden, td, tt, tp, matte, comp, ao, ddd;
 	float ip, op, st, sr;
 	xform_t ks;
 	int shapes, shapesn;       // children[]
@@ -199,9 +199,11 @@ struct layer_t {
 	int mask, maskn;
 	int doc, docn;             // docs[] (text layers)
 	int fx, fxn;               // effects[]
+	float pw, ph;              // precomp layer size
+	prop_t pe;                 // camera zoom
 };
 struct effect_t { int kind; prop_t c0, c1, amount; };  // 1 fill (c0, opacity 0..1), 2 tint (black c0, white c1, amount %)
-struct comp_t { int layer, layern; };
+struct comp_t { int layer, layern, camera, has3d; };  // camera: layer index or -1
 struct marker_t { int name; float t, dur; };
 struct font_t { int name, family, style; };        // strings[]
 struct glyph_t { unsigned cp; int family, style; float w; int shapes, shapesn; };  // outlines at size 100
@@ -252,6 +254,37 @@ struct builder {
 	jdoc const* D;
 	ImVector<int> ref_layer, ref_str, ref_len;   // precomp layers waiting for their asset
 	ImVector<int> comp_id, comp_id_len;
+	int version[3];            // file "v"; older exports are upgraded like lottie-web does
+
+	bool older_than(int a, int b, int c) const {
+		if (version[0] != a) return version[0] < a;
+		if (version[1] != b) return version[1] < b;
+		return version[2] < c;
+	}
+	// Every value of a property (static, key starts and old-format key ends)
+	template <typename F> void each_value(prop_t const& p, F f) {
+		if (p.kn == 0) { if (p.vn) f(L->floats.Data + p.v, p.vn); return; }
+		for (int i = 0; i < p.kn; i++) {
+			keyframe_t const& k = L->keys[p.k + i];
+			if (k.sn) f(L->floats.Data + k.s, k.sn);
+			if (k.en) f(L->floats.Data + k.e, k.en);
+		}
+	}
+	// Before 4.1.9 fill / stroke colours were 0..255
+	prop_t color_prop(int node) {
+		prop_t const p = prop(node);
+		if (older_than(4, 1, 9)) each_value(p, [](float* v, int n) { for (int i = 0; i < n; i++) v[i] /= 255.0f; });
+		return p;
+	}
+	// Before 4.4.18 the closed flag lived on the shape item ("closed") or mask ("cl")
+	prop_t path_prop(int node, int owner, char const* closed_key) {
+		prop_t const p = prop(node);
+		if (older_than(4, 4, 18)) {
+			float const closed = D->num(owner, closed_key, 0.0) != 0.0 ? 1.0f : 0.0f;
+			each_value(p, [closed](float* v, int n) { if (n > 0) v[0] = closed; });
+		}
+		return p;
+	}
 
 	bool is_obj(int i) const { return D->type(i) == J_OBJ; }
 
@@ -342,6 +375,7 @@ struct builder {
 			x.split = 1;
 			x.px = prop(D->get(p, "x"));
 			x.py = prop(D->get(p, "y"));
+			x.pz = prop(D->get(p, "z"));
 		} else {
 			x.p = prop(p);
 		}
@@ -352,7 +386,9 @@ struct builder {
 		x.sa = prop(D->get(node, "sa"));
 		x.so = prop(D->get(node, "so"));
 		x.eo = prop(D->get(node, "eo"));
-		if (D->get(node, "rx") >= 0 || D->get(node, "ry") >= 0) L->warn |= W_3D;
+		x.rx = prop(D->get(node, "rx"));
+		x.ry = prop(D->get(node, "ry"));
+		x.orient = prop(D->get(node, "or"));
 		return x;
 	}
 
@@ -393,7 +429,7 @@ struct builder {
 					items(D->get(c, "it"), s.child, s.childn, &tr);
 					s.tr = xform(tr);
 				} else if (D->str_eq(ty, "sh")) {
-					s.kind = SK_PATH; s.p[0] = prop(D->get(c, "ks"));
+					s.kind = SK_PATH; s.p[0] = path_prop(D->get(c, "ks"), c, "closed");
 				} else if (D->str_eq(ty, "rc")) {
 					s.kind = SK_RECT; s.p[0] = prop(D->get(c, "p")); s.p[1] = prop(D->get(c, "s")); s.p[2] = prop(D->get(c, "r"));
 				} else if (D->str_eq(ty, "el")) {
@@ -403,9 +439,9 @@ struct builder {
 					char const* const keys[7] = { "p", "or", "ir", "os", "is", "r", "pt" };
 					for (int k = 0; k < 7; k++) s.p[k] = prop(D->get(c, keys[k]));
 				} else if (D->str_eq(ty, "fl")) {
-					s.kind = SK_FILL; s.p[0] = prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o")); s.rule = (int)D->num(c, "r", 1.0);
+					s.kind = SK_FILL; s.p[0] = color_prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o")); s.rule = (int)D->num(c, "r", 1.0);
 				} else if (D->str_eq(ty, "st")) {
-					s.kind = SK_STROKE; s.p[0] = prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o")); s.p[2] = prop(D->get(c, "w"));
+					s.kind = SK_STROKE; s.p[0] = color_prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o")); s.p[2] = prop(D->get(c, "w"));
 					stroke_style(c, s);
 				} else if (D->str_eq(ty, "gf") || D->str_eq(ty, "gs")) {
 					bool const stroke = D->str_eq(ty, "gs");
@@ -450,7 +486,7 @@ struct builder {
 	}
 
 	void layers(int arr) {
-		comp_t cp = { L->layers.Size, 0 };
+		comp_t cp = { L->layers.Size, 0, -1, 0 };
 		if (D->type(arr) == J_ARR)
 			for (int c = D->n[arr].child; c >= 0; c = D->n[c].next) {
 				layer_t ly;
@@ -472,7 +508,9 @@ struct builder {
 				ly.ks = xform(D->get(c, "ks"));
 				ly.tm = prop(D->get(c, "tm"));
 				if (ly.tt == 3 || ly.tt == 4) L->warn |= W_LUMA;
-				if (D->num(c, "ddd", 0.0) != 0.0) L->warn |= W_3D;
+				ly.ddd = D->num(c, "ddd", 0.0) != 0.0;
+				ly.pw = (float)D->num(c, "w", 0.0);
+				ly.ph = (float)D->num(c, "h", 0.0);
 				if (D->num(c, "bm", 0.0) != 0.0) L->warn |= W_BLEND;
 				ly.ao = D->num(c, "ao", 0.0) != 0.0;
 				effects(D->get(c, "ef"), ly);
@@ -503,6 +541,7 @@ struct builder {
 					}
 					case 2: L->warn |= W_IMAGE; break;
 					case 3: break;
+					case 13: ly.pe = prop(D->get(c, "pe")); break;  // camera
 					case 4: items(D->get(c, "shapes"), ly.shapes, ly.shapesn, nullptr); break;
 					case 5: text(D->get(c, "t"), ly); break;
 					default: L->warn |= W_UNKNOWN_LAYER; break;
@@ -515,7 +554,7 @@ struct builder {
 						int const mode = D->get(m, "mode");
 						mk.mode = (D->type(mode) == J_STR && D->n[mode].str_len > 0) ? D->text[D->n[mode].str] : 'a';
 						mk.inv = D->num(m, "inv", 0.0) != 0.0;
-						mk.pt = prop(D->get(m, "pt"));
+						mk.pt = path_prop(D->get(m, "pt"), m, "cl");
 						mk.o = prop(D->get(m, "o"));
 						if (mk.mode != 'a' && mk.mode != 's' && mk.mode != 'i' && mk.mode != 'n' && mk.mode != 'f') L->warn |= W_MASK_MODE;
 						L->masks.push_back(mk);
@@ -524,6 +563,10 @@ struct builder {
 				L->layers.push_back(ly);
 			}
 		cp.layern = L->layers.Size - cp.layer;
+		for (int i = cp.layer; i < cp.layer + cp.layern; i++) {
+			if (L->layers[i].ty == 13 && cp.camera < 0) cp.camera = i;  // shortcut: the top camera, not the one active at each time
+			if (L->layers[i].ddd || L->layers[i].ty == 13) cp.has3d = 1;
+		}
 		// Parents and mattes refer to layers of the same composition
 		for (int i = cp.layer; i < cp.layer + cp.layern; i++) {
 			layer_t& ly = L->layers[i];
@@ -626,10 +669,12 @@ struct builder {
 	// Text layer: the document keyframes (text, font, size, colours); animators are not supported
 	void text(int t, layer_t& ly) {
 		ly.doc = L->docs.Size;
-		int const k = D->get(D->get(t, "d"), "k");
-		if (D->type(k) == J_ARR)
-			for (int kf = D->n[k].child; kf >= 0; kf = D->n[kf].next) {
-				int const sd = D->get(kf, "s");
+		int const dn = D->get(t, "d");
+		int const k = D->get(dn, "k");
+		bool const single = older_than(4, 4, 14) && D->get(dn, "t") >= 0;  // before 4.4.14: one document, not keyframes
+		if (D->type(k) == J_ARR || single)
+			for (int kf = single ? dn : D->n[k].child; kf >= 0; kf = single ? -1 : D->n[kf].next) {
+				int const sd = single ? dn : D->get(kf, "s");
 				textdoc_t d;
 				memset(&d, 0, sizeof(d));
 				d.t = (float)D->num(kf, "t", 0.0);
@@ -783,15 +828,69 @@ static inline bool present(prop_t const& p) { return p.vn > 0 || p.kn > 0; }
 // Geometry
 // ----------------------------------------------------------------------------
 
-struct mat { float a, b, c, d, x, y; };  // x' = a x + c y + x, y' = b x + d y + y
-static inline mat mat_make(float a, float b, float c, float d, float x, float y) { mat m = { a, b, c, d, x, y }; return m; }
+// 2D transform of a layer plane, projective so 3D layers seen through a camera fit too:
+// x' = (a x + c y + x) / w, y' = (b x + d y + y) / w, w = g x + h y + i (affine: g = h = 0, i = 1)
+struct mat { float a, b, c, d, x, y, g, h, i; };
+static inline mat mat_make(float a, float b, float c, float d, float x, float y) { mat m = { a, b, c, d, x, y, 0, 0, 1 }; return m; }
 static inline mat mul(mat const& A, mat const& B) {
-	return mat_make(A.a * B.a + A.c * B.b, A.b * B.a + A.d * B.b, A.a * B.c + A.c * B.d, A.b * B.c + A.d * B.d,
-	                A.a * B.x + A.c * B.y + A.x, A.b * B.x + A.d * B.y + A.y);
+	mat r;
+	r.a = A.a * B.a + A.c * B.b + A.x * B.g; r.c = A.a * B.c + A.c * B.d + A.x * B.h; r.x = A.a * B.x + A.c * B.y + A.x * B.i;
+	r.b = A.b * B.a + A.d * B.b + A.y * B.g; r.d = A.b * B.c + A.d * B.d + A.y * B.h; r.y = A.b * B.x + A.d * B.y + A.y * B.i;
+	r.g = A.g * B.a + A.h * B.b + A.i * B.g; r.h = A.g * B.c + A.h * B.d + A.i * B.h; r.i = A.g * B.x + A.h * B.y + A.i * B.i;
+	return r;
 }
-static inline ImVec2 apply(mat const& M, float x, float y) { return ImVec2(M.a * x + M.c * y + M.x, M.b * x + M.d * y + M.y); }
+static inline ImVec2 apply(mat const& M, float x, float y) {
+	float w = M.g * x + M.h * y + M.i;
+	if (w < 1e-3f) w = 1e-3f;  // behind the camera: pushed far away instead of mirrored
+	return ImVec2((M.a * x + M.c * y + M.x) / w, (M.b * x + M.d * y + M.y) / w);
+}
 static inline mat rot(float deg) { float const r = deg * (IM_PI / 180.0f), c = ImCos(r), s = ImSin(r); return mat_make(c, s, -s, c, 0, 0); }
-static inline float mat_scale(mat const& M) { return ImSqrt(ImFabs(M.a * M.d - M.b * M.c)); }
+// Local scale at the plane origin (area scale = det / w^3)
+static inline float mat_scale(mat const& M) {
+	float const det = M.a * (M.d * M.i - M.y * M.h) - M.c * (M.b * M.i - M.y * M.g) + M.x * (M.b * M.h - M.d * M.g);
+	float const w = ImMax(ImFabs(M.i), 1e-3f);
+	return ImSqrt(ImFabs(det) / (w * w * w));
+}
+
+// 3D: 4x4 row-major, column vectors; After Effects axes (x right, y down, z into the screen)
+struct m4 { float m[16]; };
+static m4 m4_id() { m4 r; for (int k = 0; k < 16; k++) r.m[k] = (k % 5) == 0 ? 1.0f : 0.0f; return r; }
+static m4 m4_mul(m4 const& A, m4 const& B) {
+	m4 r;
+	for (int i = 0; i < 4; i++)
+		for (int j = 0; j < 4; j++) r.m[i * 4 + j] = A.m[i * 4] * B.m[j] + A.m[i * 4 + 1] * B.m[4 + j] + A.m[i * 4 + 2] * B.m[8 + j] + A.m[i * 4 + 3] * B.m[12 + j];
+	return r;
+}
+static m4 m4_translate(float x, float y, float z) { m4 r = m4_id(); r.m[3] = x; r.m[7] = y; r.m[11] = z; return r; }
+static m4 m4_rot(int axis, float deg) {
+	float const t = deg * (IM_PI / 180.0f), c = ImCos(t), s = ImSin(t);
+	m4 r = m4_id();
+	int const u = axis == 0 ? 1 : 0, v = axis == 2 ? 1 : 2;  // the plane the axis rotates
+	r.m[u * 4 + u] = c; r.m[v * 4 + v] = c;
+	if (axis == 1) { r.m[u * 4 + v] = s; r.m[v * 4 + u] = -s; }  // y: x' = c x + s z
+	else { r.m[u * 4 + v] = -s; r.m[v * 4 + u] = s; }           // x: y' = c y - s z; z: x' = c x - s y
+	return r;
+}
+static m4 m4_from_mat(mat const& M) {
+	m4 r = m4_id();
+	r.m[0] = M.a; r.m[1] = M.c; r.m[3] = M.x;
+	r.m[4] = M.b; r.m[5] = M.d; r.m[7] = M.y;
+	return r;
+}
+// Inverse of an affine 4x4 (bottom row 0 0 0 1)
+static m4 m4_inverse_affine(m4 const& A) {
+	float const* a = A.m;
+	float const c00 = a[5] * a[10] - a[6] * a[9], c01 = a[6] * a[8] - a[4] * a[10], c02 = a[4] * a[9] - a[5] * a[8];
+	float det = a[0] * c00 + a[1] * c01 + a[2] * c02;
+	if (ImFabs(det) < 1e-12f) return m4_id();
+	det = 1.0f / det;
+	m4 r = m4_id();
+	r.m[0] = c00 * det; r.m[1] = (a[2] * a[9] - a[1] * a[10]) * det; r.m[2] = (a[1] * a[6] - a[2] * a[5]) * det;
+	r.m[4] = c01 * det; r.m[5] = (a[0] * a[10] - a[2] * a[8]) * det; r.m[6] = (a[2] * a[4] - a[0] * a[6]) * det;
+	r.m[8] = c02 * det; r.m[9] = (a[1] * a[8] - a[0] * a[9]) * det; r.m[10] = (a[0] * a[5] - a[1] * a[4]) * det;
+	for (int i = 0; i < 3; i++) r.m[i * 4 + 3] = -(r.m[i * 4] * a[3] + r.m[i * 4 + 1] * a[7] + r.m[i * 4 + 2] * a[11]);
+	return r;
+}
 
 struct contour { int first, count; bool closed; };
 // Fill rules: 0 non-zero, 1 even-odd, k >= 2: winding >= k - 1 (merge paths)
@@ -1904,6 +2003,8 @@ struct ctx {
 	struct active_fx { int first, count; float t; };
 	active_fx fx_stack[16];    // layers being drawn that carry effects, outermost first
 	int nfx;
+	int cur_comp;              // composition being drawn, and its size (3D projection centre)
+	float cur_w, cur_h;
 
 	// Colour through the active Fill / Tint effects, innermost layer first
 	void fx_color(float* rgb) {
@@ -2320,13 +2421,96 @@ struct ctx {
 		depth--;
 	}
 
-	mat layer_world(int li, float t, float* opacity) {
+	void pv3(prop_t const& p, float t, float def, float out[3]) {
+		out[0] = out[1] = out[2] = def;
+		if (!present(p)) return;
+		eval(L, p, t, scratch);
+		for (int k = 0; k < 3 && k < scratch.Size; k++) out[k] = scratch[k];
+		if (scratch.Size == 2) out[2] = def == 100.0f ? 100.0f : 0.0f;  // 2D value on a 3D layer
+	}
+
+	// 3D layer transform (lottie-web's order, in After Effects axes):
+	// T(p) Rx(or) Ry(or) Rz(or) Rx(rx) Ry(ry) Rz(rz) skew S T(-a)
+	m4 xform3(xform_t const& x, float t, float* opacity, bool camera = false) {
+		float a[3], p[3], s[3], o[3];
+		pv3(x.a, t, 0.0f, a);
+		if (x.split) { p[0] = pv(x.px, t, 0, 0.0f); p[1] = pv(x.py, t, 0, 0.0f); p[2] = pv(x.pz, t, 0, 0.0f); }
+		else pv3(x.p, t, 0.0f, p);
+		pv3(x.s, t, 100.0f, s);
+		pv3(x.orient, t, 0.0f, o);
+		if (opacity) *opacity = pv(x.o, t, 0, 100.0f) * 0.01f;
+		m4 m = m4_translate(p[0], p[1], p[2]);
+		if (camera && present(x.a)) {
+			// A camera's anchor is its point of interest: aim +z at it, keeping y down
+			float f[3] = { a[0] - p[0], a[1] - p[1], a[2] - p[2] };
+			float const fl = ImSqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+			if (fl > 1e-6f) {
+				for (int k = 0; k < 3; k++) f[k] /= fl;
+				float xa[3] = { f[2], 0.0f, -f[0] };  // cross((0,1,0), f)
+				float const xl = ImSqrt(xa[0] * xa[0] + xa[2] * xa[2]);
+				if (xl > 1e-6f) { xa[0] /= xl; xa[2] /= xl; } else { xa[0] = 1.0f; xa[2] = 0.0f; }
+				float const ya[3] = { f[1] * xa[2] - f[2] * xa[1], f[2] * xa[0] - f[0] * xa[2], f[0] * xa[1] - f[1] * xa[0] };
+				m4 r = m4_id();
+				for (int k = 0; k < 3; k++) { r.m[k * 4] = xa[k]; r.m[k * 4 + 1] = ya[k]; r.m[k * 4 + 2] = f[k]; }
+				m = m4_mul(m, r);
+			}
+		}
+		m = m4_mul(m, m4_rot(0, o[0])); m = m4_mul(m, m4_rot(1, o[1])); m = m4_mul(m, m4_rot(2, o[2]));
+		m = m4_mul(m, m4_rot(0, pv(x.rx, t, 0, 0.0f))); m = m4_mul(m, m4_rot(1, pv(x.ry, t, 0, 0.0f))); m = m4_mul(m, m4_rot(2, pv(x.r, t, 0, 0.0f)));
+		if (camera) return m;
+		float const sk = pv(x.sk, t, 0, 0.0f);
+		if (sk != 0.0f) {
+			float const sa = pv(x.sa, t, 0, 0.0f);
+			m = m4_mul(m, m4_from_mat(mul(mul(rot(-sa), mat_make(1, 0, tanf(-sk * (IM_PI / 180.0f)), 1, 0, 0)), rot(sa))));
+		}
+		m4 sc = m4_id();
+		sc.m[0] = s[0] * 0.01f; sc.m[5] = s[1] * 0.01f; sc.m[10] = s[2] * 0.01f;
+		m = m4_mul(m, sc);
+		return m4_mul(m, m4_translate(-a[0], -a[1], -a[2]));
+	}
+
+	m4 layer_world3(int li, float t, float* opacity) {
 		layer_t const& ly = L->layers[li];
-		mat W = xform(ly.ks, (t - ly.st) / ly.sr, opacity, ly.ao != 0);
+		float const lt = t;  // properties use the comp time (lottie-web: the start time offsets both frame and keys)
+		m4 W = ly.ddd || ly.ty == 13 ? xform3(ly.ks, lt, opacity, ly.ty == 13) : m4_from_mat(xform(ly.ks, lt, opacity));
 		int p = ly.parent;
 		for (int guard = 0; p >= 0 && guard < 32; guard++) {
 			layer_t const& pl = L->layers[p];
-			W = mul(xform(pl.ks, (t - pl.st) / pl.sr, nullptr, pl.ao != 0), W);  // parents pass their transform, not their opacity
+			float const plt = t;
+			W = m4_mul(pl.ddd ? xform3(pl.ks, plt, nullptr) : m4_from_mat(xform(pl.ks, plt, nullptr)), W);
+			p = pl.parent;
+		}
+		return W;
+	}
+
+	// 3D layer in a comp of size cw x ch: its plane through the comp camera (or After
+	// Effects' default 50 mm camera) as a projective 2D transform
+	mat layer_projected(int li, float t, float* opacity) {
+		comp_t const& cp = L->comps[cur_comp];
+		float const cx = cur_w * 0.5f, cy = cur_h * 0.5f;
+		float zoom = cur_w / 0.72f;  // 50 mm preset: horizontal view angle ~39.6 degrees
+		m4 view = m4_translate(-cx, -cy, zoom);
+		if (cp.camera >= 0) {
+			layer_t const& cam = L->layers[cp.camera];
+			zoom = pv(cam.pe, t, 0, zoom);
+			view = m4_inverse_affine(layer_world3(cp.camera, t, nullptr));
+		}
+		m4 const K = m4_mul(view, layer_world3(li, t, opacity));
+		mat H;
+		H.a = zoom * K.m[0] + cx * K.m[8]; H.c = zoom * K.m[1] + cx * K.m[9]; H.x = zoom * K.m[3] + cx * K.m[11];
+		H.b = zoom * K.m[4] + cy * K.m[8]; H.d = zoom * K.m[5] + cy * K.m[9]; H.y = zoom * K.m[7] + cy * K.m[11];
+		H.g = K.m[8]; H.h = K.m[9]; H.i = K.m[11];
+		return H;
+	}
+
+	mat layer_world(int li, float t, float* opacity) {
+		layer_t const& ly = L->layers[li];
+		if (ly.ddd && L->comps[cur_comp].has3d) return layer_projected(li, t, opacity);
+		mat W = xform(ly.ks, t, opacity, ly.ao != 0);
+		int p = ly.parent;
+		for (int guard = 0; p >= 0 && guard < 32; guard++) {
+			layer_t const& pl = L->layers[p];
+			W = mul(xform(pl.ks, t, nullptr, pl.ao != 0), W);  // parents pass their transform, not their opacity
 			p = pl.parent;
 		}
 		return W;
@@ -2369,14 +2553,14 @@ struct ctx {
 		depth++;
 		float op = 1.0f;
 		mat const W = mul(M, layer_world(li, t, &op));
-		float const lt = (t - ly.st) / ly.sr;
+		float const lt = t;  // properties use the comp time (lottie-web: the start time offsets both frame and keys)
 		float a = alpha * op;
 		// Clips are geometric; opacity is approximated: a single add mask's opacity and an
 		// alpha matte layer's own opacity scale the layer
 		if (ly.maskn == 1 && L->masks[ly.mask].mode == 'a' && !L->masks[ly.mask].inv) a *= ImSaturate(pv(L->masks[ly.mask].o, lt, 0, 100.0f) * 0.01f);
 		if (ly.matte >= 0 && ly.matte != li && (ly.tt == 1 || ly.tt == 3)) {
 			layer_t const& ml = L->layers[ly.matte];
-			a *= ImSaturate(pv(ml.ks.o, (t - ml.st) / ml.sr, 0, 100.0f) * 0.01f);
+			a *= ImSaturate(pv(ml.ks.o, t, 0, 100.0f) * 0.01f);
 		}
 		int pushed = 0;
 		if (a > 0.0f || collect) {
@@ -2407,7 +2591,7 @@ struct ctx {
 				}
 				case 5: draw_text(ly, W, a, lt); break;
 				case 0:
-					if (ly.comp >= 0) render_comp(ly.comp, present(ly.tm) ? pv(ly.tm, lt, 0, 0.0f) * L->fr : lt, W, a);
+					if (ly.comp >= 0) render_comp(ly.comp, present(ly.tm) ? pv(ly.tm, t, 0, 0.0f) * L->fr : (t - ly.st) / ly.sr, W, a, ly.pw > 0.0f ? ly.pw : cur_w, ly.ph > 0.0f ? ly.ph : cur_h);
 					break;
 				default: break;
 			}
@@ -2417,14 +2601,18 @@ struct ctx {
 		depth--;
 	}
 
-	void render_comp(int ci, float t, mat const& M, float alpha) {
+	void render_comp(int ci, float t, mat const& M, float alpha, float cw, float ch) {
 		comp_t const& cp = L->comps[ci];
+		int const prev_comp = cur_comp;
+		float const prev_w = cur_w, prev_h = cur_h;
+		cur_comp = ci; cur_w = cw; cur_h = ch;
 		for (int i = cp.layern - 1; i >= 0; --i) {
 			layer_t const& ly = L->layers[cp.layer + i];
-			if (ly.td || ly.hidden || ly.ty == 3) continue;  // matte sources are drawn through the layer they matte
+			if (ly.td || ly.hidden || ly.ty == 3 || ly.ty == 13) continue;  // matte sources are drawn through the layer they matte
 			if (t < ly.ip || t >= ly.op) continue;
 			render_layer(cp.layer + i, t, M, alpha);
 		}
+		cur_comp = prev_comp; cur_w = prev_w; cur_h = prev_h;
 	}
 };
 
@@ -2454,6 +2642,21 @@ iam_lottie* iam_lottie_load_from_memory(char const* json, size_t size) {
 	builder B;
 	B.L = L;
 	B.D = &doc;
+	{
+		// "5.7.0" -> 5 7 0; no version reads as current
+		B.version[0] = 100; B.version[1] = B.version[2] = 0;
+		int const v = doc.get(root, "v");
+		if (doc.type(v) == J_STR) {
+			char const* c = json + doc.n[v].str;
+			char const* const e = c + doc.n[v].str_len;
+			for (int k = 0; k < 3; k++) {
+				int n = 0;
+				while (c < e && *c >= '0' && *c <= '9') n = n * 10 + (*c++ - '0');
+				B.version[k] = n;
+				if (c < e && *c == '.') c++;
+			}
+		}
+	}
 	B.fonts_and_chars(root);  // before the layers: text documents refer to the fonts
 	B.layers(doc.get(root, "layers"));
 	int const assets = doc.get(root, "assets");
@@ -2532,7 +2735,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	C.collect = nullptr;
 	C.tol = 0.25f;
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);
-	C.render_comp(0, frame, M, 1.0f);
+	C.cur_comp = 0; C.cur_w = anim->w; C.cur_h = anim->h;
+	C.render_comp(0, frame, M, 1.0f, anim->w, anim->h);
 }
 
 bool iam_lottie_gpu_active() {

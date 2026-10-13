@@ -62,6 +62,8 @@ animations were made for the demo and ship under ImAnim's license.
 ## What is supported
 
 - Layers: shape, solid, null, precomp (with time remap), text, parenting, auto-orient, in/out points, time stretch
+- 3D layers (position / anchor / scale in z, X / Y / Z rotation, orientation) seen through the comp's camera layer (zoom, point of interest, parenting) or After Effects' default 50 mm camera; 2D layers in the same comp stay flat
+- Older Bodymovin exports are upgraded on load like lottie-web (0..255 colours, closed flags on shapes, single text documents)
 - Transforms: anchor, position (also split and curved motion paths), scale, rotation, skew, opacity
 - Keyframes: bezier easing (per component), hold keys, old (`e`) and new formats
 - Shapes: rect (rounded), ellipse, star / polygon (with roundness), paths and shape morphs, groups
@@ -102,7 +104,7 @@ where the CPU fill fades across the edge.
 
 Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than
 Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
-(exported with system fonts) and text animators, blend modes, 3D layers, twist. Also:
+(exported with system fonts) and text animators, blend modes, twist. Also:
 
 - Mattes and masks clip by geometry: luma mattes act as alpha mattes, feather is
   ignored, and opacity is approximated (a single add mask's opacity and an alpha
@@ -113,6 +115,9 @@ Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
   shapes are filled; a stroke after them still follows the original paths, and an
   offset path fills the holes of the shapes it offsets.
 - Text boxes do not wrap; the text is laid out as point text.
+- 3D: layers draw in file order (no depth sorting), the top camera layer is used for
+  the whole animation, and curves are projected through their control points (a
+  close-up in strong perspective can bend slightly differently).
 - Layer opacity is applied to each shape, not to the composited layer, so
   overlapping shapes of a translucent layer show through each other.
 - A repeater repeats the shapes and styles above it, not geometry seen by styles below it.

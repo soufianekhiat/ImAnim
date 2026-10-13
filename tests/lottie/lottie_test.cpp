@@ -110,6 +110,10 @@ int main() {
 		a = draw(json, 1.5f);
 		CHECK(cov_at(150, 100) > 0.99f, "after the last key: holds the last value");
 		iam_lottie_free(a);
+		// Key times are comp times: a layer's start time ("st") does not shift them (lottie-web)
+		a = draw(doc("{\"ty\":4,\"ind\":1,\"ip\":0,\"op\":60,\"st\":20," + lin + "\"shapes\":[" + el + "]}"), 0.5f);
+		CHECK(cov_at(100, 100) > 0.99f, "start time does not offset key times");
+		iam_lottie_free(a);
 		std::string hold = lin;
 		hold.replace(hold.find("\"o\":"), 0, "\"h\":1,");
 		a = draw(doc("{\"ty\":4,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0," + hold + "\"shapes\":[" + el + "]}"), 0.5f);
@@ -341,6 +345,46 @@ int main() {
 		iam_lottie_free(a);
 		a = draw(doc(layer(group(rect(100, 100, 60, 60) + "," + offset(-10) + "," + fill(1, 1, 1)))), 0.0f);
 		CHECK(cov_at(75, 103) < 0.01f && cov_at(85, 103) > 0.99f && cov_at(97, 103) > 0.99f && cov_at(65, 103) < 0.01f, "offset path shrinks the shape");
+		iam_lottie_free(a);
+	}
+
+	// ---------------- 3D layers and cameras ----------------
+	{
+		// Comp 200x200: default camera zoom 200 / 0.72; a 3D layer at z = zoom shows at half size
+		float const zoom = 200.0f / 0.72f;
+		auto layer3d = [](char const* ks, char const* extra) {
+			return std::string("{\"ty\":4,\"ind\":1,\"ddd\":1,\"ip\":0,\"op\":60,\"st\":0,") + extra + "\"ks\":{" + ks + "},\"shapes\":[" +
+			       group(rect(0, 0, 40, 40) + "," + fill(1, 1, 1)) + "]}";
+		};
+		iam_lottie* a = draw(doc(layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.0f);
+		CHECK(cov_at(118, 103) > 0.99f && cov_at(122, 103) < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "3D layer at z = 0 matches 2D");
+		iam_lottie_free(a);
+		char ks[160];
+		snprintf(ks, sizeof(ks), "\"p\":{\"a\":0,\"k\":[150,100,%g]}", zoom);
+		a = draw(doc(layer3d(ks, "")), 0.0f);
+		CHECK(cov_at(125, 103) > 0.99f && cov_at(133, 103) > 0.99f && cov_at(138, 103) < 0.01f && cov_at(150, 103) < 0.01f, "depth: half size, pulled toward the centre");
+		iam_lottie_free(a);
+		a = draw(doc(layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]},\"ry\":{\"a\":0,\"k\":60}", "")), 0.0f);
+		CHECK(cov_at(108, 103) > 0.99f && cov_at(115, 103) < 0.01f && cov_at(100, 117) > 0.99f, "Y rotation foreshortens the width");
+		iam_lottie_free(a);
+		a = draw(doc(layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]},\"ry\":{\"a\":0,\"k\":90}", "")), 0.0f);
+		CHECK(cov_at(97, 103) < 0.01f && cov_at(103, 103) < 0.01f, "edge-on layer disappears");
+		iam_lottie_free(a);
+		// Camera moved left: the scene moves right
+		char cam[300];
+		snprintf(cam, sizeof(cam), "{\"ty\":13,\"ind\":9,\"ip\":0,\"op\":60,\"st\":0,\"pe\":{\"a\":0,\"k\":%g},\"ks\":{\"p\":{\"a\":0,\"k\":[50,100,%g]}}},", zoom, -zoom);
+		a = draw(doc(cam + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.0f);
+		CHECK(cov_at(147, 103) > 0.99f && cov_at(97, 103) < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "camera layer position");
+		iam_lottie_free(a);
+		// Two-node camera aimed at the layer from the right: the layer stays centred, seen at an angle
+		snprintf(cam, sizeof(cam), "{\"ty\":13,\"ind\":9,\"ip\":0,\"op\":60,\"st\":0,\"pe\":{\"a\":0,\"k\":%g},\"ks\":{\"p\":{\"a\":0,\"k\":[300,100,-200]},\"a\":{\"a\":0,\"k\":[100,100,0]}}},", zoom);
+		a = draw(doc(cam + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.0f);
+		CHECK(cov_at(100, 103) > 0.99f && cov_at(97, 103) > 0.99f && cov_at(103, 103) > 0.99f, "point of interest keeps the target centred");
+		iam_lottie_free(a);
+		// 3D parent: a 3D null shifts its 3D child
+		std::string const null3d = "{\"ty\":3,\"ind\":5,\"ddd\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":0,\"k\":[50,0,0]}}},";
+		a = draw(doc(null3d + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "\"parent\":5,")), 0.0f);
+		CHECK(cov_at(147, 103) > 0.99f && cov_at(97, 103) < 0.01f, "3D parenting");
 		iam_lottie_free(a);
 	}
 
