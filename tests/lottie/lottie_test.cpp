@@ -272,6 +272,13 @@ int main() {
 			      "merge paths mode %d (A %d, A&B %d, B %d)", mode, only_a, both, only_b);
 			iam_lottie_free(a);
 		}
+		auto twist = [](float angle) { char b[120]; snprintf(b, sizeof(b), "{\"ty\":\"tw\",\"a\":{\"a\":0,\"k\":%g},\"c\":{\"a\":0,\"k\":[100,100]}}", angle); return std::string(b); };
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + twist(0) + "," + fill(1, 1, 1)))), 0.0f);
+		CHECK(cov_at(122, 52) > 0.99f && strcmp(iam_lottie_warnings(a), "") == 0, "twist 0 leaves the shape");
+		iam_lottie_free(a);
+		a = draw(doc(layer(group(rect(100, 100, 100, 100) + "," + twist(90) + "," + fill(1, 1, 1)))), 0.0f);
+		CHECK(cov_at(122, 52) < 0.01f && cov_at(122, 59) > 0.99f && cov_at(100, 100) > 0.99f, "twist bends the edges around the centre");
+		iam_lottie_free(a);
 		std::string const zz ="{\"ty\":\"zz\",\"s\":" + val("10") + ",\"r\":" + val("3") + ",\"pt\":" + val("1") + "}";
 		a = draw(doc(layer(group(line_path(20, 100, 180, 100) + "," + zz + "," + stroke(2, 1)))), 0.0f);
 		CHECK(cov_at(60, 90) > 0.9f && cov_at(100, 110) > 0.9f && cov_at(60, 100) < 0.01f, "zig-zag: alternating ridges");

@@ -8,11 +8,11 @@
 // motion paths, scale, rotation, skew, opacity), keyframes with bezier and hold easing,
 // rect / ellipse / star / path shapes and shape morphs, fill (non-zero / even-odd),
 // stroke (caps, joins, dashes), linear / radial gradients (with highlight), trim paths,
-// round corners, pucker / bloat, zig-zag, offset path, merge paths, repeater, masks (add,
+// round corners, pucker / bloat, zig-zag, offset path, twist, merge paths, repeater, masks (add,
 // subtract, intersect, difference) and alpha track mattes (from the matte layer's
 // geometry), Fill and Tint effects, time remap, markers.
 // Not supported (reported by iam_lottie_warnings): expressions, other effects, image
-// layers, text without embedded glyphs and text animators, blend modes, twist, luma
+// layers, text without embedded glyphs and text animators, blend modes, luma
 // mattes (drawn as alpha mattes). Older Bodymovin exports (0..255 colours, ...) are
 // upgraded on load like lottie-web does.
 

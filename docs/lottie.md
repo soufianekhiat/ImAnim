@@ -68,7 +68,7 @@ animations were made for the demo and ship under ImAnim's license.
 - Keyframes: bezier easing (per component), hold keys, old (`e`) and new formats
 - Shapes: rect (rounded), ellipse, star / polygon (with roundness), paths and shape morphs, groups
 - Styles: fill with non-zero or even-odd rule, stroke (butt / round / square caps, miter / round / bevel joins, dashes), linear and radial gradients (with highlight)
-- Modifiers: trim paths (each path or all together), round corners, pucker / bloat, zig-zag (corner and smooth), offset path, merge paths (merge, add, subtract, intersect, exclude), repeater
+- Modifiers: trim paths (each path or all together), round corners, pucker / bloat, zig-zag (corner and smooth), offset path, twist, merge paths (merge, add, subtract, intersect, exclude), repeater
 - Masks (add, subtract, intersect, difference, inverted) and alpha track mattes, markers
 - Effects: Fill and Tint recolour a layer (and the layers of a precomp); expression controls (sliders, checkboxes, ...) are ignored as they draw nothing
 - Text layers drawn from the glyph outlines the file embeds (`chars`): lines, justification, tracking, line height, fill and stroke colours
@@ -104,7 +104,7 @@ where the CPU fill fades across the edge.
 
 Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than
 Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
-(exported with system fonts) and text animators, blend modes, twist. Also:
+(exported with system fonts) and text animators, blend modes. Also:
 
 - Mattes and masks clip by geometry: luma mattes act as alpha mattes, feather is
   ignored, and opacity is approximated (a single add mask's opacity and an alpha
@@ -115,6 +115,9 @@ Fill and Tint (blur, shadows, ...), image layers, text without embedded glyphs
   shapes are filled; a stroke after them still follows the original paths, and an
   offset path fills the holes of the shapes it offsets.
 - Text boxes do not wrap; the text is laid out as point text.
+- Twist has no reference implementation (lottie-web, Skottie, ThorVG and rlottie skip it):
+  it follows After Effects' description, each point turning by angle * (1 - d / R)
+  around the centre, so it can differ from After Effects in detail.
 - 3D: layers draw in file order (no depth sorting), the top camera layer is used for
   the whole animation, and curves are projected through their control points (a
   close-up in strong perspective can bend slightly differently).

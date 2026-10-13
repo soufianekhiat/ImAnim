@@ -177,7 +177,7 @@ struct xform_t { prop_t a, p, px, py, pz, s, r, o, sk, sa, so, eo, rx, ry, orien
 
 enum {
 	SK_NONE, SK_GROUP, SK_PATH, SK_RECT, SK_ELLIPSE, SK_STAR,
-	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER, SK_PUCKER, SK_ZIGZAG, SK_MERGE, SK_OFFSET
+	SK_FILL, SK_STROKE, SK_GFILL, SK_GSTROKE, SK_TRIM, SK_ROUND, SK_REPEATER, SK_PUCKER, SK_ZIGZAG, SK_MERGE, SK_OFFSET, SK_TWIST
 };
 struct shape_t {
 	int kind, hidden, dir, rule, cap, join, mode, gcount;
@@ -468,6 +468,8 @@ struct builder {
 					s.kind = SK_REPEATER; s.p[0] = prop(D->get(c, "c")); s.p[1] = prop(D->get(c, "o"));
 					s.mode = (int)D->num(c, "m", 1.0);
 					s.tr = xform(D->get(c, "tr"));
+				} else if (D->str_eq(ty, "tw")) {
+					s.kind = SK_TWIST; s.p[0] = prop(D->get(c, "a")); s.p[1] = prop(D->get(c, "c"));
 				} else if (D->str_eq(ty, "op")) {
 					s.kind = SK_OFFSET; s.p[0] = prop(D->get(c, "a"));
 					s.join = (int)D->num(c, "lj", 1.0); s.miter = (float)D->num(c, "ml", 4.0);
@@ -1150,6 +1152,48 @@ static void offset_path(geom& g, float amount, int join, float miter, float tol)
 		stroke_polyline(g.soup, poly.Data, poly.Size, true, ImFabs(amount), 1, join, miter, tol);  // pieces fill with winding -1
 	}
 	g.rule = amount > 0.0f ? 0 : 2;  // union under non-zero; shrink: winding >= 1 keeps the shape outside the stroke
+}
+
+// Twist: no renderer defines it (lottie-web, Skottie, ThorVG and rlottie skip it); this
+// follows After Effects' description, turning the path more at the centre than at the edge:
+// each flattened point rotates by angle * (1 - d / R) around the centre, R the farthest point
+static void twist(geom& g, float angle_deg, ImVec2 center, float tol) {
+	if (angle_deg == 0.0f || g.cs.Size == 0) return;
+	ImVector<ImVec2> poly, all;
+	ImVector<int> counts;
+	ImVector<bool> closed;
+	float R = 0.0f;
+	for (int ci = 0; ci < g.cs.Size; ci++) {
+		flatten_contour(g, g.cs[ci], poly, tol * 0.5f);  // finer: straight edges bend
+		// Long straight segments have no inner points to bend: subdivide them
+		ImVector<ImVec2> fine;
+		int const n = g.cs[ci].closed ? poly.Size : poly.Size - 1;
+		for (int i = 0; i < n; i++) {
+			ImVec2 const a = poly[i], b = poly[(i + 1) % poly.Size];
+			int const steps = ImClamp((int)(ImSqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)) / 4.0f), 1, 256);
+			for (int k = 0; k < steps; k++) fine.push_back(ImVec2(a.x + (b.x - a.x) * k / steps, a.y + (b.y - a.y) * k / steps));
+		}
+		if (!g.cs[ci].closed && poly.Size) fine.push_back(poly.back());
+		for (int i = 0; i < fine.Size; i++) {
+			all.push_back(fine[i]);
+			float const dx = fine[i].x - center.x, dy = fine[i].y - center.y;
+			R = ImMax(R, ImSqrt(dx * dx + dy * dy));
+		}
+		counts.push_back(fine.Size);
+		closed.push_back(g.cs[ci].closed);
+	}
+	if (R <= 0.0f) return;
+	for (int i = 0; i < all.Size; i++) {
+		float const dx = all[i].x - center.x, dy = all[i].y - center.y;
+		float const a = angle_deg * (IM_PI / 180.0f) * (1.0f - ImSqrt(dx * dx + dy * dy) / R);
+		float const c = ImCos(a), s = ImSin(a);
+		all[i] = ImVec2(center.x + dx * c - dy * s, center.y + dx * s + dy * c);
+	}
+	geom out;
+	int ofs = 0;
+	for (int ci = 0; ci < counts.Size; ci++) { out.polyline(all.Data + ofs, counts[ci], closed[ci]); ofs += counts[ci]; }
+	out.rule = g.rule; out.soup.swap(g.soup);
+	g = out;
 }
 
 // Merge paths (geometry so far in the group): 1 merge keeps the paths as they are; 2 add,
@@ -2204,6 +2248,12 @@ struct ctx {
 				case SK_ROUND: round_corners(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M)); break;
 				case SK_PUCKER: pucker_bloat(out, pv(sh.p[0], t, 0, 0.0f)); break;
 				case SK_MERGE: merge_paths(out, sh.mode, tol); break;
+				case SK_TWIST: {
+					float c[2];
+					pv2(sh.p[1], t, 0.0f, c);
+					twist(out, pv(sh.p[0], t, 0, 0.0f), apply(M, c[0], c[1]), tol);
+					break;
+				}
 				case SK_OFFSET: offset_path(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M), sh.join, sh.miter, tol); break;  // shortcut: strokes follow the original paths  // shortcut: strokes still follow the original contours
 				case SK_ZIGZAG:
 					zigzag(out, pv(sh.p[0], t, 0, 0.0f) * mat_scale(M), ImClamp((int)pv(sh.p[1], t, 0, 0.0f), 0, 1000), pv(sh.p[2], t, 0, 1.0f) >= 1.5f, tol);
