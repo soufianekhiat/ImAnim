@@ -41,6 +41,46 @@
 #define IM_ANIM_API
 #endif
 
+// ----------------------------------------------------
+// IAM_VEC2 / IAM_VEC4 - vector types used by the public API
+// ----------------------------------------------------
+// The API uses iam_vec2/iam_vec4, which default to ImVec2/ImVec4. To use your own
+// math types (glm, Eigen, engine types...), define before including this header:
+//
+//   #define IAM_VEC2              glm::vec2
+//   #define IAM_VEC2_TO_IM(v)     ImVec2((v).x, (v).y)              // IAM_VEC2 -> ImVec2
+//   #define IAM_VEC2_FROM_IM(v)   glm::vec2((v).x, (v).y)           // ImVec2 -> IAM_VEC2
+//   #define IAM_VEC4              glm::vec4
+//   #define IAM_VEC4_TO_IM(v)     ImVec4((v).x, (v).y, (v).z, (v).w)
+//   #define IAM_VEC4_FROM_IM(v)   glm::vec4((v).x, (v).y, (v).z, (v).w)
+//
+// The conversion macros are optional when your type already converts implicitly
+// (e.g. through IM_VEC2_CLASS_EXTRA / IM_VEC4_CLASS_EXTRA in imconfig.h).
+// Define them identically for every translation unit, including im_anim.cpp.
+// Internally ImAnim still computes with ImVec2/ImVec4.
+#ifndef IAM_VEC2
+#define IAM_VEC2 ImVec2
+#endif
+#ifndef IAM_VEC4
+#define IAM_VEC4 ImVec4
+#endif
+#ifndef IAM_VEC2_TO_IM
+#define IAM_VEC2_TO_IM(v) ImVec2(v)
+#endif
+#ifndef IAM_VEC2_FROM_IM
+#define IAM_VEC2_FROM_IM(v) IAM_VEC2(v)
+#endif
+#ifndef IAM_VEC4_TO_IM
+#define IAM_VEC4_TO_IM(v) ImVec4(v)
+#endif
+#ifndef IAM_VEC4_FROM_IM
+#define IAM_VEC4_FROM_IM(v) IAM_VEC4(v)
+#endif
+typedef IAM_VEC2 iam_vec2;
+typedef IAM_VEC4 iam_vec4;
+static inline iam_vec2 iam_v2(float x, float y) { return IAM_VEC2_FROM_IM(ImVec2(x, y)); }
+static inline iam_vec4 iam_v4(float x, float y, float z, float w) { return IAM_VEC4_FROM_IM(ImVec4(x, y, z, w)); }
+
 
 #if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM < 19200 //ImFontBaked and global ImGuiStoragePair were introduced in v19200.
 #define IM_ANIM_PRE_19200_COMPATIBILITY
@@ -143,29 +183,29 @@ IM_ANIM_API void iam_profiler_end();                                            
 
 // Drag Feedback - animated feedback for drag operations
 struct iam_drag_opts {
-	ImVec2 snap_grid;              // Grid size for snapping (0,0 = no grid)
-	ImVec2* snap_points;           // Array of custom snap points
+	iam_vec2 snap_grid;              // Grid size for snapping (0,0 = no grid)
+	iam_vec2* snap_points;           // Array of custom snap points
 	int snap_points_count;         // Number of snap points
 	float snap_duration;           // Duration of snap animation
 	float overshoot;               // Overshoot amount (0 = none, 1 = normal)
 	int ease_type;                 // Easing type for snap animation
 
-	iam_drag_opts() : snap_grid(0, 0), snap_points(nullptr), snap_points_count(0),
+	iam_drag_opts() : snap_grid(iam_v2(0, 0)), snap_points(nullptr), snap_points_count(0),
 		snap_duration(0.2f), overshoot(0), ease_type(iam_ease_out_cubic) {}
 };
 
 struct iam_drag_feedback {
-	ImVec2 position;               // Current animated position
-	ImVec2 offset;                 // Offset from drag start
-	ImVec2 velocity;               // Current velocity estimate
+	iam_vec2 position;               // Current animated position
+	iam_vec2 offset;                 // Offset from drag start
+	iam_vec2 velocity;               // Current velocity estimate
 	bool is_dragging;              // Currently being dragged
 	bool is_snapping;              // Currently snapping to target
 	float snap_progress;           // Snap animation progress (0-1)
 };
 
-IM_ANIM_API iam_drag_feedback iam_drag_begin(ImGuiID id, ImVec2 pos);                           // Start tracking drag at position.
-IM_ANIM_API iam_drag_feedback iam_drag_update(ImGuiID id, ImVec2 pos, float dt);                // Update drag position during drag.
-IM_ANIM_API iam_drag_feedback iam_drag_release(ImGuiID id, ImVec2 pos, iam_drag_opts const& opts, float dt); // Release drag with animated feedback.
+IM_ANIM_API iam_drag_feedback iam_drag_begin(ImGuiID id, iam_vec2 pos);                           // Start tracking drag at position.
+IM_ANIM_API iam_drag_feedback iam_drag_update(ImGuiID id, iam_vec2 pos, float dt);                // Update drag position during drag.
+IM_ANIM_API iam_drag_feedback iam_drag_release(ImGuiID id, iam_vec2 pos, iam_drag_opts const& opts, float dt); // Release drag with animated feedback.
 IM_ANIM_API void iam_drag_cancel(ImGuiID id);                                                   // Cancel drag tracking.
 
 // Oscillators - continuous periodic animations
@@ -177,21 +217,21 @@ enum iam_wave_type {
 };
 IM_ANIM_API float  iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt);       // Returns oscillating value [-amplitude, +amplitude].
 IM_ANIM_API int    iam_oscillate_int(ImGuiID id, int amplitude, float frequency, int wave_type, float phase, float dt);      // Returns oscillating integer value [-amplitude, +amplitude].
-IM_ANIM_API ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt); // 2D oscillation.
-IM_ANIM_API ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt); // 4D oscillation.
-IM_ANIM_API ImVec4 iam_oscillate_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt); // Color oscillation in specified color space.
+IM_ANIM_API iam_vec2 iam_oscillate_vec2(ImGuiID id, iam_vec2 amplitude, iam_vec2 frequency, int wave_type, iam_vec2 phase, float dt); // 2D oscillation.
+IM_ANIM_API iam_vec4 iam_oscillate_vec4(ImGuiID id, iam_vec4 amplitude, iam_vec4 frequency, int wave_type, iam_vec4 phase, float dt); // 4D oscillation.
+IM_ANIM_API iam_vec4 iam_oscillate_color(ImGuiID id, iam_vec4 base_color, iam_vec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt); // Color oscillation in specified color space.
 
 // Shake/Wiggle - procedural noise animations
 IM_ANIM_API float  iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, float dt);       // Decaying random shake. Returns offset that decays to 0.
 IM_ANIM_API int    iam_shake_int(ImGuiID id, int intensity, float frequency, float decay_time, float dt);     // Decaying random shake for integers.
-IM_ANIM_API ImVec2 iam_shake_vec2(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt); // 2D decaying shake.
-IM_ANIM_API ImVec4 iam_shake_vec4(ImGuiID id, ImVec4 intensity, float frequency, float decay_time, float dt); // 4D decaying shake.
-IM_ANIM_API ImVec4 iam_shake_color(ImGuiID id, ImVec4 base_color, ImVec4 intensity, float frequency, float decay_time, int color_space, float dt); // Color shake in specified color space.
+IM_ANIM_API iam_vec2 iam_shake_vec2(ImGuiID id, iam_vec2 intensity, float frequency, float decay_time, float dt); // 2D decaying shake.
+IM_ANIM_API iam_vec4 iam_shake_vec4(ImGuiID id, iam_vec4 intensity, float frequency, float decay_time, float dt); // 4D decaying shake.
+IM_ANIM_API iam_vec4 iam_shake_color(ImGuiID id, iam_vec4 base_color, iam_vec4 intensity, float frequency, float decay_time, int color_space, float dt); // Color shake in specified color space.
 IM_ANIM_API float  iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt);                        // Continuous smooth random movement.
 IM_ANIM_API int    iam_wiggle_int(ImGuiID id, int amplitude, float frequency, float dt);                      // Continuous smooth random movement for integers.
-IM_ANIM_API ImVec2 iam_wiggle_vec2(ImGuiID id, ImVec2 amplitude, float frequency, float dt);                  // 2D continuous wiggle.
-IM_ANIM_API ImVec4 iam_wiggle_vec4(ImGuiID id, ImVec4 amplitude, float frequency, float dt);                  // 4D continuous wiggle.
-IM_ANIM_API ImVec4 iam_wiggle_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int color_space, float dt); // Color wiggle in specified color space.
+IM_ANIM_API iam_vec2 iam_wiggle_vec2(ImGuiID id, iam_vec2 amplitude, float frequency, float dt);                  // 2D continuous wiggle.
+IM_ANIM_API iam_vec4 iam_wiggle_vec4(ImGuiID id, iam_vec4 amplitude, float frequency, float dt);                  // 4D continuous wiggle.
+IM_ANIM_API iam_vec4 iam_wiggle_color(ImGuiID id, iam_vec4 base_color, iam_vec4 amplitude, float frequency, int color_space, float dt); // Color wiggle in specified color space.
 IM_ANIM_API void   iam_trigger_shake(ImGuiID id);                                                             // Trigger/restart a shake animation.
 
 // Easing evaluation
@@ -201,43 +241,43 @@ IM_ANIM_API float iam_eval_preset(int type, float t);                           
 // init_value: Initial value when channel is first created. Defaults to 0 (or white for color).
 //             Use this to avoid unwanted animations when the first target differs from the default.
 IM_ANIM_API float  iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float dt, float init_value = 0.0f);   // Animate a float value.
-IM_ANIM_API ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_desc const& ez, int policy, float dt, ImVec2 init_value = ImVec2(0, 0));   // Animate a 2D vector.
-IM_ANIM_API ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_desc const& ez, int policy, float dt, ImVec4 init_value = ImVec4(0, 0, 0, 0));   // Animate a 4D vector.
+IM_ANIM_API iam_vec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, iam_vec2 target, float dur, iam_ease_desc const& ez, int policy, float dt, iam_vec2 init_value = iam_v2(0, 0));   // Animate a 2D vector.
+IM_ANIM_API iam_vec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, iam_vec4 target, float dur, iam_ease_desc const& ez, int policy, float dt, iam_vec4 init_value = iam_v4(0, 0, 0, 0));   // Animate a 4D vector.
 IM_ANIM_API int    iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt, int init_value = 0);       // Animate an integer value.
-IM_ANIM_API ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt, ImVec4 init_value = ImVec4(1, 1, 1, 1)); // Animate a color in specified color space.
+IM_ANIM_API iam_vec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, iam_vec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt, iam_vec4 init_value = iam_v4(1, 1, 1, 1)); // Animate a color in specified color space.
 
 // Resize-friendly helpers
-IM_ANIM_API ImVec2 iam_anchor_size(int space); // Get dimensions of anchor space (window, viewport, etc.).
+IM_ANIM_API iam_vec2 iam_anchor_size(int space); // Get dimensions of anchor space (window, viewport, etc.).
 
 // Relative target tweens (percent of anchor + pixel offset) - survive window resizes
 IM_ANIM_API float  iam_tween_float_rel(ImGuiID id, ImGuiID channel_id, float percent, float px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, int axis, float dt);  // Float relative to anchor (axis: 0=x, 1=y).
-IM_ANIM_API ImVec2 iam_tween_vec2_rel(ImGuiID id, ImGuiID channel_id, ImVec2 percent, ImVec2 px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, float dt);           // Vec2 relative to anchor.
-IM_ANIM_API ImVec4 iam_tween_vec4_rel(ImGuiID id, ImGuiID channel_id, ImVec4 percent, ImVec4 px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, float dt);           // Vec4 with x,y relative to anchor.
-IM_ANIM_API ImVec4 iam_tween_color_rel(ImGuiID id, ImGuiID channel_id, ImVec4 percent, ImVec4 px_bias, float dur, iam_ease_desc const& ez, int policy, int color_space, int anchor_space, float dt); // Color with component offsets.
+IM_ANIM_API iam_vec2 iam_tween_vec2_rel(ImGuiID id, ImGuiID channel_id, iam_vec2 percent, iam_vec2 px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, float dt);           // Vec2 relative to anchor.
+IM_ANIM_API iam_vec4 iam_tween_vec4_rel(ImGuiID id, ImGuiID channel_id, iam_vec4 percent, iam_vec4 px_bias, float dur, iam_ease_desc const& ez, int policy, int anchor_space, float dt);           // Vec4 with x,y relative to anchor.
+IM_ANIM_API iam_vec4 iam_tween_color_rel(ImGuiID id, ImGuiID channel_id, iam_vec4 percent, iam_vec4 px_bias, float dur, iam_ease_desc const& ez, int policy, int color_space, int anchor_space, float dt); // Color with component offsets.
 
 // Resolver callbacks for dynamic target computation
 typedef float  (*iam_float_resolver)(void* user);   // Returns float target value.
-typedef ImVec2 (*iam_vec2_resolver)(void* user);    // Returns vec2 target value.
-typedef ImVec4 (*iam_vec4_resolver)(void* user);    // Returns vec4 target value.
-typedef ImVec4 (*iam_color_resolver)(void* user);   // Returns color target (sRGB).
+typedef iam_vec2 (*iam_vec2_resolver)(void* user);    // Returns vec2 target value.
+typedef iam_vec4 (*iam_vec4_resolver)(void* user);    // Returns vec4 target value.
+typedef iam_vec4 (*iam_color_resolver)(void* user);   // Returns color target (sRGB).
 typedef int    (*iam_int_resolver)(void* user);     // Returns int target value.
 
 // Resolved tweens - target computed dynamically by callback each frame
 IM_ANIM_API float  iam_tween_float_resolved(ImGuiID id, ImGuiID channel_id, iam_float_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                     // Float with dynamic target.
-IM_ANIM_API ImVec2 iam_tween_vec2_resolved(ImGuiID id, ImGuiID channel_id, iam_vec2_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec2 with dynamic target.
-IM_ANIM_API ImVec4 iam_tween_vec4_resolved(ImGuiID id, ImGuiID channel_id, iam_vec4_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec4 with dynamic target.
-IM_ANIM_API ImVec4 iam_tween_color_resolved(ImGuiID id, ImGuiID channel_id, iam_color_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt);    // Color with dynamic target.
+IM_ANIM_API iam_vec2 iam_tween_vec2_resolved(ImGuiID id, ImGuiID channel_id, iam_vec2_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec2 with dynamic target.
+IM_ANIM_API iam_vec4 iam_tween_vec4_resolved(ImGuiID id, ImGuiID channel_id, iam_vec4_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                       // Vec4 with dynamic target.
+IM_ANIM_API iam_vec4 iam_tween_color_resolved(ImGuiID id, ImGuiID channel_id, iam_color_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt);    // Color with dynamic target.
 IM_ANIM_API int    iam_tween_int_resolved(ImGuiID id, ImGuiID channel_id, iam_int_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt);                         // Int with dynamic target.
 
 // Rebase functions - change target of in-progress animation without restarting
 IM_ANIM_API void iam_rebase_float(ImGuiID id, ImGuiID channel_id, float new_target, float dt);  // Smoothly redirect float animation to new target.
-IM_ANIM_API void iam_rebase_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 new_target, float dt);  // Smoothly redirect vec2 animation to new target.
-IM_ANIM_API void iam_rebase_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt);  // Smoothly redirect vec4 animation to new target.
-IM_ANIM_API void iam_rebase_color(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt); // Smoothly redirect color animation to new target.
+IM_ANIM_API void iam_rebase_vec2(ImGuiID id, ImGuiID channel_id, iam_vec2 new_target, float dt);  // Smoothly redirect vec2 animation to new target.
+IM_ANIM_API void iam_rebase_vec4(ImGuiID id, ImGuiID channel_id, iam_vec4 new_target, float dt);  // Smoothly redirect vec4 animation to new target.
+IM_ANIM_API void iam_rebase_color(ImGuiID id, ImGuiID channel_id, iam_vec4 new_target, float dt); // Smoothly redirect color animation to new target.
 IM_ANIM_API void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt);      // Smoothly redirect int animation to new target.
 
 // Color blending utility
-IM_ANIM_API ImVec4 iam_get_blended_color(ImVec4 a_srgb, ImVec4 b_srgb, float t, int color_space);  // Blend two sRGB colors in specified color space.
+IM_ANIM_API iam_vec4 iam_get_blended_color(iam_vec4 a_srgb, iam_vec4 b_srgb, float t, int color_space);  // Blend two sRGB colors in specified color space.
 
 // ----------------------------------------------------
 // Convenience shorthands for common easings
@@ -282,9 +322,9 @@ struct iam_ease_per_axis {
 };
 
 // Tween with per-axis easing - each component uses its own easing curve
-IM_ANIM_API ImVec2 iam_tween_vec2_per_axis(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
-IM_ANIM_API ImVec4 iam_tween_vec4_per_axis(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
-IM_ANIM_API ImVec4 iam_tween_color_per_axis(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_per_axis const& ez, int policy, int color_space, float dt);
+IM_ANIM_API iam_vec2 iam_tween_vec2_per_axis(ImGuiID id, ImGuiID channel_id, iam_vec2 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
+IM_ANIM_API iam_vec4 iam_tween_vec4_per_axis(ImGuiID id, ImGuiID channel_id, iam_vec4 target, float dur, iam_ease_per_axis const& ez, int policy, float dt);
+IM_ANIM_API iam_vec4 iam_tween_color_per_axis(ImGuiID id, ImGuiID channel_id, iam_vec4 target_srgb, float dur, iam_ease_per_axis const& ez, int policy, int color_space, float dt);
 
 // ----------------------------------------------------
 // Motion Paths - animate along curves and splines
@@ -299,14 +339,14 @@ enum iam_path_segment_type {
 };
 
 // Single-curve evaluation functions (stateless, for direct use)
-IM_ANIM_API ImVec2 iam_bezier_quadratic(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t);                              // Evaluate quadratic bezier at t [0,1].
-IM_ANIM_API ImVec2 iam_bezier_cubic(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t);                       // Evaluate cubic bezier at t [0,1].
-IM_ANIM_API ImVec2 iam_catmull_rom(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension = 0.5f);  // Evaluate Catmull-Rom spline at t [0,1]. Points go through p1 and p2.
+IM_ANIM_API iam_vec2 iam_bezier_quadratic(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, float t);                              // Evaluate quadratic bezier at t [0,1].
+IM_ANIM_API iam_vec2 iam_bezier_cubic(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, iam_vec2 p3, float t);                       // Evaluate cubic bezier at t [0,1].
+IM_ANIM_API iam_vec2 iam_catmull_rom(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, iam_vec2 p3, float t, float tension = 0.5f);  // Evaluate Catmull-Rom spline at t [0,1]. Points go through p1 and p2.
 
 // Derivatives (for tangent/velocity)
-IM_ANIM_API ImVec2 iam_bezier_quadratic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, float t);                        // Derivative of quadratic bezier.
-IM_ANIM_API ImVec2 iam_bezier_cubic_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t);                 // Derivative of cubic bezier.
-IM_ANIM_API ImVec2 iam_catmull_rom_deriv(ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, float t, float tension = 0.5f); // Derivative of Catmull-Rom.
+IM_ANIM_API iam_vec2 iam_bezier_quadratic_deriv(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, float t);                        // Derivative of quadratic bezier.
+IM_ANIM_API iam_vec2 iam_bezier_cubic_deriv(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, iam_vec2 p3, float t);                 // Derivative of cubic bezier.
+IM_ANIM_API iam_vec2 iam_catmull_rom_deriv(iam_vec2 p0, iam_vec2 p1, iam_vec2 p2, iam_vec2 p3, float t, float tension = 0.5f); // Derivative of Catmull-Rom.
 
 // Forward declaration
 struct iam_path_data;
@@ -314,12 +354,12 @@ struct iam_path_data;
 // iam_path - fluent API for building multi-segment motion paths
 class IM_ANIM_API iam_path {
 public:
-	static iam_path begin(ImGuiID path_id, ImVec2 start);                                           // Start building a path at position.
+	static iam_path begin(ImGuiID path_id, iam_vec2 start);                                           // Start building a path at position.
 
-	iam_path& line_to(ImVec2 end);                                                                  // Add linear segment to endpoint.
-	iam_path& quadratic_to(ImVec2 ctrl, ImVec2 end);                                                // Add quadratic bezier segment.
-	iam_path& cubic_to(ImVec2 ctrl1, ImVec2 ctrl2, ImVec2 end);                                     // Add cubic bezier segment.
-	iam_path& catmull_to(ImVec2 end, float tension = 0.5f);                                         // Add Catmull-Rom segment to endpoint.
+	iam_path& line_to(iam_vec2 end);                                                                  // Add linear segment to endpoint.
+	iam_path& quadratic_to(iam_vec2 ctrl, iam_vec2 end);                                                // Add quadratic bezier segment.
+	iam_path& cubic_to(iam_vec2 ctrl1, iam_vec2 ctrl2, iam_vec2 end);                                     // Add cubic bezier segment.
+	iam_path& catmull_to(iam_vec2 end, float tension = 0.5f);                                         // Add Catmull-Rom segment to endpoint.
 	iam_path& close();                                                                              // Close path back to start point.
 
 	void end();                                                                                     // Finalize and register path.
@@ -334,12 +374,12 @@ private:
 // Query path info
 IM_ANIM_API bool   iam_path_exists(ImGuiID path_id);                                                            // Check if path exists.
 IM_ANIM_API float  iam_path_length(ImGuiID path_id);                                                            // Get approximate path length.
-IM_ANIM_API ImVec2 iam_path_evaluate(ImGuiID path_id, float t);                                                 // Sample path at t [0,1].
-IM_ANIM_API ImVec2 iam_path_tangent(ImGuiID path_id, float t);                                                  // Get tangent (normalized direction) at t.
+IM_ANIM_API iam_vec2 iam_path_evaluate(ImGuiID path_id, float t);                                                 // Sample path at t [0,1].
+IM_ANIM_API iam_vec2 iam_path_tangent(ImGuiID path_id, float t);                                                  // Get tangent (normalized direction) at t.
 IM_ANIM_API float  iam_path_angle(ImGuiID path_id, float t);                                                    // Get rotation angle (radians) at t.
 
 // Tween along a path
-IM_ANIM_API ImVec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate position along path.
+IM_ANIM_API iam_vec2 iam_tween_path(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt);   // Animate position along path.
 IM_ANIM_API float  iam_tween_path_angle(ImGuiID id, ImGuiID channel_id, ImGuiID path_id, float dur, iam_ease_desc const& ez, int policy, float dt); // Animate rotation angle along path.
 
 // ----------------------------------------------------
@@ -352,9 +392,9 @@ IM_ANIM_API bool   iam_path_has_arc_lut(ImGuiID path_id);                       
 
 // Distance-based path evaluation (uses arc-length LUT for constant speed)
 IM_ANIM_API float  iam_path_distance_to_t(ImGuiID path_id, float distance);                                     // Convert arc-length distance to t parameter.
-IM_ANIM_API ImVec2 iam_path_evaluate_at_distance(ImGuiID path_id, float distance);                              // Get position at arc-length distance.
+IM_ANIM_API iam_vec2 iam_path_evaluate_at_distance(ImGuiID path_id, float distance);                              // Get position at arc-length distance.
 IM_ANIM_API float  iam_path_angle_at_distance(ImGuiID path_id, float distance);                                 // Get rotation angle at arc-length distance.
-IM_ANIM_API ImVec2 iam_path_tangent_at_distance(ImGuiID path_id, float distance);                               // Get tangent at arc-length distance.
+IM_ANIM_API iam_vec2 iam_path_tangent_at_distance(ImGuiID path_id, float distance);                               // Get tangent at arc-length distance.
 
 // ----------------------------------------------------
 // Path Morphing - interpolate between two paths
@@ -372,16 +412,16 @@ struct iam_morph_opts {
 // Evaluate morphed path at parameter t [0,1] with blend factor [0,1]
 // path_a at blend=0, path_b at blend=1
 // Paths can have different numbers of segments - they are resampled to match
-IM_ANIM_API ImVec2 iam_path_morph(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
+IM_ANIM_API iam_vec2 iam_path_morph(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
 
 // Get tangent of morphed path
-IM_ANIM_API ImVec2 iam_path_morph_tangent(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
+IM_ANIM_API iam_vec2 iam_path_morph_tangent(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
 
 // Get angle (radians) of morphed path
 IM_ANIM_API float  iam_path_morph_angle(ImGuiID path_a, ImGuiID path_b, float t, float blend, iam_morph_opts const& opts = iam_morph_opts());
 
 // Tween along a morphing path - animates both position along path AND the morph blend
-IM_ANIM_API ImVec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiID path_a, ImGuiID path_b,
+IM_ANIM_API iam_vec2 iam_tween_path_morph(ImGuiID id, ImGuiID channel_id, ImGuiID path_a, ImGuiID path_b,
                             float target_blend, float dur, iam_ease_desc const& path_ease,
                             iam_ease_desc const& morph_ease, int policy, float dt,
                             iam_morph_opts const& opts = iam_morph_opts());
@@ -402,7 +442,7 @@ enum iam_text_path_align {
 
 // Text path options
 struct iam_text_path_opts {
-	ImVec2 origin;               // Screen-space origin for rendering (path coords are offset by this)
+	iam_vec2 origin;               // Screen-space origin for rendering (path coords are offset by this)
 	float offset;                // Starting offset along path (pixels)
 	float letter_spacing;        // Extra spacing between characters (pixels)
 	int   align;                 // iam_text_path_align value
@@ -411,7 +451,7 @@ struct iam_text_path_opts {
 	ImFont* font;                // Font to use (nullptr = current font)
 	float font_scale;            // Additional font scale (1.0 = normal)
 
-	iam_text_path_opts() : origin(0, 0), offset(0), letter_spacing(0), align(iam_text_align_start),
+	iam_text_path_opts() : origin(iam_v2(0, 0)), offset(0), letter_spacing(0), align(iam_text_align_start),
 	                       flip_y(false), color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f) {}
 };
 
@@ -429,10 +469,10 @@ IM_ANIM_API float iam_text_path_width(const char* text, iam_text_path_opts const
 // ----------------------------------------------------
 
 // Transform a quad (4 vertices) by rotation and translation
-IM_ANIM_API void iam_transform_quad(ImVec2* quad, ImVec2 center, float angle_rad, ImVec2 translation);
+IM_ANIM_API void iam_transform_quad(iam_vec2* quad, iam_vec2 center, float angle_rad, iam_vec2 translation);
 
 // Create a rotated quad for a glyph at a position on the path
-IM_ANIM_API void iam_make_glyph_quad(ImVec2* quad, ImVec2 pos, float angle_rad, float glyph_width, float glyph_height, float baseline_offset = 0.0f);
+IM_ANIM_API void iam_make_glyph_quad(iam_vec2* quad, iam_vec2 pos, float angle_rad, float glyph_width, float glyph_height, float baseline_offset = 0.0f);
 
 // ----------------------------------------------------
 // Text Stagger - per-character animation effects
@@ -455,7 +495,7 @@ enum iam_text_stagger_effect {
 
 // Text stagger options
 struct iam_text_stagger_opts {
-	ImVec2 pos;                  // Base position for text
+	iam_vec2 pos;                  // Base position for text
 	int    effect;               // iam_text_stagger_effect
 	float  char_delay;           // Delay between each character (seconds)
 	float  char_duration;        // Duration of each character's animation (seconds)
@@ -467,7 +507,7 @@ struct iam_text_stagger_opts {
 	float  letter_spacing;       // Extra spacing between characters
 
 	iam_text_stagger_opts()
-		: pos(0, 0), effect(iam_text_fx_fade), char_delay(0.05f), char_duration(0.3f),
+		: pos(iam_v2(0, 0)), effect(iam_text_fx_fade), char_delay(0.05f), char_duration(0.3f),
 		  effect_intensity(20.0f), ease(iam_ease_preset(iam_ease_out_cubic)),
 		  color(IM_COL32_WHITE), font(nullptr), font_scale(1.0f), letter_spacing(0.0f) {}
 };
@@ -511,15 +551,15 @@ IM_ANIM_API float  iam_noise_3d(float x, float y, float z, iam_noise_opts const&
 
 // Animated noise channels - continuous noise that evolves over time
 IM_ANIM_API float  iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt);  // 1D animated noise
-IM_ANIM_API ImVec2 iam_noise_channel_vec2(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, iam_noise_opts const& opts, float dt); // 2D animated noise
-IM_ANIM_API ImVec4 iam_noise_channel_vec4(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, iam_noise_opts const& opts, float dt); // 4D animated noise
-IM_ANIM_API ImVec4 iam_noise_channel_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt); // Animated color noise in specified color space
+IM_ANIM_API iam_vec2 iam_noise_channel_vec2(ImGuiID id, iam_vec2 frequency, iam_vec2 amplitude, iam_noise_opts const& opts, float dt); // 2D animated noise
+IM_ANIM_API iam_vec4 iam_noise_channel_vec4(ImGuiID id, iam_vec4 frequency, iam_vec4 amplitude, iam_noise_opts const& opts, float dt); // 4D animated noise
+IM_ANIM_API iam_vec4 iam_noise_channel_color(ImGuiID id, iam_vec4 base_color, iam_vec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt); // Animated color noise in specified color space
 
 // Convenience: smooth random movement (like wiggle but using noise)
 IM_ANIM_API float  iam_smooth_noise_float(ImGuiID id, float amplitude, float speed, float dt);                          // Simple 1D smooth noise
-IM_ANIM_API ImVec2 iam_smooth_noise_vec2(ImGuiID id, ImVec2 amplitude, float speed, float dt);                    // Simple 2D smooth noise
-IM_ANIM_API ImVec4 iam_smooth_noise_vec4(ImGuiID id, ImVec4 amplitude, float speed, float dt);                    // Simple 4D smooth noise
-IM_ANIM_API ImVec4 iam_smooth_noise_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt); // Smooth noise for colors in specified color space
+IM_ANIM_API iam_vec2 iam_smooth_noise_vec2(ImGuiID id, iam_vec2 amplitude, float speed, float dt);                    // Simple 2D smooth noise
+IM_ANIM_API iam_vec4 iam_smooth_noise_vec4(ImGuiID id, iam_vec4 amplitude, float speed, float dt);                    // Simple 4D smooth noise
+IM_ANIM_API iam_vec4 iam_smooth_noise_color(ImGuiID id, iam_vec4 base_color, iam_vec4 amplitude, float speed, int color_space, float dt); // Smooth noise for colors in specified color space
 
 // ----------------------------------------------------
 // Style Interpolation - animate between ImGuiStyle themes
@@ -552,26 +592,26 @@ IM_ANIM_API void iam_style_unregister(ImGuiID style_id);
 // Color gradient with any number of stops (sorted by position)
 struct iam_gradient {
 	ImVector<float> positions;   // Positions along gradient [0,1], kept sorted
-	ImVector<ImVec4> colors;     // Colors at each position (sRGB)
+	ImVector<ImVec4> colors;       // Colors at each position (sRGB, internal storage)
 
 	iam_gradient() {}
 
 	// Add a stop to the gradient (automatically sorted by position)
-	iam_gradient& add(float position, ImVec4 color);
+	iam_gradient& add(float position, iam_vec4 color);
 	iam_gradient& add(float position, ImU32 color) {
-		return add(position, ImGui::ColorConvertU32ToFloat4(color));
+		return add(position, IAM_VEC4_FROM_IM(ImGui::ColorConvertU32ToFloat4(color)));
 	}
 
 	// Get stop count
 	int stop_count() const { return positions.Size; }
 
 	// Sample the gradient at position t [0,1]
-	ImVec4 sample(float t, int color_space = iam_col_oklab) const;
+	iam_vec4 sample(float t, int color_space = iam_col_oklab) const;
 
 	// Create common gradients
-	static iam_gradient solid(ImVec4 color);
-	static iam_gradient two_color(ImVec4 start, ImVec4 end);
-	static iam_gradient three_color(ImVec4 start, ImVec4 mid, ImVec4 end);
+	static iam_gradient solid(iam_vec4 color);
+	static iam_gradient two_color(iam_vec4 start, iam_vec4 end);
+	static iam_gradient three_color(iam_vec4 start, iam_vec4 mid, iam_vec4 end);
 };
 
 // Blend between two gradients
@@ -595,12 +635,12 @@ enum iam_rotation_mode {
 
 // 2D transform (position, rotation, scale)
 struct iam_transform {
-	ImVec2 position;             // Translation
-	ImVec2 scale;                // Scale (1,1 = identity)
+	iam_vec2 position;             // Translation
+	iam_vec2 scale;                // Scale (1,1 = identity)
 	float rotation;              // Rotation in radians
 
-	iam_transform() : position(0, 0), scale(1, 1), rotation(0) {}
-	iam_transform(ImVec2 pos, float rot = 0, ImVec2 scl = ImVec2(1, 1))
+	iam_transform() : position(iam_v2(0, 0)), scale(iam_v2(1, 1)), rotation(0) {}
+	iam_transform(iam_vec2 pos, float rot = 0, iam_vec2 scl = iam_v2(1, 1))
 		: position(pos), scale(scl), rotation(rot) {}
 
 	// Create identity transform
@@ -610,7 +650,7 @@ struct iam_transform {
 	iam_transform operator*(iam_transform const& other) const;
 
 	// Apply transform to a point
-	ImVec2 apply(ImVec2 point) const;
+	iam_vec2 apply(iam_vec2 point) const;
 
 	// Get inverse transform
 	iam_transform inverse() const;
@@ -687,8 +727,8 @@ enum iam_variation_mode {
 // Callback types for custom variation logic
 typedef float  (*iam_variation_float_fn)(int index, void* user);
 typedef int    (*iam_variation_int_fn)(int index, void* user);
-typedef ImVec2 (*iam_variation_vec2_fn)(int index, void* user);
-typedef ImVec4 (*iam_variation_vec4_fn)(int index, void* user);
+typedef iam_vec2 (*iam_variation_vec2_fn)(int index, void* user);
+typedef iam_vec4 (*iam_variation_vec4_fn)(int index, void* user);
 
 // Float variation
 struct iam_variation_float {
@@ -715,9 +755,9 @@ struct iam_variation_int {
 // Vec2 variation (global mode or per-axis)
 struct iam_variation_vec2 {
 	int                    mode;        // Global mode (iam_var_none = use per-axis)
-	ImVec2                 amount;
-	ImVec2                 min_clamp;
-	ImVec2                 max_clamp;
+	iam_vec2                 amount;
+	iam_vec2                 min_clamp;
+	iam_vec2                 max_clamp;
 	unsigned int           seed;
 	iam_variation_vec2_fn  callback;
 	void*                  user;
@@ -727,9 +767,9 @@ struct iam_variation_vec2 {
 // Vec4 variation (global mode or per-axis)
 struct iam_variation_vec4 {
 	int                    mode;
-	ImVec4                 amount;
-	ImVec4                 min_clamp;
-	ImVec4                 max_clamp;
+	iam_vec4                 amount;
+	iam_vec4                 min_clamp;
+	iam_vec4                 max_clamp;
 	unsigned int           seed;
 	iam_variation_vec4_fn  callback;
 	void*                  user;
@@ -739,12 +779,12 @@ struct iam_variation_vec4 {
 // Color variation (global mode or per-channel)
 struct iam_variation_color {
 	int                    mode;
-	ImVec4                 amount;
-	ImVec4                 min_clamp;
-	ImVec4                 max_clamp;
+	iam_vec4                 amount;
+	iam_vec4                 min_clamp;
+	iam_vec4                 max_clamp;
 	int                    color_space; // iam_col_oklab, etc.
 	unsigned int           seed;
-	iam_variation_vec4_fn  callback;    // Returns ImVec4 color delta
+	iam_variation_vec4_fn  callback;    // Returns color delta
 	void*                  user;
 	iam_variation_float    r, g, b, a;  // Per-channel
 };
@@ -823,35 +863,35 @@ static inline iam_variation_int iam_vari_seed(iam_variation_int v, unsigned int 
 
 // Vec2 variation helpers (global)
 static inline iam_variation_vec2 iam_varv2_none(void) {
-	iam_variation_vec2 v = {iam_var_none, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_none, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_inc(float x, float y) {
-	iam_variation_vec2 v = {iam_var_increment, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_increment, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_dec(float x, float y) {
-	iam_variation_vec2 v = {iam_var_decrement, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_decrement, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_mul(float f) {
-	iam_variation_vec2 v = {iam_var_multiply, {f,f}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_multiply, iam_v2(f,f), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_rand(float x, float y) {
-	iam_variation_vec2 v = {iam_var_random, {x,y}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_random, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_fn(iam_variation_vec2_fn fn, void* user) {
-	iam_variation_vec2 v = {iam_var_callback, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, fn, user, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_callback, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, fn, user, {0}, {0}};
 	return v;
 }
 // Vec2 per-axis helper
 static inline iam_variation_vec2 iam_varv2_axis(iam_variation_float vx, iam_variation_float vy) {
-	iam_variation_vec2 v = {iam_var_none, {0,0}, {-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX}, 0, 0, 0, vx, vy};
+	iam_variation_vec2 v = {iam_var_none, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, vx, vy};
 	return v;
 }
-static inline iam_variation_vec2 iam_varv2_clamp(iam_variation_vec2 v, ImVec2 mn, ImVec2 mx) {
+static inline iam_variation_vec2 iam_varv2_clamp(iam_variation_vec2 v, iam_vec2 mn, iam_vec2 mx) {
 	v.min_clamp = mn; v.max_clamp = mx; return v;
 }
 static inline iam_variation_vec2 iam_varv2_seed(iam_variation_vec2 v, unsigned int s) {
@@ -860,35 +900,35 @@ static inline iam_variation_vec2 iam_varv2_seed(iam_variation_vec2 v, unsigned i
 
 // Vec4 variation helpers (global)
 static inline iam_variation_vec4 iam_varv4_none(void) {
-	iam_variation_vec4 v = {iam_var_none, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_inc(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_increment, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_increment, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_dec(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_decrement, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_decrement, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_mul(float f) {
-	iam_variation_vec4 v = {iam_var_multiply, {f,f,f,f}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_multiply, iam_v4(f,f,f,f), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_rand(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_random, {x,y,z,w}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_random, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_fn(iam_variation_vec4_fn fn, void* user) {
-	iam_variation_vec4 v = {iam_var_callback, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, fn, user, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, fn, user, {0}, {0}, {0}, {0}};
 	return v;
 }
 // Vec4 per-axis helper
 static inline iam_variation_vec4 iam_varv4_axis(iam_variation_float vx, iam_variation_float vy, iam_variation_float vz, iam_variation_float vw) {
-	iam_variation_vec4 v = {iam_var_none, {0,0,0,0}, {-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX}, {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX}, 0, 0, 0, vx, vy, vz, vw};
+	iam_variation_vec4 v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, vx, vy, vz, vw};
 	return v;
 }
-static inline iam_variation_vec4 iam_varv4_clamp(iam_variation_vec4 v, ImVec4 mn, ImVec4 mx) {
+static inline iam_variation_vec4 iam_varv4_clamp(iam_variation_vec4 v, iam_vec4 mn, iam_vec4 mx) {
 	v.min_clamp = mn; v.max_clamp = mx; return v;
 }
 static inline iam_variation_vec4 iam_varv4_seed(iam_variation_vec4 v, unsigned int s) {
@@ -897,38 +937,38 @@ static inline iam_variation_vec4 iam_varv4_seed(iam_variation_vec4 v, unsigned i
 
 // Color variation helpers (global)
 static inline iam_variation_color iam_varc_none(void) {
-	iam_variation_color v = {iam_var_none, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_inc(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_increment, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_increment, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_dec(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_decrement, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_decrement, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_mul(float f) {
-	iam_variation_color v = {iam_var_multiply, {f,f,f,1}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_multiply, iam_v4(f,f,f,1), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_rand(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_random, {r,g,b,a}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_random, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_fn(iam_variation_vec4_fn fn, void* user) {
-	iam_variation_color v = {iam_var_callback, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, fn, user, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, fn, user, {0}, {0}, {0}, {0}};
 	return v;
 }
 // Color per-channel helper
 static inline iam_variation_color iam_varc_channel(iam_variation_float vr, iam_variation_float vg, iam_variation_float vb, iam_variation_float va) {
-	iam_variation_color v = {iam_var_none, {0,0,0,0}, {0,0,0,0}, {1,1,1,1}, iam_col_oklab, 0, 0, 0, vr, vg, vb, va};
+	iam_variation_color v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, vr, vg, vb, va};
 	return v;
 }
 static inline iam_variation_color iam_varc_space(iam_variation_color v, int space) {
 	v.color_space = space; return v;
 }
-static inline iam_variation_color iam_varc_clamp(iam_variation_color v, ImVec4 mn, ImVec4 mx) {
+static inline iam_variation_color iam_varc_clamp(iam_variation_color v, iam_vec4 mn, iam_vec4 mx) {
 	v.min_clamp = mn; v.max_clamp = mx; return v;
 }
 static inline iam_variation_color iam_varc_seed(iam_variation_color v, unsigned int s) {
@@ -958,26 +998,26 @@ public:
 
 	// Add keyframes for different channel types
 	iam_clip& key_float(ImGuiID channel, float time, float value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec2(ImGuiID channel, float time, ImVec2 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec4(ImGuiID channel, float time, ImVec4 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec2(ImGuiID channel, float time, iam_vec2 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec4(ImGuiID channel, float time, iam_vec4 value, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 	iam_clip& key_int(ImGuiID channel, float time, int value, int ease_type = iam_ease_linear);
-	iam_clip& key_color(ImGuiID channel, float time, ImVec4 value, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_color(ImGuiID channel, float time, iam_vec4 value, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
 	// Keyframes with repeat variation (value changes per loop iteration)
 	iam_clip& key_float_var(ImGuiID channel, float time, float value, iam_variation_float const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec2_var(ImGuiID channel, float time, ImVec2 value, iam_variation_vec2 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec4_var(ImGuiID channel, float time, ImVec4 value, iam_variation_vec4 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec2_var(ImGuiID channel, float time, iam_vec2 value, iam_variation_vec2 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec4_var(ImGuiID channel, float time, iam_vec4 value, iam_variation_vec4 const& var, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 	iam_clip& key_int_var(ImGuiID channel, float time, int value, iam_variation_int const& var, int ease_type = iam_ease_linear);
-	iam_clip& key_color_var(ImGuiID channel, float time, ImVec4 value, iam_variation_color const& var, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_color_var(ImGuiID channel, float time, iam_vec4 value, iam_variation_color const& var, int color_space = iam_col_oklab, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
 	// Spring-based keyframe (float only)
 	iam_clip& key_float_spring(ImGuiID channel, float time, float target, iam_spring_params const& spring);
 
 	// Anchor-relative keyframes (values resolved relative to window/viewport at get time)
 	iam_clip& key_float_rel(ImGuiID channel, float time, float percent, float px_bias, int anchor_space, int axis, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec2_rel(ImGuiID channel, float time, ImVec2 percent, ImVec2 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_vec4_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
-	iam_clip& key_color_rel(ImGuiID channel, float time, ImVec4 percent, ImVec4 px_bias, int color_space, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec2_rel(ImGuiID channel, float time, iam_vec2 percent, iam_vec2 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_vec4_rel(ImGuiID channel, float time, iam_vec4 percent, iam_vec4 px_bias, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
+	iam_clip& key_color_rel(ImGuiID channel, float time, iam_vec4 percent, iam_vec4 px_bias, int color_space, int anchor_space, int ease_type = iam_ease_linear, float const* bezier4 = nullptr);
 
 	// Timeline grouping - sequential and parallel keyframe blocks
 	iam_clip& seq_begin();  // Start sequential block (keyframes after seq_end start after this block)
@@ -1052,10 +1092,10 @@ public:
 
 	// Get animated values
 	bool get_float(ImGuiID channel, float* out) const;
-	bool get_vec2(ImGuiID channel, ImVec2* out) const;
-	bool get_vec4(ImGuiID channel, ImVec4* out) const;
+	bool get_vec2(ImGuiID channel, iam_vec2* out) const;
+	bool get_vec4(ImGuiID channel, iam_vec4* out) const;
 	bool get_int(ImGuiID channel, int* out) const;
-	bool get_color(ImGuiID channel, ImVec4* out, int color_space = iam_col_oklab) const;  // Color blended in specified color space.
+	bool get_color(ImGuiID channel, iam_vec4* out, int color_space = iam_col_oklab) const;  // Color blended in specified color space.
 
 	// Check validity
 	bool valid() const;
@@ -1138,8 +1178,8 @@ IM_ANIM_API void iam_layer_begin(ImGuiID instance_id);                          
 IM_ANIM_API void iam_layer_add(iam_instance inst, float weight);                            // Add source instance with weight.
 IM_ANIM_API void iam_layer_end(ImGuiID instance_id);                                        // Finalize blending and normalize weights.
 IM_ANIM_API bool iam_get_blended_float(ImGuiID instance_id, ImGuiID channel, float* out);   // Get blended float value.
-IM_ANIM_API bool iam_get_blended_vec2(ImGuiID instance_id, ImGuiID channel, ImVec2* out);   // Get blended vec2 value.
-IM_ANIM_API bool iam_get_blended_vec4(ImGuiID instance_id, ImGuiID channel, ImVec4* out);   // Get blended vec4 value.
+IM_ANIM_API bool iam_get_blended_vec2(ImGuiID instance_id, ImGuiID channel, iam_vec2* out);   // Get blended vec2 value.
+IM_ANIM_API bool iam_get_blended_vec4(ImGuiID instance_id, ImGuiID channel, iam_vec4* out);   // Get blended vec4 value.
 IM_ANIM_API bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out);       // Get blended int value.
 
 // Persistence (optional)

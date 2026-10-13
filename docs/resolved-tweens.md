@@ -37,13 +37,13 @@ float height = iam_tween_float_resolved(
 typedef float (*iam_float_resolver)(void* user);
 
 // Vec2 resolver
-typedef ImVec2 (*iam_vec2_resolver)(void* user);
+typedef iam_vec2 (*iam_vec2_resolver)(void* user);  // iam_vec2 = ImVec2 unless IAM_VEC2 is defined
 
 // Vec4 resolver
-typedef ImVec4 (*iam_vec4_resolver)(void* user);
+typedef iam_vec4 (*iam_vec4_resolver)(void* user);
 
 // Color resolver
-typedef ImVec4 (*iam_color_resolver)(void* user);
+typedef iam_vec4 (*iam_color_resolver)(void* user);
 
 // Int resolver
 typedef int (*iam_int_resolver)(void* user);

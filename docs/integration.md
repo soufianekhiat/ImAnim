@@ -294,6 +294,33 @@ module is invisible to the others. Building it once as a shared library gives
 every module a single shared state, which is usually what a plugin architecture
 wants.
 
+### Custom vector types
+
+The API takes and returns `iam_vec2` / `iam_vec4`, which default to `ImVec2` /
+`ImVec4`. To use your own math types, define `IAM_VEC2` / `IAM_VEC4` and their
+conversion macros for every translation unit, including `im_anim.cpp` (e.g. in
+your build system or a forced-include header):
+
+```cpp
+#define IAM_VEC2              glm::vec2
+#define IAM_VEC2_TO_IM(v)     ImVec2((v).x, (v).y)
+#define IAM_VEC2_FROM_IM(v)   glm::vec2((v).x, (v).y)
+#define IAM_VEC4              glm::vec4
+#define IAM_VEC4_TO_IM(v)     ImVec4((v).x, (v).y, (v).z, (v).w)
+#define IAM_VEC4_FROM_IM(v)   glm::vec4((v).x, (v).y, (v).z, (v).w)
+#include "im_anim.h"
+
+glm::vec2 pos = iam_tween_vec2(id, ch, glm::vec2(100, 50), 0.3f, ease, policy, dt);
+```
+
+The conversion macros can be omitted when your type already converts to and
+from `ImVec2` / `ImVec4` implicitly (e.g. via `IM_VEC2_CLASS_EXTRA` /
+`IM_VEC4_CLASS_EXTRA` in `imconfig.h`). `iam_v2(x, y)` / `iam_v4(x, y, z, w)`
+build an `iam_vec2` / `iam_vec4` from floats whatever the type. Everything
+public uses the custom type: parameters, return values, out-pointers, option
+structs and resolver/variation callbacks. Internally ImAnim still computes with
+`ImVec2` / `ImVec4`; `iam_gradient::colors` stays `ImVector<ImVec4>` storage.
+
 ## Next Steps
 
 - [Quick Start](quickstart.md) - More animation examples
