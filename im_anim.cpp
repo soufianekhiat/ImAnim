@@ -946,6 +946,7 @@ static void iam_inertia_clear();
 static void iam_track_velocity_gc(unsigned max_age);  // Velocity tracking section
 static void iam_track_velocity_clear();
 static void iam_state_gc(unsigned max_age);  // State blending section
+static void iam_trail_gc(unsigned max_age);  // Trails section
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
@@ -953,6 +954,7 @@ void iam_gc(unsigned int max_age_frames) {
 	iam_inertia_gc(max_age_frames);
 	iam_track_velocity_gc(max_age_frames);
 	iam_state_gc(max_age_frames);
+	iam_trail_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -1939,6 +1941,115 @@ void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float b
 	float len = iam_path_length(path_a) + (iam_path_length(path_b) - iam_path_length(path_a)) * ImClamp(blend, 0.0f, 1.0f);
 	iam_path_draw_detail::draw(dl, t0, t1, len, col, thickness, IAM_VEC2_TO_IM(offset), segments,
 		[&](float t) { return iam_path_morph_impl(path_a, path_b, t, blend, opts); });
+}
+
+void iam_path_draw_dashed(ImDrawList* dl, ImGuiID path_id, float t0, float t1, float dash, float gap, float phase, ImU32 col, float thickness, iam_vec2 offset_in) {
+	if (!dl || !iam_path_exists(path_id) || dash <= 0.0f || (col & IM_COL32_A_MASK) == 0) return;
+	float const len = iam_path_length(path_id);
+	if (len <= 0.0f) return;
+	gap = ImMax(gap, 0.0f);
+	float const period = dash + gap;
+	ImVec2 const off = IAM_VEC2_TO_IM(offset_in);
+	float const d0 = ImClamp(ImMin(t0, t1), 0.0f, 1.0f) * len, d1 = ImClamp(ImMax(t0, t1), 0.0f, 1.0f) * len;
+	// First dash start at or before d0 (phase shifts the pattern forward)
+	float start = d0 - ImFmod(ImFmod(d0 - phase, period) + period, period);
+	static ImVector<ImVec2> pts;
+	for (float a = start; a < d1; a += period) {
+		float b = a + dash;
+		float s0 = ImMax(a, d0), s1 = ImMin(b, d1);
+		if (s1 <= s0) continue;
+		int n = ImClamp((int)((s1 - s0) / 3.0f), 1, 128);
+		pts.resize(0);
+		for (int i = 0; i <= n; i++) {
+			ImVec2 p = iam_path_evaluate_at_distance_impl(path_id, s0 + (s1 - s0) * (float)i / (float)n);
+			pts.push_back(ImVec2(p.x + off.x, p.y + off.y));
+		}
+		add_polyline(dl, pts.Data, pts.Size, col, thickness);
+	}
+}
+
+// Fading, tapering stroke through points (newest last): alpha and thickness go from 0 at the tail to full at the head
+static void draw_fading_stroke(ImDrawList* dl, ImVec2 const* pts, int count, ImU32 col, float thickness, bool taper) {
+	if (count < 2) return;
+	float const base_a = (float)((col >> IM_COL32_A_SHIFT) & 0xFF);
+	for (int i = 1; i < count; i++) {
+		float f = (float)i / (float)(count - 1);
+		ImU32 c = (col & ~IM_COL32_A_MASK) | ((ImU32)(base_a * f) << IM_COL32_A_SHIFT);
+		dl->AddLine(pts[i - 1], pts[i], c, taper ? ImMax(thickness * f, 0.5f) : thickness);
+	}
+}
+
+void iam_path_draw_trail(ImDrawList* dl, ImGuiID path_id, float t_head, float length, ImU32 col, float thickness, iam_vec2 offset_in, bool taper) {
+	if (!dl || !iam_path_exists(path_id) || length <= 0.0f) return;
+	float const len = iam_path_length(path_id);
+	if (len <= 0.0f) return;
+	ImVec2 const off = IAM_VEC2_TO_IM(offset_in);
+	float const head = ImClamp(t_head, 0.0f, 1.0f) * len, tail = ImMax(head - ImClamp(length, 0.0f, 1.0f) * len, 0.0f);
+	int const n = ImClamp((int)((head - tail) / 3.0f), 2, 256);
+	static ImVector<ImVec2> pts;
+	pts.resize(0);
+	for (int i = 0; i <= n; i++) {
+		ImVec2 p = iam_path_evaluate_at_distance_impl(path_id, tail + (head - tail) * (float)i / (float)n);
+		pts.push_back(ImVec2(p.x + off.x, p.y + off.y));
+	}
+	draw_fading_stroke(dl, pts.Data, pts.Size, col, thickness, taper);
+}
+
+// ----------------------------------------------------
+// Point trails (position history)
+// ----------------------------------------------------
+namespace iam_trail_detail {
+	struct sample { ImVec2 pos; double time; };
+	struct trail {
+		ImVector<sample> samples;  // oldest first
+		unsigned last_seen_frame, last_push_frame;
+	};
+	static ImPool<trail> g_trails;
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_trails.GetMapSize(); ++i) {
+			if (trail* t = g_trails.TryGetMapData(i)) {
+				if (iam_detail::g_frame - t->last_seen_frame > max_age) {
+					t->samples.clear();
+					ImGuiID k = g_trails.Map.Data[i].key;
+					g_trails.Remove(k, g_trails.GetIndex(t));
+				}
+			}
+		}
+	}
+} // namespace iam_trail_detail
+
+static void iam_trail_gc(unsigned max_age) { iam_trail_detail::gc(max_age); }
+
+void iam_trail_draw(ImDrawList* dl, ImGuiID id, iam_vec2 pos_in, float duration, ImU32 col, float thickness, bool taper) {
+	using namespace iam_trail_detail;
+	trail* t = g_trails.GetByKey(id);
+	if (!t) { t = g_trails.GetOrAddByKey(id); t->last_push_frame = iam_detail::g_frame - 1; }
+	t->last_seen_frame = iam_detail::g_frame;
+	double const now = iam_detail::g_global_time;
+	ImVec2 const pos = IAM_VEC2_TO_IM(pos_in);
+	if (t->last_push_frame != iam_detail::g_frame) {  // one sample per frame
+		t->last_push_frame = iam_detail::g_frame;
+		sample s = { pos, now };
+		t->samples.push_back(s);
+	} else if (t->samples.Size > 0) {
+		t->samples.back().pos = pos;
+	}
+	// Drop samples older than duration (keep one just past it so the tail reaches the cut-off)
+	int drop = 0;
+	while (drop + 1 < t->samples.Size && now - t->samples[drop + 1].time > duration) drop++;
+	if (drop > 0) t->samples.erase(t->samples.Data, t->samples.Data + drop);
+	if (t->samples.Size > 512) t->samples.erase(t->samples.Data, t->samples.Data + (t->samples.Size - 512));
+	if (!dl || t->samples.Size < 2 || duration <= 0.0f) return;
+	static ImVector<ImVec2> pts;
+	pts.resize(t->samples.Size);
+	for (int i = 0; i < t->samples.Size; i++) pts[i] = t->samples[i].pos;
+	draw_fading_stroke(dl, pts.Data, pts.Size, col, thickness, taper);
+}
+
+void iam_trail_clear(ImGuiID id) {
+	iam_trail_detail::trail* t = iam_trail_detail::g_trails.GetByKey(id);
+	if (t) t->samples.clear();
 }
 
 // ----------------------------------------------------

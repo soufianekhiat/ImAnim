@@ -4775,6 +4775,46 @@ static void ShowStateBlendingDemo()
 }
 
 // ============================================================
+// SECTION: Dashes & Trails
+// ============================================================
+static void ShowStrokesDemo()
+{
+	float const fs = ImGui::GetFontSize();
+	float const k = fs / 13.0f;
+	static float built_k = 0.0f;
+	static ImGuiID const rect = ImHashStr("demo_dash_rect");
+	static ImGuiID const loop = ImHashStr("demo_trail_loop");
+	if (built_k != k) {
+		iam_path_from_svg(rect, "M10 10 H150 V100 H10 Z", k);
+		iam_path_from_svg(loop, "M60 10 C100 10 110 50 110 55 C110 90 80 100 60 100 C30 100 10 80 10 55 C10 25 30 10 60 10 Z", k);
+		built_k = k;
+	}
+	ImGui::TextWrapped("iam_path_draw_dashed() with an animated phase gives \"marching ants\"; iam_path_draw_trail() draws a "
+		"fading comet behind a point on a path; iam_trail_draw() keeps a short position history for anything that moves "
+		"(move the mouse over the canvas).");
+	static float T = 0.0f;
+	T += GetSafeDeltaTime();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, 115.0f * k);
+	ImGui::InvisibleButton("##strokes_canvas", size);
+	bool hovered = ImGui::IsItemHovered();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	dl->PushClipRect(p, ImVec2(p.x + size.x, p.y + size.y), true);
+	ImVec2 o1(p.x, p.y), o2(p.x + 180 * k, p.y + 2 * k);
+	iam_path_draw_dashed(dl, rect, 0.0f, 1.0f, 8.0f * k, 6.0f * k, T * 30.0f * k, IM_COL32(230, 190, 90, 255), 2.0f * k, o1);
+	iam_path_draw(dl, loop, 0.0f, 1.0f, IM_COL32(255, 255, 255, 20), 2.0f * k, o2);
+	float head = ImFmod(T * 0.35f, 1.0f);
+	iam_path_draw_trail(dl, loop, head, 0.35f, IM_COL32(91, 194, 231, 255), 5.0f * k, o2);
+	ImVec2 hp = iam_path_evaluate_at_distance(loop, head * iam_path_length(loop));
+	dl->AddCircleFilled(ImVec2(o2.x + hp.x, o2.y + hp.y), 4.0f * k, IM_COL32(255, 255, 255, 255));
+	ImGuiID mouse_trail = ImGui::GetID("mouse_trail");
+	if (hovered) iam_trail_draw(dl, mouse_trail, ImGui::GetMousePos(), 0.35f, IM_COL32(204, 120, 88, 255), 6.0f * k);
+	else iam_trail_clear(mouse_trail);
+	dl->PopClipRect();
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8678,6 +8718,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Path Drawing")) {
 			ShowPathDrawDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Dashes & Trails")) {
+			ShowStrokesDemo();
 			ImGui::TreePop();
 		}
 

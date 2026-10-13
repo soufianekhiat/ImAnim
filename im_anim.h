@@ -472,6 +472,16 @@ IM_ANIM_API void iam_path_draw(ImDrawList* dl, ImGuiID path_id, float t0, float 
 IM_ANIM_API void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float blend, float t0, float t1, ImU32 col, float thickness = 1.0f,
                                      iam_vec2 offset = iam_v2(0, 0), iam_morph_opts const& opts = iam_morph_opts(), int segments = 0);
 
+// Dashed stroke of [t0, t1] (fractions of arc length): dash and gap in pixels; animate phase (pixels) for "marching ants".
+IM_ANIM_API void iam_path_draw_dashed(ImDrawList* dl, ImGuiID path_id, float t0, float t1, float dash, float gap, float phase, ImU32 col, float thickness = 1.0f, iam_vec2 offset = iam_v2(0, 0));
+// Fading trail behind t_head over `length` (fraction of the path): alpha (and thickness when taper) grow toward the head.
+IM_ANIM_API void iam_path_draw_trail(ImDrawList* dl, ImGuiID path_id, float t_head, float length, ImU32 col, float thickness = 2.0f, iam_vec2 offset = iam_v2(0, 0), bool taper = true);
+
+// Trail behind any moving point (mouse, widget, particle): call every frame with the current position; the last
+// `duration` seconds of positions are drawn as a fading (optionally tapering) stroke. dl may be null to only record.
+IM_ANIM_API void iam_trail_draw(ImDrawList* dl, ImGuiID id, iam_vec2 pos, float duration, ImU32 col, float thickness = 2.0f, bool taper = true);
+IM_ANIM_API void iam_trail_clear(ImGuiID id);  // Forget the history (e.g. after a teleport).
+
 // Build a path from SVG path data ("d" attribute): M L H V C S Q T A Z and their relative forms.
 // Arcs are converted to cubic beziers. A new subpath (second M) is joined with a line. Points are
 // transformed as p * scale + offset. Returns false (and builds nothing) if the data can't be parsed.

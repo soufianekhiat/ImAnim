@@ -188,6 +188,20 @@ iam_path_draw(dl, loop_id, a, fmodf(a + 0.25f, 1.0f), IM_COL32_WHITE, 4.0f, orig
 `iam_path_morph_draw()` does the same on a morph between two paths.
 `segments = 0` picks a segment count from the drawn length.
 
+## Dashes and Trails
+
+```cpp
+// Marching ants: animate the phase (pixels)
+iam_path_draw_dashed(dl, path_id, 0.0f, 1.0f, 8.0f /*dash*/, 6.0f /*gap*/, time * 30.0f /*phase*/, col, 2.0f, origin);
+
+// Comet: fading, tapering stroke behind a point at t_head, over 35% of the path
+iam_path_draw_trail(dl, path_id, t_head, 0.35f, col, 5.0f, origin);
+
+// Any moving point (mouse, widget, particle): keeps the last 0.35s of positions
+iam_trail_draw(dl, ImGui::GetID("cursor"), ImGui::GetMousePos(), 0.35f, col, 6.0f);
+iam_trail_clear(ImGui::GetID("cursor"));   // e.g. after a teleport
+```
+
 ## Paths from SVG
 
 `iam_path_from_svg()` builds a path from SVG path data (the `d` attribute), so

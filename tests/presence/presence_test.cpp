@@ -103,6 +103,38 @@ int main() {
 	CHECK(fabsf(mn.y - 25) < 2.5f && fabsf(mx.y - 25) < 2.5f, "morph draw halfway between paths (y %.1f..%.1f)", mn.y, mx.y);
 	end_frame();
 
+	// --- Dashed / trail strokes on a straight path (0,0) -> (100,0)
+	iam_path::begin(ImHashStr("line"), iam_v2(0, 0)).line_to(iam_v2(100, 0)).end();
+	begin_frame();
+	dl = ImGui::GetWindowDrawList();
+	v0 = dl->VtxBuffer.Size;
+	iam_path_draw_dashed(dl, ImHashStr("line"), 0.0f, 1.0f, 10.0f, 10.0f, 0.0f, IM_COL32_WHITE, 1.0f);
+	bool gap_empty = true, dash_inked = false;
+	for (int i = v0; i < dl->VtxBuffer.Size; i++) { float x = dl->VtxBuffer[i].pos.x; gap_empty &= !(x > 12.5f && x < 17.5f); dash_inked |= (x > 22.0f && x < 28.0f); }
+	CHECK(dl->VtxBuffer.Size > v0 && gap_empty && dash_inked, "dashes 10/10: ink in dashes, none in gaps");
+	v0 = dl->VtxBuffer.Size;
+	iam_path_draw_dashed(dl, ImHashStr("line"), 0.0f, 1.0f, 10.0f, 10.0f, 10.0f, IM_COL32_WHITE, 1.0f);
+	bool shifted = false, old_dash_empty = true;
+	for (int i = v0; i < dl->VtxBuffer.Size; i++) { float x = dl->VtxBuffer[i].pos.x; shifted |= (x > 12.5f && x < 17.5f); old_dash_empty &= !(x > 22.5f && x < 27.5f); }
+	CHECK(shifted && old_dash_empty, "phase 10 shifts the pattern by one dash");
+	v0 = dl->VtxBuffer.Size;
+	iam_path_draw_trail(dl, ImHashStr("line"), 0.8f, 0.3f, IM_COL32_WHITE, 3.0f);
+	bounds(dl, v0, &mn, &mx);
+	CHECK(fabsf(mn.x - 50.0f) < 3.0f && fabsf(mx.x - 80.0f) < 3.0f, "path trail spans 0.5..0.8 (x %.1f..%.1f)", mn.x, mx.x);
+	end_frame();
+	// Point trail: moving 2px per frame, 0.25s history (~15 frames => ~30px)
+	float px = 0.0f;
+	for (int f = 0; f < 60; f++) {
+		begin_frame();
+		px += 2.0f;
+		dl = ImGui::GetWindowDrawList();
+		v0 = dl->VtxBuffer.Size;
+		iam_trail_draw(dl, 42, iam_v2(px, 50), 0.25f, IM_COL32_WHITE, 2.0f);
+		if (f == 59) bounds(dl, v0, &mn, &mx);
+		end_frame();
+	}
+	CHECK(fabsf(mx.x - px) < 3.0f && mn.x > px - 36.0f && mn.x < px - 24.0f, "point trail covers the last 0.25s (x %.1f..%.1f, head %.1f)", mn.x, mx.x, px);
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;
