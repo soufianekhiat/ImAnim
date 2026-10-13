@@ -1888,7 +1888,10 @@ static bool gpu_fill(ImDrawList* dl, ImVec2 const* segs, int n, ImU32 col, int e
 // (premultiplied), t1 = the matte (luma mattes) or a copy of the backbuffer (blend modes)
 static char const s_comp_hlsl[] = R"(
 cbuffer vertexBuffer : register(b0) { float4x4 ProjMtx; };
-cbuffer compositeBuffer : register(b1) { float4 params; };   // x: mode (-1 / -2 luma, -3 / -4 alpha matte (inverted), 1..17 blend), y: opacity
+// params: x mode (-1 / -2 luma, -3 / -4 alpha matte (inverted), 1..17 blend, 0 normal), y opacity,
+// z blur sigma in pixels along params2.xy, w pass (0 composite, 1 blur into a texture, 2 shadow)
+// params2.zw: shadow offset in pixels; color: shadow colour
+cbuffer compositeBuffer : register(b1) { float4 params; float4 params2; float4 color; };
 Texture2D layerTex : register(t0);
 Texture2D extraTex : register(t1);
 struct VS_INPUT { float2 pos : POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };
@@ -1939,9 +1942,35 @@ float3 blend(int m, float3 b, float3 s) {
 	if (m == 17) return (b + s) >= 1.0 ? 1.0 : 0.0;
 	return s;
 }
+float4 fetch(int2 p) {
+	float sigma = params.z;
+	if (sigma <= 0.0) return layerTex.Load(int3(p, 0));
+	// Gaussian along params2.xy, at most 64 taps per side (wider blurs stride)
+	int r = (int)ceil(sigma * 3.0);
+	int stride = max(1, (r + 63) / 64);
+	float4 acc = 0;
+	float wsum = 0;
+	for (int k = -r; k <= r; k += stride) {
+		float w = exp(-0.5 * (k * k) / (sigma * sigma));
+		acc += w * layerTex.Load(int3(p + int2(params2.xy * k), 0));
+		wsum += w;
+	}
+	return acc / wsum;
+}
 float4 main_ps(PS_INPUT input) : SV_Target {
-	int3 px = int3(input.pos.xy, 0);
-	float4 src = layerTex.Load(px);
+	int2 p = int2(input.pos.xy);
+	int3 px = int3(p, 0);
+	int pk = (int)params.w;  // pass kind ("pass" is an HLSL keyword)
+	if (pk == 2) {
+		float sa = fetch(p - int2(params2.zw)).a * color.a;   // shadow: blurred alpha, tinted
+		if (sa <= 0.0) discard;
+		return float4(color.rgb, sa);
+	}
+	float4 src = fetch(p);
+	if (pk == 1) {
+		if (src.a <= 0.0) discard;
+		return float4(src.rgb / src.a, src.a);   // stored premultiplied again by the blend state
+	}
 	if (src.a <= 0.0) discard;
 	float3 s = src.rgb / src.a;
 	int mode = (int)params.x;
@@ -1952,6 +1981,7 @@ float4 main_ps(PS_INPUT input) : SV_Target {
 		a *= (mode == -1 || mode == -3) ? l : 1.0 - l;
 		return float4(s, a);
 	}
+	if (mode == 0) return float4(s, a);
 	float3 b = extraTex.Load(px).rgb;
 	return float4(saturate(blend(mode, b, s)), a);
 }
@@ -1959,7 +1989,7 @@ float4 main_ps(PS_INPUT input) : SV_Target {
 
 static ImPlatform_ShaderProgram s_comp_program = nullptr;
 static bool s_comp_tried = false;
-static ImTextureID s_rt[2] = { ImTextureID(), ImTextureID() };
+static ImTextureID s_rt[3] = { ImTextureID(), ImTextureID(), ImTextureID() };  // layer, matte, blur scratch
 static ImTextureID s_bg = ImTextureID();
 static unsigned s_rt_w = 0, s_rt_h = 0;
 
@@ -1988,24 +2018,24 @@ static bool offscreen_targets() {
 	ImPlatform_GetBackbufferSize(&w, &h);
 	if (w == 0 || h == 0) return false;
 	if (w != s_rt_w || h != s_rt_h || !s_rt[0]) {
-		for (int i = 0; i < 2; i++) if (s_rt[i]) ImPlatform_DestroyTexture(s_rt[i]);
+		for (int i = 0; i < 3; i++) if (s_rt[i]) ImPlatform_DestroyTexture(s_rt[i]);
 		if (s_bg) ImPlatform_DestroyTexture(s_bg);
 		ImPlatform_TextureDesc desc = ImPlatform_TextureDesc_Default(w, h);
 		desc.format = ImPlatform_PixelFormat_RGBA8;
-		for (int i = 0; i < 2; i++) s_rt[i] = ImPlatform_CreateRenderTexture(&desc);
+		for (int i = 0; i < 3; i++) s_rt[i] = ImPlatform_CreateRenderTexture(&desc);
 		ImVector<unsigned char> zeros;
 		zeros.resize((int)(w * h * 4));
 		memset(zeros.Data, 0, (size_t)zeros.Size);
 		s_bg = ImPlatform_CreateTexture(zeros.Data, &desc);  // CopyBackbuffer target: same size and format
 		s_rt_w = w; s_rt_h = h;
 	}
-	return s_rt[0] && s_rt[1] && s_bg;
+	return s_rt[0] && s_rt[1] && s_rt[2] && s_bg;
 }
 
 static void cb_begin_rt(ImDrawList const*, ImDrawCmd const* cmd) { ImTextureID t; memcpy(&t, cmd->UserCallbackData, sizeof(t)); ImPlatform_BeginRenderToTexture(t); }
 static void cb_end_rt(ImDrawList const*, ImDrawCmd const*) { ImPlatform_EndRenderToTexture(); }
 static void cb_copy_bg(ImDrawList const*, ImDrawCmd const*) { ImPlatform_CopyBackbuffer(s_bg); }
-struct comp_cb { ImPlatform_ShaderProgram prog; ImTextureID extra; float params[4]; };
+struct comp_cb { ImPlatform_ShaderProgram prog; ImTextureID extra; float params[12]; };
 static void cb_composite(ImDrawList const*, ImDrawCmd const* cmd) {
 	comp_cb c;
 	memcpy(&c, cmd->UserCallbackData, sizeof(c));
@@ -2015,16 +2045,21 @@ static void cb_composite(ImDrawList const*, ImDrawCmd const* cmd) {
 
 static void offscreen_begin(ImDrawList* dl, int i) { dl->AddCallback(cb_begin_rt, &s_rt[i], sizeof(ImTextureID)); }
 static void offscreen_end(ImDrawList* dl) { dl->AddCallback(cb_end_rt, nullptr); dl->AddCallback(ImDrawCallback_ResetRenderState, nullptr); }
-// Draws target 0 over the clip rect through the composite shader
-static void offscreen_composite(ImDrawList* dl, int mode, ImTextureID extra) {
+// One shader pass over the clip rect reading target `src` (t0), into target `dst` (-1 = screen).
+// pass 0 composite (mode, extra), 1 blur into a texture, 2 shadow; blur `sigma` px along dir
+static void offscreen_pass(ImDrawList* dl, int src, int dst, int pass, int mode, ImTextureID extra, float sigma, ImVec2 dir,
+                           ImVec2 offset = ImVec2(0, 0), float const* rgba = nullptr) {
 	ImPlatform_ShaderProgram const prog = comp_program();
-	if (mode > 0) dl->AddCallback(cb_copy_bg, nullptr);
-	comp_cb c = { prog, extra, { (float)mode, 1.0f, 0.0f, 0.0f } };
+	if (dst >= 0) offscreen_begin(dl, dst);
+	if (pass == 0 && mode > 0) dl->AddCallback(cb_copy_bg, nullptr);
+	comp_cb c = { prog, extra ? extra : s_rt[1], { (float)mode, 1.0f, sigma, (float)pass, dir.x, dir.y, offset.x, offset.y,
+	              rgba ? rgba[0] : 0.0f, rgba ? rgba[1] : 0.0f, rgba ? rgba[2] : 0.0f, rgba ? rgba[3] : 0.0f } };
 	dl->AddCallback(cb_composite, &c, sizeof(c));
 	ImPlatform_BeginCustomShader(dl, prog);
 	ImVec4 const cr = dl->_CmdHeader.ClipRect;
-	dl->AddImageQuad(ImTextureRef(s_rt[0]), ImVec2(cr.x, cr.y), ImVec2(cr.z, cr.y), ImVec2(cr.z, cr.w), ImVec2(cr.x, cr.w));
+	dl->AddImageQuad(ImTextureRef(s_rt[src]), ImVec2(cr.x, cr.y), ImVec2(cr.z, cr.y), ImVec2(cr.z, cr.w), ImVec2(cr.x, cr.w));
 	ImPlatform_EndCustomShader(dl);
+	if (dst >= 0) offscreen_end(dl);
 }
 #endif
 
@@ -2210,6 +2245,7 @@ struct ctx {
 	float cur_w, cur_h;
 	bool offscreen;            // drawing into an offscreen layer (no nesting)
 	int skip_matte;            // layer whose matte is applied by the composite
+	int gpu_fx_layer;          // layer whose blur / shadow the GPU draws
 	// CPU blur / drop shadow: a soft edge (fringe width in pixels) and a recoloured, offset pass
 	float soft;
 	bool shadow;
@@ -2842,7 +2878,12 @@ struct ctx {
 		// Track mattes and blend modes: draw the layer (and the matte) into textures, composite
 		// (exact matte opacity, gradients and luma, unlike the CPU's geometric clip)
 		bool const luma = ly.matte >= 0 && ly.matte != li && ly.tt >= 1 && ly.tt <= 4;
-		if (!collect && !offscreen && a > 0.0f && (luma || (ly.bm > 0 && ly.bm <= 17)) && comp_program() && offscreen_targets()) {
+		int blur_fx = -1, shadow_fx2 = -1;
+		for (int i = 0; i < ly.fxn; i++) {
+			if (L->effects[ly.fx + i].kind == FX_BLUR) blur_fx = ly.fx + i;
+			if (L->effects[ly.fx + i].kind == FX_SHADOW) shadow_fx2 = ly.fx + i;
+		}
+		if (!collect && !offscreen && a > 0.0f && (luma || (ly.bm > 0 && ly.bm <= 17) || blur_fx >= 0 || shadow_fx2 >= 0) && comp_program() && offscreen_targets()) {
 			offscreen = true;
 			if (luma) {
 				layer_t const& ml = L->layers[ly.matte];
@@ -2850,15 +2891,42 @@ struct ctx {
 				if (t >= ml.ip && t < ml.op) render_layer(ly.matte, t, M, 1.0f);
 				offscreen_end(dl);
 			}
-			int const prev_skip = skip_matte;
+			int const prev_skip = skip_matte, prev_fx = gpu_fx_layer;
 			if (luma) skip_matte = li;  // the texture is the matte
+			gpu_fx_layer = li;          // blur and shadow come from the passes below
 			offscreen_begin(dl, 0);
 			render_layer(li, t, M, alpha);
 			offscreen_end(dl);
 			skip_matte = prev_skip;
+			gpu_fx_layer = prev_fx;
 			offscreen = false;
+			float const scale = mat_scale(W), fbs = ImGui::GetIO().DisplayFramebufferScale.x;
+			if (shadow_fx2 >= 0) {
+				// Drop shadow: the layer's alpha blurred (two passes), tinted and offset, under the layer
+				effect_t const& fx = L->effects[shadow_fx2];
+				float rgba[4];
+				eval(L, fx.v[0], lt, scratch);
+				for (int k = 0; k < 3; k++) rgba[k] = k < scratch.Size ? scratch[k] : 0.0f;
+				rgba[3] = ImSaturate(pv(fx.v[1], lt, 0, 255.0f) / 255.0f);
+				float const ang = (pv(fx.v[2], lt, 0, 135.0f) - 90.0f) * (IM_PI / 180.0f), dist = pv(fx.v[3], lt, 0, 5.0f) * scale * fbs;
+				float const sigma = pv(fx.v[4], lt, 0, 0.0f) * 0.25f * scale * fbs;  // lottie-web: sigma = softness / 4
+				offscreen_pass(dl, 0, 2, 1, 0, s_rt[1], sigma, ImVec2(1, 0));
+				offscreen_pass(dl, 2, -1, 2, 0, s_rt[1], sigma, ImVec2(0, 1), ImVec2(ImCos(ang) * dist, ImSin(ang) * dist), rgba);
+				if (pv(fx.v[5], lt, 0, 0.0f) != 0.0f) { depth--; return; }  // shadow only
+			}
 			static int const matte_mode[5] = { 0, -3, -4, -1, -2 };  // tt 1 alpha, 2 inverted alpha, 3 luma, 4 inverted luma
-			offscreen_composite(dl, luma ? matte_mode[ly.tt] : ly.bm, luma ? s_rt[1] : s_bg);
+			int const mode = luma ? matte_mode[ly.tt] : (ly.bm > 0 && ly.bm <= 17 ? ly.bm : 0);
+			ImTextureID const extra = luma ? s_rt[1] : s_bg;
+			if (blur_fx >= 0) {
+				// Gaussian blur: horizontal pass into the scratch texture, vertical in the composite
+				effect_t const& fx = L->effects[blur_fx];
+				float const sigma = pv(fx.v[0], lt, 0, 0.0f) * 0.3f * scale * fbs;  // lottie-web: sigma = 0.3 blurriness
+				int const dims = (int)pv(fx.v[1], lt, 0, 1.0f);                     // 1 both, 2 horizontal, 3 vertical
+				offscreen_pass(dl, 0, 2, 1, 0, s_rt[1], dims == 3 ? 0.0f : sigma, ImVec2(1, 0));
+				offscreen_pass(dl, 2, -1, 0, mode, extra, dims == 2 ? 0.0f : sigma, ImVec2(0, 1));
+			} else {
+				offscreen_pass(dl, 0, -1, 0, mode, extra, 0.0f, ImVec2(0, 0));
+			}
 			depth--;
 			return;
 		}
@@ -2883,7 +2951,7 @@ struct ctx {
 			float const prev_soft = soft;
 			float const scale = mat_scale(W);
 			int shadow_fx = -1;
-			for (int i = 0; i < ly.fxn && !collect; i++) {
+			for (int i = 0; i < ly.fxn && !collect && li != gpu_fx_layer; i++) {
 				effect_t const& fx = L->effects[ly.fx + i];
 				if (fx.kind == FX_BLUR) soft = ImMax(soft, pv(fx.v[0], lt, 0, 0.0f) * 0.3f * 2.5f * scale);  // lottie-web: sigma = 0.3 blurriness
 				if (fx.kind == FX_SHADOW) shadow_fx = ly.fx + i;
@@ -2904,7 +2972,7 @@ struct ctx {
 					shadow = false;
 					if (!draw_content) break;
 					soft = prev_soft;
-					for (int i = 0; i < ly.fxn && !collect; i++)
+					for (int i = 0; i < ly.fxn && !collect && li != gpu_fx_layer; i++)
 						if (L->effects[ly.fx + i].kind == FX_BLUR) soft = ImMax(soft, pv(L->effects[ly.fx + i].v[0], lt, 0, 0.0f) * 0.3f * 2.5f * scale);
 				}
 			switch (ly.ty) {
@@ -3068,6 +3136,7 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	C.shadow = false;
 	C.offscreen = false;
 	C.skip_matte = -1;
+	C.gpu_fx_layer = -1;
 	C.collect = nullptr;
 	C.tol = 0.25f;
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);

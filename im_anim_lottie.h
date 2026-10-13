@@ -11,9 +11,9 @@
 // round corners, pucker / bloat, zig-zag, offset path, twist, merge paths, repeater, masks (add,
 // subtract, intersect, difference) and alpha track mattes (from the matte layer's
 // geometry), Fill / Tint / Gaussian blur / drop shadow effects, time remap, markers.
-// With the GPU path on DX10 / DX11 (see below): blend modes and exact track mattes
-// (alpha with opacity and gradients, luma); without it blend modes draw as normal and luma
-// mattes as alpha mattes.
+// With the GPU path on DX10 / DX11 (see below): blend modes, exact track mattes (alpha with
+// opacity and gradients, luma) and true Gaussian blur / drop shadow; without it blend modes
+// draw as normal, luma mattes as alpha mattes, blur and shadow as soft edges.
 // Not supported (reported by iam_lottie_warnings): expressions, other effects, image
 // layers, text without embedded glyphs and text animators. Older Bodymovin exports (0..255 colours, ...) are
 // upgraded on load like lottie-web does.

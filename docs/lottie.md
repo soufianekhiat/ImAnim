@@ -96,9 +96,10 @@ bool on = iam_lottie_gpu_active();  // compiled in, enabled and the shader compi
 
 On D3D10 / D3D11 it also draws layers that use a blend mode or a track matte into
 offscreen textures (ImPlatform render textures) and composites them with a shader: all
-17 After Effects blend modes (W3C formulas, against a copy of the backbuffer) and exact
+17 After Effects blend modes (W3C formulas, against a copy of the backbuffer), exact
 track mattes, alpha and luma, inverted or not, including the matte's opacity and
-gradients. Offscreen layers do not nest (an inner one draws as with the CPU path) and
+gradients, and a true Gaussian blur and drop shadow (two separable passes, sigma as in
+lottie-web) instead of the CPU's soft edges. Offscreen layers do not nest (an inner one draws as with the CPU path) and
 use the main viewport's backbuffer.
 
 The fill runs on the D3D10/11/12 backends (their custom-shader constant buffers hold the
@@ -122,7 +123,7 @@ Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded g
   shapes are filled; a stroke after them still follows the original paths, and an
   offset path fills the holes of the shapes it offsets.
 - Text boxes do not wrap; the text is laid out as point text.
-- Blur and drop shadow are drawn without an offscreen layer: each shape's edge becomes a
+- Without the GPU path, blur and drop shadow are drawn without an offscreen layer: each shape's edge becomes a
   soft ramp (the shape stacked grown and shrunk across the edge), so a blur softens
   edges rather than mixing colours of shapes that touch, and directional blur is
   applied in both directions.
