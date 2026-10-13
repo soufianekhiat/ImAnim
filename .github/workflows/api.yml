@@ -1,0 +1,22 @@
+name: API
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  custom-vec-types:
+    runs-on: ubuntu-latest
+    name: Custom vector types (IAM_VEC2/IAM_VEC4)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Build and compare default vs custom vector types
+        run: sh tests/vec_types/run.sh
