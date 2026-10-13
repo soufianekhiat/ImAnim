@@ -362,6 +362,56 @@ static float eval_preset_internal(int type, float t) {
 	}
 }
 
+// ----------------------------------------------------
+// Custom curve eases (iam_ease_curve)
+// ----------------------------------------------------
+struct ease_curve {
+	ImGuiID id;
+	ImVector<ImVec2> pts;   // P0, then (C1, C2, P1) per segment
+	float lut[129];         // y sampled at uniform x in [0,1]
+};
+static ImGuiStorage g_curve_map;  // id -> ease_curve* (heap, never moves)
+
+static ease_curve* find_curve(ImGuiID id) { return (ease_curve*)g_curve_map.GetVoidPtr(id); }
+static ImGuiID curve_id_from(float lo, float hi) { return ((ImGuiID)(hi < 0.0f ? 0.0f : hi) << 16) | ((ImGuiID)(lo < 0.0f ? 0.0f : lo) & 0xFFFF); }
+
+static ImVec2 bezier_point(ImVec2 a, ImVec2 b, ImVec2 c, ImVec2 d, float u) {
+	float v = 1.0f - u;
+	float w0 = v * v * v, w1 = 3 * v * v * u, w2 = 3 * v * u * u, w3 = u * u * u;
+	return ImVec2(a.x * w0 + b.x * w1 + c.x * w2 + d.x * w3, a.y * w0 + b.y * w1 + c.y * w2 + d.y * w3);
+}
+
+static void build_curve_lut(ease_curve* c) {
+	int const segs = (c->pts.Size - 1) / 3;
+	int const per = 48;
+	ImVector<ImVec2> s;
+	s.reserve(segs * per + 1);
+	for (int k = 0; k < segs; k++) {
+		ImVec2 const* p = &c->pts[k * 3];
+		for (int i = 0; i < per; i++) s.push_back(bezier_point(p[0], p[1], p[2], p[3], (float)i / per));
+	}
+	s.push_back(c->pts.back());
+	for (int i = 1; i < s.Size; i++) if (s[i].x < s[i - 1].x) s[i].x = s[i - 1].x;  // keep x monotonic
+	int j = 0;
+	for (int i = 0; i <= 128; i++) {
+		float x = (float)i / 128.0f;
+		while (j < s.Size - 2 && s[j + 1].x < x) j++;
+		ImVec2 a = s[j], b = s[j + 1];
+		float f = (b.x - a.x) > 1e-7f ? ImClamp((x - a.x) / (b.x - a.x), 0.0f, 1.0f) : 1.0f;
+		c->lut[i] = a.y + (b.y - a.y) * f;
+	}
+}
+
+static float curve_eval(ImGuiID id, float t) {
+	ease_curve* c = find_curve(id);
+	if (!c) return t;  // undefined curve: linear
+	t = ImClamp(t, 0.0f, 1.0f);
+	float f = t * 128.0f;
+	int i = (int)f;
+	if (i >= 128) return c->lut[128];
+	return c->lut[i] + (c->lut[i + 1] - c->lut[i]) * (f - (float)i);
+}
+
 static float eval(iam_ease_desc const& d, float t) {
 	switch (d.type) {
 		case iam_ease_linear:
@@ -384,6 +434,8 @@ static float eval(iam_ease_desc const& d, float t) {
 			}
 			return t; // fallback to linear if no callback registered
 		}
+		case iam_ease_curve:
+			return curve_eval(curve_id_from(d.p0, d.p1), t);
 		default:
 			return ease_lut_pool_singleton().eval_lut(d, t);
 	}
@@ -1016,6 +1068,41 @@ void iam_register_custom_ease(int slot, iam_ease_fn fn) {
 	}
 }
 
+void iam_ease_curve_set(ImGuiID curve_id, iam_vec2 const* points, int count) {
+	using namespace iam_detail;
+	if (!points || count < 4 || (count - 1) % 3 != 0) return;
+	ease_curve* c = find_curve(curve_id);
+	if (!c) {
+		c = IM_NEW(ease_curve)();
+		c->id = curve_id;
+		g_curve_map.SetVoidPtr(curve_id, c);
+	}
+	c->pts.resize(count);
+	for (int i = 0; i < count; i++) c->pts[i] = IAM_VEC2_TO_IM(points[i]);
+	build_curve_lut(c);
+}
+
+int iam_ease_curve_get(ImGuiID curve_id, iam_vec2* out_points, int max_count) {
+	iam_detail::ease_curve* c = iam_detail::find_curve(curve_id);
+	if (!c) return 0;
+	if (out_points) for (int i = 0; i < c->pts.Size && i < max_count; i++) out_points[i] = IAM_VEC2_FROM_IM(c->pts[i]);
+	return c->pts.Size;
+}
+
+bool iam_ease_curve_exists(ImGuiID curve_id) {
+	return iam_detail::find_curve(curve_id) != nullptr;
+}
+
+float const* iam_ease_curve_ref(ImGuiID curve_id) {
+	static float ring[8][4];
+	static int n = 0;
+	float* r = ring[n++ & 7];
+	r[0] = (float)(curve_id & 0xFFFF);
+	r[1] = (float)(curve_id >> 16);
+	r[2] = r[3] = 0.0f;
+	return r;
+}
+
 iam_ease_fn iam_get_custom_ease(int slot) {
 	if (slot >= 0 && slot < 16) {
 		return iam_detail::g_custom_ease[slot];
@@ -1025,6 +1112,10 @@ iam_ease_fn iam_get_custom_ease(int slot) {
 
 float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
+}
+
+float iam_ease_eval(iam_ease_desc const& ez, float t) {
+	return iam_detail::eval(ez, t);
 }
 
 float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, iam_ease_desc const& ez, int policy, float /*dt*/, float init_value) {
@@ -2649,11 +2740,11 @@ static iam_instance_data* find_instance(ImGuiID inst_id) {
 
 // Evaluate easing for clip keyframes
 static float eval_clip_ease(int ease_type, float t, float const* bezier, bool has_bezier) {
-	if (has_bezier && ease_type == iam_ease_cubic_bezier) {
-		iam_ease_desc d = { ease_type, bezier[0], bezier[1], bezier[2], bezier[3] };
-		return iam_detail::eval(d, t);
-	}
-	return iam_detail::eval_preset_internal(ease_type, t);
+	if (ease_type <= iam_ease_in_out_bounce) return iam_detail::eval_preset_internal(ease_type, t);
+	if (ease_type == iam_ease_cubic_bezier && !has_bezier) return iam_detail::eval_preset_internal(iam_ease_linear, t);
+	// Parametric eases (steps, cubic bezier, spring, custom slot, curve) keep their params in bezier[]
+	iam_ease_desc d = { ease_type, bezier[0], bezier[1], bezier[2], bezier[3] };
+	return iam_detail::eval(d, t);
 }
 
 // Evaluate spring
@@ -5128,7 +5219,7 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Tracks: count + for each: channel, type, num_keys, keys...
 
 static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static int const IAM_CLIP_VERSION = 5;      // 4: + loop delay, track color space/anchor, key color space/value_ext; 5: + labels
+static int const IAM_CLIP_VERSION = 6;      // 4: + loop delay, track color space/anchor, key color space/value_ext; 5: + labels; 6: + curve eases
 static int const IAM_CLIP_VERSION_MIN = 3;  // Oldest version iam_clip_load() accepts
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
@@ -5199,6 +5290,25 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 	for (int l = 0; l < label_count; ++l) {
 		fwrite(&clip->labels[l].id, sizeof(ImGuiID), 1, f);
 		fwrite(&clip->labels[l].time, sizeof(float), 1, f);
+	}
+
+	// Curve eases used by keys (v6)
+	ImVector<ImGuiID> curves;
+	for (int t = 0; t < track_count; ++t)
+		for (int k = 0; k < clip->iam_tracks[t].keys.Size; ++k) {
+			keyframe const& kf = clip->iam_tracks[t].keys[k];
+			if (kf.ease_type != iam_ease_curve) continue;
+			ImGuiID cid = iam_detail::curve_id_from(kf.bezier[0], kf.bezier[1]);
+			if (iam_detail::find_curve(cid) && !curves.contains(cid)) curves.push_back(cid);
+		}
+	int curve_count = curves.Size;
+	fwrite(&curve_count, sizeof(int), 1, f);
+	for (int c = 0; c < curve_count; ++c) {
+		iam_detail::ease_curve* ec = iam_detail::find_curve(curves[c]);
+		int n = ec->pts.Size;
+		fwrite(&curves[c], sizeof(ImGuiID), 1, f);
+		fwrite(&n, sizeof(int), 1, f);
+		for (int i = 0; i < n; ++i) { fwrite(&ec->pts[i].x, sizeof(float), 1, f); fwrite(&ec->pts[i].y, sizeof(float), 1, f); }
 	}
 
 	// Note: callbacks cannot be serialized
@@ -5320,6 +5430,24 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 				iam_clip_detail::clip_label cl;
 				if (fread(&cl.id, sizeof(ImGuiID), 1, f) != 1 || fread(&cl.time, sizeof(float), 1, f) != 1) break;
 				clip->labels.push_back(cl);
+			}
+		}
+	}
+	if (version >= 6) {
+		int curve_count = 0;
+		if (fread(&curve_count, sizeof(int), 1, f) == 1) {
+			for (int c = 0; c < curve_count; ++c) {
+				ImGuiID cid = 0;
+				int n = 0;
+				if (fread(&cid, sizeof(ImGuiID), 1, f) != 1 || fread(&n, sizeof(int), 1, f) != 1 || n < 0 || n > 4096) break;
+				ImVector<ImVec2> pts;
+				pts.resize(n);
+				bool ok = true;
+				for (int i = 0; i < n && ok; ++i) ok = fread(&pts[i].x, sizeof(float), 1, f) == 1 && fread(&pts[i].y, sizeof(float), 1, f) == 1;
+				if (!ok) break;
+				ImVector<iam_vec2> conv;
+				for (int i = 0; i < n; ++i) conv.push_back(IAM_VEC2_FROM_IM(pts[i]));
+				iam_ease_curve_set(cid, conv.Data, n);
 			}
 		}
 	}
@@ -9182,7 +9310,7 @@ namespace iam_clip_editor_detail {
 		"in_back", "out_back", "in_out_back",
 		"in_elastic", "out_elastic", "in_out_elastic",
 		"in_bounce", "out_bounce", "in_out_bounce",
-		"steps", "cubic_bezier", "spring", "custom"
+		"steps", "cubic_bezier", "spring", "custom", "curve"
 	};
 	static int const k_ease_count = (int)(sizeof(k_ease_names) / sizeof(k_ease_names[0]));
 	static char const* const k_type_names[] = { "float", "vec2", "vec4", "int", "color", "float_rel", "vec2_rel", "vec4_rel", "color_rel" };
@@ -9230,10 +9358,11 @@ namespace iam_clip_editor_detail {
 		char status[160];
 		double status_until;
 		bool modified;
+		bool ease_editing;                  // an ease editor drag is in progress (one undo step per drag)
 
 		editor_state() : clip_id(0), view_t0(0), view_len(1), view_fitted(false), snap(true), snap_step(0.05f),
 			drag_keys(false), drag_moved(false), drag_origin_t(0), box_active(false), box_start(0, 0),
-			add_type(0), status_until(0), modified(false) {
+			add_type(0), status_until(0), modified(false), ease_editing(false) {
 			path[0] = add_name[0] = status[0] = 0;
 		}
 		~editor_state() {
@@ -9474,13 +9603,33 @@ namespace iam_clip_editor_detail {
 		b.append(")");
 	}
 
+	// Key needs an explicit params argument (bezier4) in exported code
+	static bool export_params(keyframe const& kf) {
+		if (kf.is_spring || kf.ease_type <= iam_ease_in_out_bounce || kf.ease_type == iam_ease_curve) return false;
+		return kf.has_bezier || kf.bezier[0] != 0.0f || kf.bezier[1] != 0.0f || kf.bezier[2] != 0.0f || kf.bezier[3] != 0.0f;
+	}
+
 	static void export_cpp(iam_clip_data* clip, ImGuiTextBuffer& b) {
 		int bez_count = 0;
+		ImVector<ImGuiID> curves;
 		for (int t = 0; t < clip->iam_tracks.Size; t++)
 			for (int k = 0; k < clip->iam_tracks[t].keys.Size; k++) {
 				keyframe const& kf = clip->iam_tracks[t].keys[k];
-				if (kf.has_bezier && !kf.is_spring) {
+				if (export_params(kf)) {
 					b.appendf("static float const bezier_%d[4] = { %s, %s, %s, %s };\n", bez_count++, fl(kf.bezier[0]), fl(kf.bezier[1]), fl(kf.bezier[2]), fl(kf.bezier[3]));
+				}
+				if (kf.ease_type == iam_ease_curve && !kf.is_spring) {
+					ImGuiID cid = iam_detail::curve_id_from(kf.bezier[0], kf.bezier[1]);
+					iam_detail::ease_curve* c = iam_detail::find_curve(cid);
+					if (c && !curves.contains(cid)) {
+						b.appendf("static iam_vec2 const curve_%d[] = {", curves.Size);
+						for (int i = 0; i < c->pts.Size; i++) b.appendf("%s iam_v2(%s, %s)", i ? "," : "", fl(c->pts[i].x), fl(c->pts[i].y));
+						b.append(" };\n");
+						b.append("iam_ease_curve_set(");
+						append_id(b, cid);
+						b.appendf(", curve_%d, %d);\n", curves.Size, c->pts.Size);
+						curves.push_back(cid);
+					}
 				}
 			}
 		b.append("iam_clip::begin(");
@@ -9491,8 +9640,14 @@ namespace iam_clip_editor_detail {
 			iam_track const& trk = clip->iam_tracks[t];
 			for (int k = 0; k < trk.keys.Size; k++) {
 				keyframe const& kf = trk.keys[k];
-				char bez_arg[32] = "";
-				if (kf.has_bezier && !kf.is_spring) snprintf(bez_arg, sizeof(bez_arg), ", bezier_%d", bez_count++);
+				char bez_arg[96] = "";
+				if (export_params(kf)) snprintf(bez_arg, sizeof(bez_arg), ", bezier_%d", bez_count++);
+				else if (kf.ease_type == iam_ease_curve && !kf.is_spring) {
+					ImGuiID cid = iam_detail::curve_id_from(kf.bezier[0], kf.bezier[1]);
+					char const* cname = iam_get_id_name(cid);
+					if (cname) snprintf(bez_arg, sizeof(bez_arg), ", iam_ease_curve_ref(iam_id(\"%s\"))", cname);
+					else snprintf(bez_arg, sizeof(bez_arg), ", iam_ease_curve_ref(0x%08Xu)", cid);
+				}
 				if (kf.is_spring && trk.type == iam_chan_float) {
 					b.append("\t.key_float_spring(");
 					append_id(b, trk.channel);
@@ -9590,7 +9745,7 @@ namespace iam_clip_editor_detail {
 		bool changed = false;
 		if (ImGui::BeginCombo(label, ease_name(*ease))) {
 			for (int e = 0; e < k_ease_count; e++) {
-				if (e == iam_ease_spring || e == iam_ease_custom) continue;  // spring: use the Spring checkbox; custom needs a slot
+				if (e == iam_ease_spring || e == iam_ease_custom || e == iam_ease_curve) continue;  // spring: Spring checkbox; custom: slot; curve: ease editor
 				bool sel = (e == *ease);
 				if (ImGui::Selectable(k_ease_names[e], sel)) { *ease = e; changed = true; }
 				if (sel) ImGui::SetItemDefaultFocus();
@@ -10056,7 +10211,7 @@ namespace iam_clip_editor_detail {
 				ImGui::TextDisabled("%d key%s", st->selected.Size, st->selected.Size == 1 ? "" : "s");
 				if (ImGui::BeginMenu("Ease")) {
 					for (int e = 0; e < k_ease_count; e++) {
-						if (e == iam_ease_spring || e == iam_ease_custom || e == iam_ease_cubic_bezier) continue;
+						if (e == iam_ease_spring || e == iam_ease_custom || e == iam_ease_cubic_bezier || e == iam_ease_curve) continue;
 						if (ImGui::MenuItem(k_ease_names[e])) {
 							push_undo(st, clip);
 							for (int i = 0; i < st->selected.Size; i++) {
@@ -10162,7 +10317,8 @@ namespace iam_clip_editor_detail {
 				char lbl[64];
 				track_label(trk, lbl, sizeof(lbl));
 
-				float const curve_w = ImGui::GetFontSize() * 9.0f;
+				float const curve_w = ImGui::GetFontSize() * 16.0f;
+				keyframe const before = *kf;
 				ImGui::BeginGroup();
 				ImGui::Text("%s", lbl);
 				ImGui::SameLine();
@@ -10176,22 +10332,6 @@ namespace iam_clip_editor_detail {
 					int cs = kf->color_space;
 					static char const* const cs_names[] = { "sRGB", "sRGB linear", "HSV", "OKLAB", "OKLCH" };
 					if (ImGui::Combo("Blend space", &cs, cs_names, 5)) { activated = true; kf->color_space = cs; changed = true; }
-				}
-				if (!kf->is_spring) {
-					int ease = kf->ease_type;
-					if (ease_combo("Ease", &ease)) {
-						activated = true;
-						kf->ease_type = ease;
-						if (ease == iam_ease_cubic_bezier && !kf->has_bezier) { kf->has_bezier = true; kf->bezier[0] = 0.25f; kf->bezier[1] = 0.1f; kf->bezier[2] = 0.25f; kf->bezier[3] = 1.0f; }
-						else if (ease != iam_ease_cubic_bezier) kf->has_bezier = false;
-						changed = true;
-					}
-					if (kf->ease_type == iam_ease_cubic_bezier) {
-						changed |= ImGui::DragFloat4("Bezier", kf->bezier, 0.005f, -2.0f, 3.0f, "%.3f");
-						activated |= ImGui::IsItemActivated();
-						kf->bezier[0] = ImClamp(kf->bezier[0], 0.0f, 1.0f);
-						kf->bezier[2] = ImClamp(kf->bezier[2], 0.0f, 1.0f);
-					}
 				}
 				if (trk.type == iam_chan_float) {
 					bool spring = kf->is_spring;
@@ -10210,11 +10350,24 @@ namespace iam_clip_editor_detail {
 				ImGui::PopItemWidth();
 				ImGui::EndGroup();
 
-				// Curve preview of the segment starting at this key
+				// Ease of the segment starting at this key: editable graph (spring keys: preview only)
 				ImGui::SameLine();
 				ImVec2 cp = ImGui::GetCursorScreenPos();
 				float ch = ImMin(ImGui::GetContentRegionAvail().y, curve_w * 0.6f);
-				if (ch > 20.0f) {
+				if (!kf->is_spring && ch > ImGui::GetFrameHeightWithSpacing() * 3.0f) {
+					iam_ease_desc d = { kf->ease_type, kf->bezier[0], kf->bezier[1], kf->bezier[2], kf->bezier[3] };
+					if (kf->ease_type <= iam_ease_in_out_bounce) d.p0 = d.p1 = d.p2 = d.p3 = 0.0f;
+					bool ease_changed = iam_ease_editor("Ease", &d, iam_v2(curve_w, ch - ImGui::GetFrameHeightWithSpacing() * 2.0f));
+					if (ease_changed) {
+						if (!st->ease_editing) activated = true;
+						st->ease_editing = true;
+						kf->ease_type = d.type;
+						kf->bezier[0] = d.p0; kf->bezier[1] = d.p1; kf->bezier[2] = d.p2; kf->bezier[3] = d.p3;
+						kf->has_bezier = (d.type == iam_ease_cubic_bezier);
+						changed = true;
+					}
+					if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) st->ease_editing = false;
+				} else if (ch > 20.0f) {
 					ImDrawList* idl = ImGui::GetWindowDrawList();
 					ImVec2 c1(cp.x + curve_w, cp.y + ch);
 					idl->AddRectFilled(cp, c1, col_bg, 3.0f);
@@ -10228,7 +10381,12 @@ namespace iam_clip_editor_detail {
 					ImGui::Dummy(ImVec2(curve_w, ch));
 				}
 
-				if (activated) push_undo(st, clip);
+				if (activated) {
+					keyframe const after = *kf;
+					*kf = before;  // snapshot the state from before this frame's edit
+					push_undo(st, clip);
+					*kf = after;
+				}
 				if (changed) after_edit(st, clip, preview_id);
 			} else {
 				ImGui::Text("%d keys selected", st->selected.Size);
@@ -10258,6 +10416,252 @@ namespace iam_clip_editor_detail {
 } // namespace iam_clip_editor_detail
 
 static void iam_clip_editor_free_states() { iam_clip_editor_detail::free_states(); }
+
+// ============================================================
+// EASE EDITOR
+// ============================================================
+namespace iam_ease_editor_detail {
+	using iam_clip_editor_detail::k_ease_names;
+	using iam_clip_editor_detail::k_ease_count;
+
+	// Default curve: a single ease-in-out segment
+	static void default_curve(ImVector<ImVec2>& pts) {
+		pts.resize(4);
+		pts[0] = ImVec2(0, 0); pts[1] = ImVec2(0.42f, 0.0f); pts[2] = ImVec2(0.58f, 1.0f); pts[3] = ImVec2(1, 1);
+	}
+
+	static void set_curve(ImGuiID id, ImVector<ImVec2> const& pts) {
+		ImVector<iam_vec2> conv;
+		conv.resize(pts.Size);
+		for (int i = 0; i < pts.Size; i++) conv[i] = IAM_VEC2_FROM_IM(pts[i]);
+		iam_ease_curve_set(id, conv.Data, conv.Size);
+	}
+
+	static ImGuiID new_curve_id() {
+		char name[32];
+		for (int n = 1; ; n++) {
+			snprintf(name, sizeof(name), "curve_%d", n);
+			ImGuiID id = ImHashStr(name);
+			if (!iam_ease_curve_exists(id)) { iam_set_id_name(id, name); return id; }
+		}
+	}
+
+	// Split segment k of a bezier chain at parameter u (de Casteljau): the curve shape is unchanged
+	static void split_segment(ImVector<ImVec2>& pts, int k, float u) {
+		ImVec2 p0 = pts[k * 3], p1 = pts[k * 3 + 1], p2 = pts[k * 3 + 2], p3 = pts[k * 3 + 3];
+		ImVec2 p01 = ImLerp(p0, p1, u), p12 = ImLerp(p1, p2, u), p23 = ImLerp(p2, p3, u);
+		ImVec2 p012 = ImLerp(p01, p12, u), p123 = ImLerp(p12, p23, u), mid = ImLerp(p012, p123, u);
+		pts[k * 3 + 1] = p01;
+		pts[k * 3 + 2] = p012;
+		ImVec2 ins[3] = { mid, p123, p23 };
+		pts.insert(pts.Data + k * 3 + 3, ins[2]);
+		pts.insert(pts.Data + k * 3 + 3, ins[1]);
+		pts.insert(pts.Data + k * 3 + 3, ins[0]);
+	}
+
+	// Parameter u where segment k reaches x (bisection; x is monotonic per segment)
+	static float solve_u(ImVector<ImVec2> const& pts, int k, float x) {
+		float lo = 0.0f, hi = 1.0f;
+		for (int i = 0; i < 30; i++) {
+			float m = (lo + hi) * 0.5f;
+			if (iam_detail::bezier_point(pts[k * 3], pts[k * 3 + 1], pts[k * 3 + 2], pts[k * 3 + 3], m).x < x) lo = m; else hi = m;
+		}
+		return (lo + hi) * 0.5f;
+	}
+
+	static bool editor(char const* label, iam_ease_desc* ez, ImVec2 size_in) {
+		ImGuiIO& io = ImGui::GetIO();
+		float const fs = ImGui::GetFontSize();
+		bool changed = false;
+		ImGui::PushID(label);
+		ImGui::BeginGroup();
+
+		// Type picker
+		char const* cur_name = (ez->type >= 0 && ez->type < k_ease_count) ? k_ease_names[ez->type] : "?";
+		float const w = size_in.x > 0.0f ? size_in.x : ImGui::GetContentRegionAvail().x;
+		ImGui::SetNextItemWidth(ImMax(w - ImGui::CalcTextSize(label).x - ImGui::GetStyle().ItemInnerSpacing.x, fs * 6.0f));
+		if (ImGui::BeginCombo(label, cur_name)) {
+			for (int e = 0; e < k_ease_count; e++) {
+				if (e == iam_ease_custom) continue;  // needs a registered slot
+				if (ImGui::Selectable(k_ease_names[e], e == ez->type)) {
+					if (e != ez->type) {
+						iam_ease_desc d = { e, 0, 0, 0, 0 };
+						if (e == iam_ease_cubic_bezier) { d.p0 = 0.25f; d.p1 = 0.1f; d.p2 = 0.25f; d.p3 = 1.0f; }
+						if (e == iam_ease_steps) { d.p0 = 5.0f; d.p1 = 0.0f; }
+						if (e == iam_ease_spring) { d.p0 = 1.0f; d.p1 = 120.0f; d.p2 = 20.0f; d.p3 = 0.0f; }
+						if (e == iam_ease_curve) {
+							ImGuiID cid = new_curve_id();
+							ImVector<ImVec2> pts;
+							default_curve(pts);
+							set_curve(cid, pts);
+							d = iam_ease_curve_desc(cid);
+						}
+						*ez = d;
+						changed = true;
+					}
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		// Parameters
+		ImGui::PushItemWidth(w);
+		if (ez->type == iam_ease_steps) {
+			int steps = (int)ez->p0, mode = (int)ez->p1;
+			static char const* const modes[] = { "jump end", "jump start", "jump both" };
+			if (ImGui::SliderInt("##steps", &steps, 1, 24, "%d steps")) { ez->p0 = (float)steps; changed = true; }
+			if (ImGui::Combo("##stepmode", &mode, modes, 3)) { ez->p1 = (float)mode; changed = true; }
+		} else if (ez->type == iam_ease_spring) {
+			float sp[4] = { ez->p0, ez->p1, ez->p2, ez->p3 };
+			if (ImGui::DragFloat4("##spring", sp, 0.1f, 0.0f, 0.0f, "%.2f")) { ez->p0 = ImMax(sp[0], 0.01f); ez->p1 = ImMax(sp[1], 0.01f); ez->p2 = ImMax(sp[2], 0.0f); ez->p3 = sp[3]; changed = true; }
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("mass, stiffness, damping, initial velocity");
+		} else if (ez->type == iam_ease_cubic_bezier) {
+			float b[4] = { ez->p0, ez->p1, ez->p2, ez->p3 };
+			if (ImGui::DragFloat4("##bezier", b, 0.005f, -2.0f, 3.0f, "%.3f")) {
+				ez->p0 = ImClamp(b[0], 0.0f, 1.0f); ez->p1 = b[1]; ez->p2 = ImClamp(b[2], 0.0f, 1.0f); ez->p3 = b[3];
+				changed = true;
+			}
+		} else if (ez->type == iam_ease_curve) {
+			ImGuiID cid = iam_detail::curve_id_from(ez->p0, ez->p1);
+			char const* cname = iam_get_id_name(cid);
+			if (cname) ImGui::TextDisabled("%s: double-click adds a point, right-click removes it", cname);
+			else ImGui::TextDisabled("0x%08X: double-click adds a point, right-click removes it", cid);
+		}
+		ImGui::PopItemWidth();
+
+		// Graph
+		ImVec2 gsize(w, size_in.y > 0.0f ? size_in.y : ImMin(w * 0.6f, fs * 12.0f));
+		ImVec2 gp = ImGui::GetCursorScreenPos();
+		ImGui::InvisibleButton("##graph", gsize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+		bool const hovered = ImGui::IsItemHovered(), active = ImGui::IsItemActive();
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		// y range: [0,1] plus any overshoot
+		float y_min = 0.0f, y_max = 1.0f;
+		ImVector<ImVec2> curve_pts;
+		ImGuiID cid = 0;
+		if (ez->type == iam_ease_curve) {
+			cid = iam_detail::curve_id_from(ez->p0, ez->p1);
+			iam_detail::ease_curve* c = iam_detail::find_curve(cid);
+			if (c) curve_pts = c->pts;
+			else { default_curve(curve_pts); set_curve(cid, curve_pts); }
+			for (int i = 0; i < curve_pts.Size; i++) { y_min = ImMin(y_min, curve_pts[i].y); y_max = ImMax(y_max, curve_pts[i].y); }
+		}
+		for (int i = 0; i <= 48; i++) { float v = iam_detail::eval(*ez, i / 48.0f); y_min = ImMin(y_min, v); y_max = ImMax(y_max, v); }
+		if (ez->type == iam_ease_cubic_bezier) { y_min = ImMin(y_min, ImMin(ez->p1, ez->p3)); y_max = ImMax(y_max, ImMax(ez->p1, ez->p3)); }
+		float const pad = fs * 0.8f;
+		ImVec2 g0(gp.x + pad, gp.y + pad), g1(gp.x + gsize.x - pad * 3.0f, gp.y + gsize.y - pad);
+		float const yr = (y_max - y_min) > 1e-4f ? (y_max - y_min) : 1.0f;
+		#define IAM_EE_X(vx_) (g0.x + (vx_) * (g1.x - g0.x))
+		#define IAM_EE_Y(vy_) (g1.y - ((vy_) - y_min) / yr * (g1.y - g0.y))
+		#define IAM_EE_P(pp_) ImVec2(IAM_EE_X((pp_).x), IAM_EE_Y((pp_).y))
+		ImU32 const col_bg = IM_COL32(25, 27, 34, 255), col_grid = IM_COL32(55, 60, 74, 255);
+		ImU32 const col_curve = ZimaBlue, col_handle = AgedCopper;
+		dl->AddRectFilled(gp, ImVec2(gp.x + gsize.x, gp.y + gsize.y), col_bg, 4.0f);
+		dl->AddLine(ImVec2(g0.x, IAM_EE_Y(0.0f)), ImVec2(g1.x, IAM_EE_Y(0.0f)), col_grid);
+		dl->AddLine(ImVec2(g0.x, IAM_EE_Y(1.0f)), ImVec2(g1.x, IAM_EE_Y(1.0f)), col_grid);
+		dl->AddLine(ImVec2(g0.x, g0.y), ImVec2(g0.x, g1.y), col_grid);
+		dl->AddLine(ImVec2(g1.x, g0.y), ImVec2(g1.x, g1.y), col_grid);
+		ImVec2 line[97];
+		for (int i = 0; i <= 96; i++) { float t = i / 96.0f; line[i] = ImVec2(IAM_EE_X(t), IAM_EE_Y(iam_detail::eval(*ez, t))); }
+		dl->AddPolyline(line, 97, col_curve, 0, 2.0f);
+
+		// Interactive handles
+		ImVec2 const mouse = io.MousePos;
+		float const grab = fs * 0.6f;
+		ImGuiStorage* store = ImGui::GetStateStorage();
+		ImGuiID const drag_key = ImGui::GetID("##drag_index");
+		int drag = store->GetInt(drag_key, -1);
+		float const mx = ImClamp((mouse.x - g0.x) / (g1.x - g0.x), 0.0f, 1.0f);
+		float const my = y_min + (g1.y - mouse.y) / (g1.y - g0.y) * yr;
+		if (ez->type == iam_ease_cubic_bezier) {
+			ImVec2 h[2] = { ImVec2(ez->p0, ez->p1), ImVec2(ez->p2, ez->p3) };
+			ImVec2 a0 = IAM_EE_P(ImVec2(0, 0)), a1 = IAM_EE_P(ImVec2(1, 1));
+			dl->AddLine(a0, IAM_EE_P(h[0]), col_handle, 1.5f);
+			dl->AddLine(a1, IAM_EE_P(h[1]), col_handle, 1.5f);
+			if (ImGui::IsItemActivated()) {
+				drag = -1;
+				for (int i = 0; i < 2; i++) { ImVec2 d = IAM_EE_P(h[i]); if (ImLengthSqr(ImVec2(d.x - mouse.x, d.y - mouse.y)) < grab * grab * 4) drag = i; }
+			}
+			if (active && drag >= 0) {
+				if (drag == 0) { ez->p0 = mx; ez->p1 = my; } else { ez->p2 = mx; ez->p3 = my; }
+				changed = true;
+			}
+			for (int i = 0; i < 2; i++) dl->AddCircleFilled(IAM_EE_P(h[i]), grab * 0.6f, (drag == i && active) ? IM_COL32_WHITE : col_handle);
+		} else if (ez->type == iam_ease_curve && curve_pts.Size >= 4) {
+			int const n = curve_pts.Size;
+			for (int k = 0; k + 3 < n; k += 3) {
+				dl->AddLine(IAM_EE_P(curve_pts[k]), IAM_EE_P(curve_pts[k + 1]), col_handle, 1.0f);
+				dl->AddLine(IAM_EE_P(curve_pts[k + 3]), IAM_EE_P(curve_pts[k + 2]), col_handle, 1.0f);
+			}
+			int hover_i = -1;
+			if (hovered || active) {
+				float best = grab * grab * 4;
+				for (int i = 0; i < n; i++) { ImVec2 d = IAM_EE_P(curve_pts[i]); float dd = ImLengthSqr(ImVec2(d.x - mouse.x, d.y - mouse.y)); if (dd < best) { best = dd; hover_i = i; } }
+			}
+			if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) drag = hover_i;
+			bool edited = false;
+			if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left) && drag >= 0 && drag < n) {
+				ImVector<ImVec2>& P = curve_pts;
+				if (drag % 3 == 0) {  // anchor: x between neighbours (ends fixed at x 0 / 1), moves its handles along
+					float nx = (drag == 0) ? 0.0f : (drag == n - 1) ? 1.0f : ImClamp(mx, P[drag - 3].x + 0.01f, P[drag + 3].x - 0.01f);
+					ImVec2 delta(nx - P[drag].x, my - P[drag].y);
+					P[drag] = ImVec2(nx, my);
+					if (drag > 0) P[drag - 1] = ImVec2(P[drag - 1].x + delta.x, P[drag - 1].y + delta.y);
+					if (drag < n - 1) P[drag + 1] = ImVec2(P[drag + 1].x + delta.x, P[drag + 1].y + delta.y);
+				} else {  // handle: x within its segment so x stays monotonic
+					int seg = drag / 3;
+					P[drag] = ImVec2(ImClamp(mx, P[seg * 3].x, P[seg * 3 + 3].x), my);
+				}
+				for (int k = 0; k + 3 < n; k += 3) {  // keep handles inside their segment after anchor moves
+					P[k + 1].x = ImClamp(P[k + 1].x, P[k].x, P[k + 3].x);
+					P[k + 2].x = ImClamp(P[k + 2].x, P[k].x, P[k + 3].x);
+				}
+				edited = true;
+			}
+			if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && hover_i < 0) {
+				int seg = 0;
+				while (seg * 3 + 3 < n - 1 && curve_pts[seg * 3 + 3].x < mx) seg++;
+				split_segment(curve_pts, seg, solve_u(curve_pts, seg, mx));
+				edited = true;
+				drag = -1;
+			}
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && hover_i > 0 && hover_i < n - 1 && hover_i % 3 == 0) {
+				curve_pts.erase(curve_pts.Data + hover_i - 1, curve_pts.Data + hover_i + 2);  // anchor + its two handles
+				edited = true;
+				drag = -1;
+			}
+			if (edited) { set_curve(cid, curve_pts); changed = true; }
+			for (int i = 0; i < curve_pts.Size; i++) {
+				bool anchor = (i % 3 == 0);
+				ImU32 c = (i == drag && active) || i == hover_i ? IM_COL32_WHITE : (anchor ? col_curve : col_handle);
+				if (anchor) dl->AddRectFilled(ImVec2(IAM_EE_X(curve_pts[i].x) - grab * 0.5f, IAM_EE_Y(curve_pts[i].y) - grab * 0.5f), ImVec2(IAM_EE_X(curve_pts[i].x) + grab * 0.5f, IAM_EE_Y(curve_pts[i].y) + grab * 0.5f), c);
+				else dl->AddCircleFilled(IAM_EE_P(curve_pts[i]), grab * 0.45f, c);
+			}
+		}
+		if (!active) drag = -1;
+		store->SetInt(drag_key, drag);
+
+		// Preview: a dot running along the curve, and the value on a side bar
+		float const ph = ImFmod((float)ImGui::GetTime(), 1.8f) / 1.4f;
+		float const pt = ImClamp(ph, 0.0f, 1.0f), pv = iam_detail::eval(*ez, pt);
+		dl->AddCircleFilled(ImVec2(IAM_EE_X(pt), IAM_EE_Y(pv)), fs * 0.25f, IM_COL32(255, 255, 255, 200));
+		float const bx = gp.x + gsize.x - pad * 1.5f;
+		dl->AddLine(ImVec2(bx, IAM_EE_Y(0.0f)), ImVec2(bx, IAM_EE_Y(1.0f)), col_grid, 2.0f);
+		dl->AddCircleFilled(ImVec2(bx, IAM_EE_Y(pv)), fs * 0.35f, col_handle);
+		#undef IAM_EE_X
+		#undef IAM_EE_Y
+		#undef IAM_EE_P
+
+		ImGui::EndGroup();
+		ImGui::PopID();
+		return changed;
+	}
+} // namespace iam_ease_editor_detail
+
+bool iam_ease_editor(char const* label, iam_ease_desc* ez, iam_vec2 size) {
+	if (!ez) return false;
+	return iam_ease_editor_detail::editor(label, ez, IAM_VEC2_TO_IM(size));
+}
 
 bool iam_clip_editor(ImGuiID clip_id, ImGuiID preview_instance_id) {
 	return iam_clip_editor_detail::editor_body(clip_id, preview_instance_id);

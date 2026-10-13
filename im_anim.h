@@ -111,7 +111,8 @@ enum iam_ease_type {
 	iam_ease_steps,         // p0 = steps (>=1), p1 = 0:end 1:start 2:both
 	iam_ease_cubic_bezier,  // p0=x1 p1=y1 p2=x2 p3=y2
 	iam_ease_spring,        // p0=mass p1=stiffness p2=damping p3=v0
-	iam_ease_custom         // User-defined easing function (use iam_ease_custom_fn)
+	iam_ease_custom,        // User-defined easing function (use iam_ease_custom_fn)
+	iam_ease_curve          // Custom bezier curve (iam_ease_curve_set / iam_ease_curve_desc); p0,p1 = curve id (16-bit halves)
 };
 
 enum iam_policy {
@@ -255,6 +256,7 @@ IM_ANIM_API void   iam_trigger_shake(ImGuiID id);                               
 
 // Easing evaluation
 IM_ANIM_API float iam_eval_preset(int type, float t);                                           // Evaluate a preset easing function at time t (0-1).
+IM_ANIM_API float iam_ease_eval(iam_ease_desc const& ez, float t);                               // Evaluate any ease descriptor (presets, parametric, custom, curve) at t in [0,1].
 
 // Tween API - smoothly interpolate values over time
 // init_value: Initial value when channel is first created. Defaults to 0 (or white for color).
@@ -308,6 +310,20 @@ inline iam_ease_desc iam_ease_back(float overshoot) { iam_ease_desc e = { iam_ea
 inline iam_ease_desc iam_ease_elastic(float amplitude, float period) { iam_ease_desc e = { iam_ease_out_elastic, amplitude, period,0,0 }; return e; } // Create elastic easing.
 inline iam_ease_desc iam_ease_spring_desc(float mass, float stiffness, float damping, float v0) { iam_ease_desc e = { iam_ease_spring, mass, stiffness, damping, v0 }; return e; } // Create physics spring.
 inline iam_ease_desc iam_ease_custom_fn(int slot) { iam_ease_desc e = { iam_ease_custom, (float)slot,0,0,0 }; return e; }                                                         // Use registered custom easing (slot 0-15).
+
+// Custom curve eases (like GSAP CustomEase): a chain of cubic bezier segments from (0,0) to (1,y_end).
+// points = P0, then (C1, C2, P1) per segment: count = 1 + 3 * segments. Anchor x must increase; y may
+// overshoot (e.g. a bounce). Use anywhere an iam_ease_desc goes, and in clips with iam_ease_curve_ref().
+IM_ANIM_API void          iam_ease_curve_set(ImGuiID curve_id, iam_vec2 const* points, int count);
+IM_ANIM_API int           iam_ease_curve_get(ImGuiID curve_id, iam_vec2* out_points, int max_count);  // Returns the point count (0 if undefined).
+IM_ANIM_API bool          iam_ease_curve_exists(ImGuiID curve_id);
+inline iam_ease_desc      iam_ease_curve_desc(ImGuiID curve_id) { iam_ease_desc e = { iam_ease_curve, (float)(curve_id & 0xFFFF), (float)(curve_id >> 16), 0, 0 }; return e; }
+IM_ANIM_API float const*  iam_ease_curve_ref(ImGuiID curve_id);  // For clip keys: key_float(ch, t, v, iam_ease_curve, iam_ease_curve_ref(id)).
+
+// Ease editor widget: pick a preset, edit its parameters, drag cubic-bezier handles or edit curve
+// anchors/handles on a graph (double-click: add anchor, right-click: remove). Returns true when changed.
+// A curve ease edits the shared curve (iam_ease_curve_set). size = 0: fit width, height from width.
+IM_ANIM_API bool iam_ease_editor(char const* label, iam_ease_desc* ez, iam_vec2 size = iam_v2(0, 0));
 
 // Scroll animation - smooth scrolling for ImGui windows
 IM_ANIM_API void iam_scroll_to_y(float target_y, float duration, iam_ease_desc const& ez = iam_ease_preset(iam_ease_out_cubic));           // Scroll current window to Y position.

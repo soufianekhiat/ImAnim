@@ -36,7 +36,7 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 |----------|-------------|
 | **Tweens** | Float, Vec2, Vec4, Int, Color with crossfade/cut/queue policies, velocity-preserving springs, enter/exit presence, state queries |
 | **Clips** | Timeline keyframes, looping, callbacks, chaining, stagger, variations |
-| **Easing** | Quad to Bounce presets, cubic-bezier, steps, spring physics, per-axis |
+| **Easing** | Quad to Bounce presets, cubic-bezier, steps, spring physics, custom curves, ease editor widget, per-axis |
 | **Paths** | Bezier curves, Catmull-Rom splines, SVG path import, path morphing, partial stroke drawing, text along paths |
 | **Transforms** | Position, rotation, scale with rotation modes |
 | **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise |

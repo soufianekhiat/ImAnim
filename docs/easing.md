@@ -171,6 +171,47 @@ iam_set_ease_lut_samples(512);  // More accurate
 iam_set_ease_lut_samples(128);  // Faster, less accurate
 ```
 
+## Curve Eases
+
+Define your own ease as a chain of cubic bezier segments from (0,0) to (1,1)
+(like GSAP CustomEase). Points are `P0`, then `C1, C2, P1` per segment; anchor x
+must increase, y may overshoot:
+
+```cpp
+iam_vec2 const pts[] = {
+    iam_v2(0, 0),
+    iam_v2(0.25f, 0.0f), iam_v2(0.35f, 1.25f), iam_v2(0.55f, 1.15f),   // rise and overshoot
+    iam_v2(0.7f, 1.05f), iam_v2(0.85f, 1.0f),  iam_v2(1, 1)            // settle
+};
+iam_ease_curve_set(iam_id("overshoot"), pts, 7);
+
+iam_ease_desc ez = iam_ease_curve_desc(iam_id("overshoot"));   // tweens, paths, ...
+iam_clip::begin(CLIP)
+    .key_float(X, 0.0f, 0.0f, iam_ease_curve, iam_ease_curve_ref(iam_id("overshoot")))   // clip keys
+    .key_float(X, 1.0f, 1.0f)
+    .end();
+```
+
+Curves are referenced by id, so they can be edited live (every tween and clip
+using them updates) and are embedded in clip files saved with
+`iam_clip_save()`. An undefined curve evaluates as linear.
+
+`iam_ease_eval(ez, t)` evaluates any ease descriptor (presets, steps, bezier,
+spring, custom slot, curve).
+
+## Ease Editor
+
+```cpp
+static iam_ease_desc ez = iam_ease_preset(iam_ease_out_cubic);
+iam_ease_editor("Ease", &ez);                 // or iam_ease_editor("Ease", &ez, iam_v2(w, h))
+```
+
+Pick a preset, set steps/spring parameters, drag cubic-bezier handles, or shape
+a curve: drag anchors and handles, double-click to add an anchor (the curve
+shape is preserved), right-click an anchor to remove it. Choosing "curve"
+creates a new named curve (`curve_1`, ...). A preview dot shows the motion. The
+clip editor's key inspector uses this widget.
+
 ## See Also
 
 - [Tweens](tweens.md) - Using easing with tweens

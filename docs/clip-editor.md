@@ -60,9 +60,11 @@ preview instance (a swatch for colors).
 ## Inspector
 
 With one key selected: time, value (per type: float, vec2, vec4, int, color,
-and percent/px bias for anchor-relative tracks), ease, cubic-bezier control
-points, spring parameters (float tracks), and the color blend space. A curve
-preview shows the segment's easing. With several keys selected you can set the
+and percent/px bias for anchor-relative tracks), spring parameters (float
+tracks), the color blend space, and the ease of the segment starting at the key,
+edited on a graph with the [ease editor](easing.md#ease-editor) (presets, steps,
+cubic-bezier handles, custom curves). Curve eases are exported by "Copy C++" and
+saved in clip files. With several keys selected you can set the
 ease for all of them or delete them.
 
 ## Toolbar
