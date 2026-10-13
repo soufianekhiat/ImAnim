@@ -114,6 +114,38 @@ int main() {
 	iam_gc(2);
 	CHECK(iam_state_current(M) == 0 && !iam_state_get_float(M, 1, &v), "unused machine collected by iam_gc");
 
+	// ---------------- Particles ----------------
+	iam_particle_opts po; po.rate = 0.0f; po.lifetime = 0.5f; po.lifetime_var = 0.0f; po.speed_var = 0.0f;
+	iam_particles_burst(500, 50);
+	begin_frame(); iam_particles(500, nullptr, iam_v2(0, 0), io.DeltaTime, po); end_frame();
+	CHECK(iam_particles_count(500) == 50, "burst of 50 (%d)", iam_particles_count(500));
+	for (int f = 0; f < 40; f++) { begin_frame(); iam_particles(500, nullptr, iam_v2(0, 0), io.DeltaTime, po); end_frame(); }
+	CHECK(iam_particles_count(500) == 0, "all expire after their lifetime (%d)", iam_particles_count(500));
+	iam_particle_opts pr; pr.rate = 60.0f; pr.lifetime = 5.0f; pr.lifetime_var = 0.0f;
+	for (int f = 0; f < 60; f++) { begin_frame(); iam_particles(501, nullptr, iam_v2(0, 0), io.DeltaTime, pr); end_frame(); }
+	CHECK(iam_particles_count(501) >= 58 && iam_particles_count(501) <= 61, "rate 60/s over 1s (%d)", iam_particles_count(501));
+	pr.max_particles = 10;
+	for (int f = 0; f < 30; f++) { begin_frame(); iam_particles(502, nullptr, iam_v2(0, 0), io.DeltaTime, pr); end_frame(); }
+	CHECK(iam_particles_count(502) == 10, "max_particles cap (%d)", iam_particles_count(502));
+	// Gravity pulls particles down (draw and read vertex positions)
+	iam_particle_opts pg; pg.rate = 0.0f; pg.velocity = iam_v2(0, 0); pg.spread = 0.0f; pg.gravity = iam_v2(0, 1000); pg.lifetime = 5.0f; pg.size_var = 0.0f;
+	iam_particles_burst(503, 1);
+	float py = 0;
+	for (int f = 0; f < 30; f++) {
+		begin_frame();
+		ImDrawList* pdl = ImGui::GetWindowDrawList();
+		int pv = pdl->VtxBuffer.Size;
+		iam_particles(503, pdl, iam_v2(100, 100), io.DeltaTime, pg);
+		if (f == 29 && pdl->VtxBuffer.Size > pv) py = pdl->VtxBuffer[pv].pos.y;
+		end_frame();
+	}
+	CHECK(py > 215.0f && py < 245.0f, "gravity: y = 100 + g*t^2/2 = ~225 after 0.5s (y %.1f)", py);
+	iam_set_reduced_motion(true, 0.0f);
+	iam_particles_burst(504, 20);
+	for (int f = 0; f < 10; f++) { begin_frame(); iam_particles(504, nullptr, iam_v2(0, 0), io.DeltaTime, pr); end_frame(); }
+	iam_set_reduced_motion(false);
+	CHECK(iam_particles_count(504) == 0, "reduced motion (scale 0): no emission");
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;

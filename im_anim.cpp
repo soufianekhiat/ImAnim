@@ -1005,6 +1005,7 @@ static void iam_track_velocity_gc(unsigned max_age);  // Velocity tracking secti
 static void iam_track_velocity_clear();
 static void iam_state_gc(unsigned max_age);  // State blending section
 static void iam_trail_gc(unsigned max_age);  // Trails section
+static void iam_particles_gc(unsigned max_age);  // Particles section
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
@@ -1013,6 +1014,7 @@ void iam_gc(unsigned int max_age_frames) {
 	iam_track_velocity_gc(max_age_frames);
 	iam_state_gc(max_age_frames);
 	iam_trail_gc(max_age_frames);
+	iam_particles_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -2108,6 +2110,133 @@ void iam_trail_draw(ImDrawList* dl, ImGuiID id, iam_vec2 pos_in, float duration,
 void iam_trail_clear(ImGuiID id) {
 	iam_trail_detail::trail* t = iam_trail_detail::g_trails.GetByKey(id);
 	if (t) t->samples.clear();
+}
+
+// ----------------------------------------------------
+// Particles
+// ----------------------------------------------------
+namespace iam_particles_detail {
+	struct particle { ImVec2 pos, vel; float age, life, size_k; };
+	struct emitter {
+		ImVector<particle> parts;
+		float spawn_accum;
+		int pending_burst;
+		unsigned rng;
+		unsigned last_seen_frame, last_step_frame;
+	};
+	static ImPool<emitter> g_emitters;
+
+	static float rnd(unsigned* s) {  // [0,1)
+		unsigned x = *s; x ^= x << 13; x ^= x >> 17; x ^= x << 5; *s = x;
+		return (float)(x & 0xFFFFFF) / (float)0x1000000;
+	}
+
+	static void spawn(emitter* e, ImVec2 at, iam_particle_opts const& o) {
+		if (e->parts.Size >= ImMax(o.max_particles, 1)) return;
+		particle p;
+		ImVec2 v = IAM_VEC2_TO_IM(o.velocity);
+		float speed = ImSqrt(v.x * v.x + v.y * v.y) * (1.0f + (rnd(&e->rng) * 2.0f - 1.0f) * o.speed_var);
+		float angle = atan2f(v.y, v.x) + (rnd(&e->rng) * 2.0f - 1.0f) * o.spread * 0.5f;
+		p.pos = at;
+		p.vel = ImVec2(ImCos(angle) * speed, ImSin(angle) * speed);
+		p.age = 0.0f;
+		p.life = ImMax(o.lifetime * (1.0f + (rnd(&e->rng) * 2.0f - 1.0f) * o.lifetime_var), 0.01f);
+		p.size_k = 1.0f + (rnd(&e->rng) * 2.0f - 1.0f) * o.size_var;
+		e->parts.push_back(p);
+	}
+
+	static ImU32 lerp_col(ImU32 a, ImU32 b, float t) {
+		ImVec4 ca = ImGui::ColorConvertU32ToFloat4(a), cb = ImGui::ColorConvertU32ToFloat4(b);
+		ImVec4 c = iam_detail::color::lerp_color(ca, cb, t, iam_col_oklab);
+		return ImGui::ColorConvertFloat4ToU32(c);
+	}
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_emitters.GetMapSize(); ++i) {
+			if (emitter* e = g_emitters.TryGetMapData(i)) {
+				if (iam_detail::g_frame - e->last_seen_frame > max_age) {
+					e->parts.clear();
+					ImGuiID k = g_emitters.Map.Data[i].key;
+					g_emitters.Remove(k, g_emitters.GetIndex(e));
+				}
+			}
+		}
+	}
+
+	static emitter* get(ImGuiID id, unsigned seed) {
+		emitter* e = g_emitters.GetByKey(id);
+		if (!e) {
+			e = g_emitters.GetOrAddByKey(id);
+			e->spawn_accum = 0.0f;
+			e->pending_burst = 0;
+			e->rng = (seed ? seed : id) | 1u;
+			e->last_step_frame = iam_detail::g_frame - 1;
+		}
+		return e;
+	}
+} // namespace iam_particles_detail
+
+static void iam_particles_gc(unsigned max_age) { iam_particles_detail::gc(max_age); }
+
+void iam_particles_burst(ImGuiID id, int count) {
+	iam_particles_detail::emitter* e = iam_particles_detail::get(id, 0);
+	e->pending_burst += ImMax(count, 0);
+	e->last_seen_frame = iam_detail::g_frame;
+}
+
+int iam_particles_count(ImGuiID id) {
+	iam_particles_detail::emitter* e = iam_particles_detail::g_emitters.GetByKey(id);
+	return e ? e->parts.Size : 0;
+}
+
+void iam_particles(ImGuiID id, ImDrawList* dl, iam_vec2 emitter_pos, float dt, iam_particle_opts const& o) {
+	using namespace iam_particles_detail;
+	emitter* e = get(id, o.seed);
+	e->last_seen_frame = iam_detail::g_frame;
+	ImVec2 const at = IAM_VEC2_TO_IM(emitter_pos);
+	float const k = iam_detail::procedural_scale();  // reduced motion scales emission
+
+	if (e->last_step_frame != iam_detail::g_frame) {  // simulate once per frame
+		e->last_step_frame = iam_detail::g_frame;
+		float const h = ImClamp(dt * iam_detail::g_time_scale, 0.0f, 0.1f);
+		// Emit
+		int burst = (int)ImFloor(e->pending_burst * k + 0.5f);
+		e->pending_burst = 0;
+		for (int i = 0; i < burst; i++) spawn(e, at, o);
+		e->spawn_accum += o.rate * k * h;
+		while (e->spawn_accum >= 1.0f) { spawn(e, at, o); e->spawn_accum -= 1.0f; }
+		// Integrate and age
+		ImVec2 const g = IAM_VEC2_TO_IM(o.gravity);
+		float const drag = expf(-ImMax(o.drag, 0.0f) * h);
+		for (int i = e->parts.Size - 1; i >= 0; i--) {
+			particle& p = e->parts[i];
+			p.age += h;
+			if (p.age >= p.life) { e->parts.erase(e->parts.Data + i); continue; }
+			p.vel = ImVec2((p.vel.x + g.x * h) * drag, (p.vel.y + g.y * h) * drag);
+			p.pos = ImVec2(p.pos.x + p.vel.x * h, p.pos.y + p.vel.y * h);
+		}
+	}
+
+	if (!dl) return;
+	for (int i = 0; i < e->parts.Size; i++) {
+		particle const& p = e->parts[i];
+		float t = p.age / p.life;
+		float size = (o.size_start + (o.size_end - o.size_start) * t) * p.size_k;
+		if (size <= 0.0f) continue;
+		ImU32 col = lerp_col(o.color_start, o.color_end, t);
+		if ((col & IM_COL32_A_MASK) == 0) continue;
+		switch (o.shape) {
+			case iam_particle_square: dl->AddRectFilled(ImVec2(p.pos.x - size, p.pos.y - size), ImVec2(p.pos.x + size, p.pos.y + size), col); break;
+			case iam_particle_spark: {
+				float sp = ImSqrt(p.vel.x * p.vel.x + p.vel.y * p.vel.y);
+				ImVec2 d = sp > 1e-3f ? ImVec2(p.vel.x / sp, p.vel.y / sp) : ImVec2(1, 0);
+				float len = size * 3.0f;
+				dl->AddLine(ImVec2(p.pos.x - d.x * len, p.pos.y - d.y * len), p.pos, col, ImMax(size * 0.6f, 1.0f));
+				break;
+			}
+			default: dl->AddCircleFilled(p.pos, size, col); break;
+		}
+	}
 }
 
 // ----------------------------------------------------

@@ -39,7 +39,7 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 | **Easing** | Quad to Bounce presets, cubic-bezier, steps, spring physics, custom curves, ease editor widget, per-axis |
 | **Paths** | Bezier curves, Catmull-Rom splines, SVG path import, path morphing, partial stroke drawing, text along paths |
 | **Transforms** | Position, rotation, scale with rotation modes |
-| **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise |
+| **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise, particles |
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
 | **Advanced** | Layering/blending, resolved tweens, layout animation, drag feedback with inertia, scroll animation and scroll-linked triggers |
 | **Tools** | Visual clip editor, debug inspector, profiler, save/load, reduced motion, memory management |
@@ -186,6 +186,7 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 
 ### Tools & Debug
 - [Clip Editor](clip-editor.md) - Edit clips visually while they play, export to C++
+- [Particles](particles.md) - Immediate-mode particle emitter
 - [Debug](debug.md) - Inspector and debugging tools
 - [Advanced](advanced.md) - Profiler, persistence, memory management
 

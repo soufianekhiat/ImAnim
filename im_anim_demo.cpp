@@ -4855,6 +4855,64 @@ static void ShowTextOutlinesDemo()
 }
 
 // ============================================================
+// SECTION: Particles
+// ============================================================
+static void ShowParticlesDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped("iam_particles() is a small immediate-mode emitter: a fountain of sparks on the left, embers following "
+		"the mouse, and iam_particles_burst() confetti on click.");
+	float const fs = ImGui::GetFontSize();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, fs * 12.0f);
+	ImGui::InvisibleButton("##particles_canvas", size);
+	bool hovered = ImGui::IsItemHovered();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(20, 22, 28, 255), 4.0f);
+	dl->PushClipRect(p, ImVec2(p.x + size.x, p.y + size.y), true);
+
+	iam_particle_opts fountain;
+	fountain.rate = 90.0f;
+	fountain.lifetime = 1.4f;
+	fountain.velocity = iam_v2(0, -fs * 16.0f);
+	fountain.spread = 0.5f;
+	fountain.gravity = iam_v2(0, fs * 22.0f);
+	fountain.size_start = fs * 0.22f; fountain.size_end = fs * 0.05f;
+	fountain.color_start = IM_COL32(120, 210, 240, 255); fountain.color_end = IM_COL32(91, 120, 231, 0);
+	fountain.shape = iam_particle_spark;
+	iam_particles(ImGui::GetID("fountain"), dl, iam_v2(p.x + size.x * 0.2f, p.y + size.y - fs * 0.5f), dt, fountain);
+
+	iam_particle_opts embers;
+	embers.rate = hovered ? 70.0f : 0.0f;
+	embers.lifetime = 0.9f;
+	embers.velocity = iam_v2(0, -fs * 3.0f);
+	embers.spread = 3.14f;
+	embers.drag = 1.5f;
+	embers.size_start = fs * 0.3f; embers.size_end = 0.0f;
+	embers.color_start = IM_COL32(255, 200, 120, 255); embers.color_end = IM_COL32(204, 80, 50, 0);
+	ImVec2 mouse = ImGui::GetMousePos();
+	iam_particles(ImGui::GetID("embers"), dl, mouse, dt, embers);
+
+	ImGuiID confetti = ImGui::GetID("confetti");
+	static ImVec2 burst_pos(0, 0);
+	if (ImGui::IsItemClicked()) { burst_pos = mouse; iam_particles_burst(confetti, 80); }
+	iam_particle_opts c;
+	c.rate = 0.0f;
+	c.lifetime = 1.8f;
+	c.velocity = iam_v2(0, -fs * 14.0f);
+	c.spread = 2.4f;
+	c.speed_var = 0.6f;
+	c.gravity = iam_v2(0, fs * 18.0f);
+	c.drag = 0.8f;
+	c.size_start = fs * 0.25f; c.size_end = fs * 0.2f;
+	c.color_start = IM_COL32(230, 190, 90, 255); c.color_end = IM_COL32(160, 120, 200, 0);
+	c.shape = iam_particle_square;
+	iam_particles(confetti, dl, burst_pos, dt, c);
+	dl->PopClipRect();
+	ImGui::Text("Live particles: %d", iam_particles_count(ImGui::GetID("fountain")) + iam_particles_count(ImGui::GetID("embers")) + iam_particles_count(confetti));
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8712,6 +8770,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Oscillators")) {
 			ShowOscillatorsDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Particles")) {
+			ShowParticlesDemo();
 			ImGui::TreePop();
 		}
 

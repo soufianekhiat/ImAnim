@@ -482,6 +482,30 @@ IM_ANIM_API void iam_path_draw_trail(ImDrawList* dl, ImGuiID path_id, float t_he
 IM_ANIM_API void iam_trail_draw(ImDrawList* dl, ImGuiID id, iam_vec2 pos, float duration, ImU32 col, float thickness = 2.0f, bool taper = true);
 IM_ANIM_API void iam_trail_clear(ImGuiID id);  // Forget the history (e.g. after a teleport).
 
+// Particles - a small immediate-mode emitter: call every frame to simulate (once per frame) and draw.
+enum iam_particle_shape { iam_particle_circle = 0, iam_particle_square, iam_particle_spark };
+struct iam_particle_opts {
+	float    rate;              // Particles per second (0 = bursts only)
+	float    lifetime;          // Seconds
+	float    lifetime_var;      // Random +/- fraction of lifetime
+	iam_vec2 velocity;          // Base velocity (direction and speed, pixels/s)
+	float    spread;            // Random direction cone (radians)
+	float    speed_var;         // Random +/- fraction of speed
+	iam_vec2 gravity;           // Pixels/s^2
+	float    drag;              // Velocity damping per second
+	float    size_start, size_end, size_var;  // Radius over life; random +/- fraction
+	ImU32    color_start, color_end;          // Color over life (blended in OKLAB; use alpha 0 at the end to fade out)
+	int      shape;             // iam_particle_shape
+	int      max_particles;
+	unsigned seed;
+	iam_particle_opts() : rate(30.0f), lifetime(1.0f), lifetime_var(0.2f), velocity(iam_v2(0, -80)), spread(0.6f), speed_var(0.3f),
+		gravity(iam_v2(0, 0)), drag(0.0f), size_start(4.0f), size_end(1.0f), size_var(0.2f),
+		color_start(IM_COL32(255, 255, 255, 255)), color_end(IM_COL32(255, 255, 255, 0)), shape(iam_particle_circle), max_particles(512), seed(0) {}
+};
+IM_ANIM_API void iam_particles(ImGuiID id, ImDrawList* dl, iam_vec2 emitter_pos, float dt, iam_particle_opts const& opts = iam_particle_opts());  // dl may be null to only simulate.
+IM_ANIM_API void iam_particles_burst(ImGuiID id, int count);  // Emit count particles at the next iam_particles() call (scaled by reduced motion).
+IM_ANIM_API int  iam_particles_count(ImGuiID id);            // Live particles.
+
 // Build a path from SVG path data ("d" attribute): M L H V C S Q T A Z and their relative forms.
 // Arcs are converted to cubic beziers. A new subpath (second M) is joined with a line. Points are
 // transformed as p * scale + offset. Returns false (and builds nothing) if the data can't be parsed.
