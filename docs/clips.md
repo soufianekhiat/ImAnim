@@ -234,6 +234,40 @@ See [Stagger](stagger.md) for more details.
 iam_clip_gc(600);  // Remove instances older than 600 frames
 ```
 
+## Playhead Control
+
+```cpp
+iam_instance inst = iam_play(CLIP, id);
+
+inst.reverse();                                   // flip direction now; a finished instance plays back
+bool back = inst.is_reversed();
+
+inst.tween_to(0.8f, 0.5f, iam_ease_out_cubic);    // ease the playhead to 0.8s over 0.5s, then hold (paused)
+```
+
+`tween_to()` works from a paused or stopped instance too, fires markers it
+crosses, and is cancelled by `seek()`, `reverse()`, `restart()` or `iam_play()`.
+
+## Labels
+
+Labels name times on the timeline. Like markers, their time is relative to the
+current `seq`/`par` offset while building:
+
+```cpp
+iam_clip::begin(CLIP)
+    .key_float(X, 0.0f, 0.0f).key_float(X, 2.0f, 1.0f)
+    .label(iam_id("jump"), 0.6f)
+    .label(iam_id("land"), 1.4f)
+    .end();
+
+inst.seek_label(iam_id("jump"));                      // jump there (re-evaluates values)
+inst.tween_to_label(iam_id("land"), 0.6f);            // ease there
+float t = iam_clip_label_time(CLIP, iam_id("land"));  // -1 if missing
+```
+
+Labels are saved by `iam_clip_save()` (file version 5), drawn in the clip
+editor's ruler and included in its "Copy C++" output.
+
 ## See Also
 
 - [Stagger](stagger.md) - Cascading animations

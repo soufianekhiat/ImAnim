@@ -1176,6 +1176,9 @@ public:
 	iam_clip& marker(float time, ImGuiID marker_id, iam_marker_callback cb, void* user = nullptr);  // Add marker at specific time.
 	iam_clip& marker(float time, iam_marker_callback cb, void* user = nullptr);                     // Add marker (auto-generated ID).
 
+	// Labels - named times for iam_instance::seek_label / tween_to_label (relative to the current seq/par offset, like markers)
+	iam_clip& label(ImGuiID label_id, float time);
+
 	// Clip options
 	iam_clip& set_loop(bool loop, int direction = iam_dir_normal, int loop_count = -1);
 	iam_clip& set_loop_delay(float delay_seconds);  // Delay between loop iterations
@@ -1224,6 +1227,13 @@ public:
 	void destroy();  // Remove instance from system (valid() will return false after this)
 	void seek(float time);
 	void set_time_scale(float scale);
+
+	// Playhead control
+	void reverse();                                    // Flip playback direction now (a finished instance plays back the other way).
+	bool is_reversed() const;
+	void tween_to(float time, float duration, int ease_type = iam_ease_in_out_cubic);  // Ease the playhead to time, then hold there (paused). Works from paused/stopped too.
+	bool tween_to_label(ImGuiID label_id, float duration, int ease_type = iam_ease_in_out_cubic);  // false if the clip has no such label.
+	bool seek_label(ImGuiID label_id);                 // Jump to a label (and re-evaluate). false if the clip has no such label.
 	void set_weight(float weight);  // for layering/blending
 
 	// Animation chaining - play another clip when this one completes
@@ -1277,6 +1287,7 @@ IM_ANIM_API iam_instance iam_get_instance(ImGuiID instance_id);
 // Query clip info
 IM_ANIM_API float iam_clip_duration(ImGuiID clip_id);                                       // Get clip duration in seconds.
 IM_ANIM_API bool iam_clip_exists(ImGuiID clip_id);                                          // Check if clip exists.
+IM_ANIM_API float iam_clip_label_time(ImGuiID clip_id, ImGuiID label_id);                   // Time of a label, or -1 if missing.
 
 // Stagger helpers - compute delay for indexed instances
 IM_ANIM_API float iam_stagger_delay(ImGuiID clip_id, int index);                            // Get stagger delay for element at index.

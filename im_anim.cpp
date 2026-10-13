@@ -2472,6 +2472,12 @@ struct iam_track {
 	iam_track() : channel(0), type(0), color_space(iam_col_oklab), is_relative(false), anchor_space(0), anchor_axis(0) {}
 };
 
+// Named time on a clip's timeline (iam_clip::label)
+struct clip_label {
+	ImGuiID	id;
+	float	time;
+};
+
 // Timeline marker
 struct iam_marker {
 	float					time;
@@ -2494,6 +2500,9 @@ struct iam_clip_data {
 
 	// Timeline markers
 	ImVector<iam_clip_detail::iam_marker>	markers;
+
+	// Named times (labels)
+	ImVector<iam_clip_detail::clip_label>	labels;
 
 	// Loop delay
 	float					loop_delay;		// Delay between loop iterations (seconds)
@@ -2601,10 +2610,15 @@ struct iam_instance_data {
 	int			current_loop;			// Current loop iteration (0-based), used for variation calculations
 	unsigned int var_rng_state;			// RNG state for deterministic variation random
 
+	// Playhead tween (iam_instance::tween_to)
+	bool		tw_active;
+	float		tw_from, tw_to, tw_elapsed, tw_dur;
+	int			tw_ease;
+
 	iam_instance_data() : inst_id(0), clip_id(0), time(0), time_scale(1.0f), weight(1.0f),
 		delay_left(0), playing(false), paused(false), begin_called(false), dir_sign(1), loops_left(0), last_seen_frame(0),
 		has_blended(false), prev_time(0), chain_next_clip_id(0), chain_next_inst_id(0), chain_delay(0),
-		current_loop(0), var_rng_state(12345) {}
+		current_loop(0), var_rng_state(12345), tw_active(false), tw_from(0), tw_to(0), tw_elapsed(0), tw_dur(0), tw_ease(iam_ease_in_out_cubic) {}
 };
 
 namespace iam_clip_detail {
@@ -3330,6 +3344,7 @@ iam_clip iam_clip::begin(ImGuiID clip_id) {
 	// Reset for building
 	clip->build_keys.clear();
 	clip->iam_tracks.clear();
+	clip->labels.clear();
 	clip->group_stack.clear();
 	clip->duration = 0;
 	clip->delay = 0;
@@ -3845,6 +3860,19 @@ static ImGuiID generate_marker_id() {
 	return ImHashData(&(++s_marker_counter), sizeof(s_marker_counter));
 }
 
+iam_clip& iam_clip::label(ImGuiID label_id, float time) {
+	iam_clip_data* clip = get_clip_data(m_clip_id);
+	if (!clip) return *this;
+	float t = time + clip->build_time_offset;  // like markers: relative to the current seq/par offset
+	for (int i = 0; i < clip->labels.Size; i++)
+		if (clip->labels[i].id == label_id) { clip->labels[i].time = t; return *this; }
+	iam_clip_detail::clip_label l;
+	l.id = label_id;
+	l.time = t;
+	clip->labels.push_back(l);
+	return *this;
+}
+
 iam_clip& iam_clip::marker(float time, ImGuiID marker_id, iam_marker_callback cb, void* user) {
 	iam_clip_data* clip = get_clip_data(m_clip_id);
 	if (!clip) return *this;
@@ -3988,8 +4016,10 @@ void iam_instance::restart() {
 	inst->paused = false;
 	inst->begin_called = false;
 	inst->dir_sign = (clip->direction == iam_dir_reverse) ? -1 : 1;
+	inst->time = (inst->dir_sign > 0) ? 0.0f : clip->duration;  // reverse plays from the end
 	inst->loops_left = clip->loop_count;
 	inst->last_seen_frame = g_clip_sys.frame_counter;
+	inst->tw_active = false;
 	inst->prev_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
 	inst->markers_triggered.resize(clip->markers.Size);
 	for (int m = 0; m < inst->markers_triggered.Size; m++)
@@ -4013,8 +4043,9 @@ void iam_instance::reset() {
 	if (!clip) return;
 
 	float initial_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
-	inst->time = 0.0f;
+	inst->time = initial_time;
 	inst->playing = false;
+	inst->tw_active = false;
 	inst->paused = false;
 	inst->delay_left = 0.0f;
 
@@ -4060,6 +4091,66 @@ void iam_instance::seek(float time) {
 	if (time < 0) time = 0;
 	if (time > dur) time = dur;
 	inst->time = time;
+	inst->prev_time = time;
+	inst->tw_active = false;
+}
+
+void iam_instance::reverse() {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return;
+	inst->tw_active = false;
+	inst->dir_sign = -inst->dir_sign;
+	inst->playing = true;   // a finished instance plays back the other way
+	inst->paused = false;
+	inst->delay_left = 0.0f;
+}
+
+bool iam_instance::is_reversed() const {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	return inst && inst->dir_sign < 0;
+}
+
+void iam_instance::tween_to(float time, float duration, int ease_type) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return;
+	iam_clip_data* clip = get_clip_data(inst->clip_id);
+	if (!clip) return;
+	inst->tw_active = true;
+	inst->tw_from = inst->time;
+	inst->tw_to = ImClamp(time, 0.0f, clip->duration);
+	inst->tw_elapsed = 0.0f;
+	inst->tw_dur = iam_detail::motion_dur(duration);
+	inst->tw_ease = ease_type;
+	inst->prev_time = inst->time;
+	inst->delay_left = 0.0f;
+}
+
+bool iam_instance::tween_to_label(ImGuiID label_id, float duration, int ease_type) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return false;
+	float t = iam_clip_label_time(inst->clip_id, label_id);
+	if (t < 0.0f) return false;
+	tween_to(t, duration, ease_type);
+	return true;
+}
+
+bool iam_instance::seek_label(ImGuiID label_id) {
+	iam_instance_data* inst = get_instance_data(m_inst_id);
+	if (!inst) return false;
+	float t = iam_clip_label_time(inst->clip_id, label_id);
+	if (t < 0.0f) return false;
+	inst->tw_active = false;
+	seek(t);
+	refresh();
+	return true;
+}
+
+float iam_clip_label_time(ImGuiID clip_id, ImGuiID label_id) {
+	iam_clip_data* clip = get_clip_data(clip_id);
+	if (!clip) return -1.0f;
+	for (int i = 0; i < clip->labels.Size; i++)
+		if (clip->labels[i].id == label_id) return clip->labels[i].time;
+	return -1.0f;
 }
 
 void iam_instance::set_time_scale(float scale) {
@@ -4363,7 +4454,31 @@ void iam_clip_update(float dt) {
 	for (int i = 0; i < g_clip_sys.instances.Size; ++i) {
 		iam_instance_data* inst = &g_clip_sys.instances[i];
 		iam_clip_data* clip = find_clip(inst->clip_id);
-		if (!inst->playing || inst->paused || !clip) continue;
+		if (!clip) continue;
+
+		// Playhead tween (tween_to): move the playhead itself, then hold (paused) at the target
+		if (inst->tw_active) {
+			inst->tw_elapsed += dt;
+			float u = inst->tw_dur > 1e-6f ? ImMin(inst->tw_elapsed / inst->tw_dur, 1.0f) : 1.0f;
+			float w = (u >= 1.0f) ? 1.0f : iam_detail::eval_preset_internal(inst->tw_ease, u);
+			float t = (u >= 1.0f) ? inst->tw_to : ImClamp(inst->tw_from + (inst->tw_to - inst->tw_from) * w, 0.0f, clip->duration);
+			float t_min = ImMin(inst->prev_time, t), t_max = ImMax(inst->prev_time, t);
+			if (inst->markers_triggered.Size != clip->markers.Size) {
+				inst->markers_triggered.resize(clip->markers.Size);
+				for (int m = 0; m < inst->markers_triggered.Size; m++) inst->markers_triggered[m] = false;
+			}
+			for (int m = 0; m < clip->markers.Size; m++) {
+				iam_marker const& marker = clip->markers[m];
+				if (marker.time >= t_min && marker.time <= t_max && t_max > t_min && marker.callback)
+					marker.callback(inst->inst_id, marker.marker_id, marker.time, marker.user_data);
+			}
+			inst->time = inst->prev_time = t;
+			for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) eval_iam_track(clip->iam_tracks[tr], t, inst);
+			inst->last_seen_frame = g_clip_sys.frame_counter;
+			if (u >= 1.0f) { inst->tw_active = false; inst->playing = true; inst->paused = true; }
+			continue;
+		}
+		if (!inst->playing || inst->paused) continue;
 
 		// Use local copy of dt for this instance to avoid affecting other instances
 		float inst_dt = dt;
@@ -4420,22 +4535,13 @@ void iam_clip_update(float dt) {
 				if (t > dur) t = 2*dur - t;
 				loop_iters++;
 			}
-		} else if (clip->direction == iam_dir_reverse) {
-			while (t < 0.0f && loop_iters < MAX_LOOP_ITERS) {
+		} else { // normal / reverse: wrap at the end we're moving toward (either direction, see reverse())
+			while ((t > dur || t < 0.0f) && loop_iters < MAX_LOOP_ITERS) {
 				if (clip->loop_count == 0 && inst->loops_left == 0) { done = true; break; }
 				if (inst->loops_left > 0) inst->loops_left--;
-				t += dur;
+				t += (t > dur) ? -dur : dur;
 				loop_iters++;
 			}
-			while (t > dur && loop_iters < MAX_LOOP_ITERS) { t -= dur; loop_iters++; }
-		} else { // normal
-			while (t > dur && loop_iters < MAX_LOOP_ITERS) {
-				if (clip->loop_count == 0 && inst->loops_left == 0) { done = true; break; }
-				if (inst->loops_left > 0) inst->loops_left--;
-				t -= dur;
-				loop_iters++;
-			}
-			while (t < 0.0f && loop_iters < MAX_LOOP_ITERS) { t += dur; loop_iters++; }
 		}
 		// Safety clamp
 		if (t < 0.0f) t = 0.0f;
@@ -4593,8 +4699,10 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id) {
 	inst->paused = false;
 	inst->begin_called = false;  // Reset so on_begin will be called
 	inst->dir_sign = (clip->direction == iam_dir_reverse) ? -1 : 1;
+	inst->time = (inst->dir_sign > 0) ? 0.0f : clip->duration;  // reverse plays from the end
 	inst->loops_left = clip->loop_count;
 	inst->last_seen_frame = g_clip_sys.frame_counter;
+	inst->tw_active = false;
 
 	// Initialize marker tracking
 	inst->prev_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
@@ -5020,7 +5128,7 @@ bool iam_get_blended_int(ImGuiID instance_id, ImGuiID channel, int* out) {
 // Tracks: count + for each: channel, type, num_keys, keys...
 
 static char const IAM_CLIP_MAGIC[4] = { 'I', 'A', 'M', 'C' };
-static int const IAM_CLIP_VERSION = 4;      // 4: + loop delay, track color space/anchor, key color space/value_ext
+static int const IAM_CLIP_VERSION = 5;      // 4: + loop delay, track color space/anchor, key color space/value_ext; 5: + labels
 static int const IAM_CLIP_VERSION_MIN = 3;  // Oldest version iam_clip_load() accepts
 
 iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
@@ -5083,6 +5191,14 @@ iam_result iam_clip_save(ImGuiID clip_id, char const* path) {
 			fwrite(&kf.color_space, sizeof(int), 1, f);
 			fwrite(kf.value_ext, sizeof(float), 4, f);
 		}
+	}
+
+	// Labels (v5)
+	int label_count = clip->labels.Size;
+	fwrite(&label_count, sizeof(int), 1, f);
+	for (int l = 0; l < label_count; ++l) {
+		fwrite(&clip->labels[l].id, sizeof(ImGuiID), 1, f);
+		fwrite(&clip->labels[l].time, sizeof(float), 1, f);
 	}
 
 	// Note: callbacks cannot be serialized
@@ -5193,6 +5309,18 @@ iam_result iam_clip_load(char const* path, ImGuiID* out_clip_id) {
 			kf.channel = trk.channel;
 			kf.type = trk.type;
 			trk.keys.push_back(kf);
+		}
+	}
+
+	clip->labels.clear();
+	if (version >= 5) {
+		int label_count = 0;
+		if (fread(&label_count, sizeof(int), 1, f) == 1) {
+			for (int l = 0; l < label_count; ++l) {
+				iam_clip_detail::clip_label cl;
+				if (fread(&cl.id, sizeof(ImGuiID), 1, f) != 1 || fread(&cl.time, sizeof(float), 1, f) != 1) break;
+				clip->labels.push_back(cl);
+			}
 		}
 	}
 
@@ -9207,6 +9335,7 @@ namespace iam_clip_editor_detail {
 			}
 			if (keys.Size > 0 && keys.back().time > dur) dur = keys.back().time;
 		}
+		for (int m = 0; m < clip->markers.Size; m++) if (clip->markers[m].time > dur) dur = clip->markers[m].time;
 		clip->duration = dur;
 	}
 
@@ -9409,6 +9538,11 @@ namespace iam_clip_editor_detail {
 				if (kf.has_variation) b.append("  // note: per-loop variation not exported");
 				b.append("\n");
 			}
+		}
+		for (int l = 0; l < clip->labels.Size; l++) {
+			b.append("\t.label(");
+			append_id(b, clip->labels[l].id);
+			b.appendf(", %s)\n", fl(clip->labels[l].time));
 		}
 		if (clip->delay > 0.0f) b.appendf("\t.set_delay(%s)\n", fl(clip->delay));
 		if (clip->loop_count != 0) {
@@ -9684,6 +9818,19 @@ namespace iam_clip_editor_detail {
 				char lbl[32];
 				snprintf(lbl, sizeof(lbl), step < 0.1f ? "%.2f" : (step < 1.0f ? "%.1f" : "%.0f"), t);
 				dl->AddText(ImVec2(x + 3, ruler_p.y + 1), col_text, lbl);
+			}
+			// Labels
+			for (int l = 0; l < clip->labels.Size; l++) {
+				float lx = IAM_ED_T2X(clip->labels[l].time);
+				char const* ln = iam_get_id_name(clip->labels[l].id);
+				char lbuf[24];
+				if (!ln) { snprintf(lbuf, sizeof(lbuf), "0x%08X", clip->labels[l].id); ln = lbuf; }
+				dl->AddTriangleFilled(ImVec2(lx, ruler_p.y + ruler_h * 0.55f), ImVec2(lx + 5, ruler_p.y + ruler_h * 0.35f), ImVec2(lx, ruler_p.y + ruler_h * 0.15f), IM_COL32(230, 190, 90, 255));
+				dl->AddLine(ImVec2(lx, ruler_p.y + ruler_h * 0.15f), ImVec2(lx, ruler_p.y + ruler_h), IM_COL32(230, 190, 90, 200));
+				ImVec2 lt(lx + 7, ruler_p.y + ruler_h * 0.5f - ImGui::GetFontSize() * 0.5f);
+				ImVec2 ls = ImGui::CalcTextSize(ln);
+				dl->AddRectFilled(ImVec2(lt.x - 2, lt.y), ImVec2(lt.x + ls.x + 2, lt.y + ls.y), col_bg, 2.0f);  // readable over tick numbers
+				dl->AddText(lt, IM_COL32(230, 190, 90, 255), ln);
 			}
 			// Clip end + playhead handle
 			float end_x = IAM_ED_T2X(clip->duration);
