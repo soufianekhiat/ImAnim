@@ -118,3 +118,17 @@ jobs:
 
       - name: Run
         run: sh tests/ease/run.sh
+
+  extras:
+    runs-on: ubuntu-latest
+    name: Text split, stagger values, state blending
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/extras/run.sh
