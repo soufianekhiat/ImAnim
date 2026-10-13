@@ -428,7 +428,15 @@ static float curve_eval(ImGuiID id, float t) {
 	return c->lut[i] + (c->lut[i + 1] - c->lut[i]) * (f - (float)i);
 }
 
+// Back/elastic parameters (iam_ease_back / iam_ease_elastic) are honored only when enabled (iam_set_preset_ease_params)
+static bool g_preset_ease_params = false;
+static bool preset_has_params(iam_ease_desc const& d) {
+	if (!g_preset_ease_params || (d.p0 == 0.0f && d.p1 == 0.0f)) return false;
+	return (d.type >= iam_ease_in_back && d.type <= iam_ease_in_out_back) || (d.type >= iam_ease_in_elastic && d.type <= iam_ease_in_out_elastic);
+}
+
 static float eval(iam_ease_desc const& d, float t) {
+	if (preset_has_params(d)) return ease_lut_pool_singleton().eval_lut(d, t);
 	switch (d.type) {
 		case iam_ease_linear:
 		case iam_ease_in_quad:    case iam_ease_out_quad:    case iam_ease_in_out_quad:
@@ -1131,6 +1139,9 @@ iam_ease_fn iam_get_custom_ease(int slot) {
 float iam_eval_preset(int type, float t) {
 	return iam_detail::eval_preset_internal(type, t);
 }
+
+void iam_set_preset_ease_params(bool enabled) { iam_detail::g_preset_ease_params = enabled; }
+bool iam_get_preset_ease_params() { return iam_detail::g_preset_ease_params; }
 
 float iam_ease_eval(iam_ease_desc const& ez, float t) {
 	return iam_detail::eval(ez, t);
@@ -2930,7 +2941,11 @@ static iam_instance_data* find_instance(ImGuiID inst_id) {
 
 // Evaluate easing for clip keyframes
 static float eval_clip_ease(int ease_type, float t, float const* bezier, bool has_bezier) {
-	if (ease_type <= iam_ease_in_out_bounce) return iam_detail::eval_preset_internal(ease_type, t);
+	if (ease_type <= iam_ease_in_out_bounce) {
+		iam_ease_desc d = { ease_type, bezier[0], bezier[1], 0, 0 };
+		if (iam_detail::preset_has_params(d)) return iam_detail::eval(d, t);
+		return iam_detail::eval_preset_internal(ease_type, t);
+	}
 	if (ease_type == iam_ease_cubic_bezier && !has_bezier) return iam_detail::eval_preset_internal(iam_ease_linear, t);
 	// Parametric eases (steps, cubic bezier, spring, custom slot, curve) keep their params in bezier[]
 	iam_ease_desc d = { ease_type, bezier[0], bezier[1], bezier[2], bezier[3] };
@@ -9881,7 +9896,11 @@ namespace iam_clip_editor_detail {
 
 	// Key needs an explicit params argument (bezier4) in exported code
 	static bool export_params(keyframe const& kf) {
-		if (kf.is_spring || kf.ease_type <= iam_ease_in_out_bounce || kf.ease_type == iam_ease_curve) return false;
+		if (kf.is_spring || kf.ease_type == iam_ease_curve) return false;
+		if (kf.ease_type <= iam_ease_in_out_bounce) {
+			bool back_elastic = (kf.ease_type >= iam_ease_in_back && kf.ease_type <= iam_ease_in_out_back) || (kf.ease_type >= iam_ease_in_elastic && kf.ease_type <= iam_ease_in_out_elastic);
+			return back_elastic && (kf.bezier[0] != 0.0f || kf.bezier[1] != 0.0f);
+		}
 		return kf.has_bezier || kf.bezier[0] != 0.0f || kf.bezier[1] != 0.0f || kf.bezier[2] != 0.0f || kf.bezier[3] != 0.0f;
 	}
 
@@ -10632,7 +10651,7 @@ namespace iam_clip_editor_detail {
 				float ch = ImMin(ImGui::GetContentRegionAvail().y, curve_w * 0.6f);
 				if (!kf->is_spring && ch > ImGui::GetFrameHeightWithSpacing() * 3.0f) {
 					iam_ease_desc d = { kf->ease_type, kf->bezier[0], kf->bezier[1], kf->bezier[2], kf->bezier[3] };
-					if (kf->ease_type <= iam_ease_in_out_bounce) d.p0 = d.p1 = d.p2 = d.p3 = 0.0f;
+					if (kf->ease_type <= iam_ease_in_out_bounce) { d.p2 = d.p3 = 0.0f; if (!iam_get_preset_ease_params()) d.p0 = d.p1 = 0.0f; }
 					bool ease_changed = iam_ease_editor("Ease", &d, iam_v2(curve_w, ch - ImGui::GetFrameHeightWithSpacing() * 2.0f));
 					if (ease_changed) {
 						if (!st->ease_editing) activated = true;
@@ -10791,6 +10810,13 @@ namespace iam_ease_editor_detail {
 			float sp[4] = { ez->p0, ez->p1, ez->p2, ez->p3 };
 			if (ImGui::DragFloat4("##spring", sp, 0.1f, 0.0f, 0.0f, "%.2f")) { ez->p0 = ImMax(sp[0], 0.01f); ez->p1 = ImMax(sp[1], 0.01f); ez->p2 = ImMax(sp[2], 0.0f); ez->p3 = sp[3]; changed = true; }
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("mass, stiffness, damping, initial velocity");
+		} else if (iam_get_preset_ease_params() && ez->type >= iam_ease_in_back && ez->type <= iam_ease_in_out_back) {
+			float s = ez->p0 != 0.0f ? ez->p0 : (ez->type == iam_ease_in_out_back ? 2.5949f : 1.70158f);
+			if (ImGui::SliderFloat("##overshoot", &s, 0.0f, 6.0f, "overshoot %.2f")) { ez->p0 = s; changed = true; }
+		} else if (iam_get_preset_ease_params() && ez->type >= iam_ease_in_elastic && ez->type <= iam_ease_in_out_elastic) {
+			float ap[2] = { ez->p0 > 0.0f ? ez->p0 : 1.0f, ez->p1 > 0.0f ? ez->p1 : (ez->type == iam_ease_in_out_elastic ? 0.45f : 0.3f) };
+			if (ImGui::SliderFloat2("##elastic", ap, 0.05f, 3.0f, "%.2f")) { ez->p0 = ImMax(ap[0], 0.05f); ez->p1 = ImMax(ap[1], 0.05f); changed = true; }
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("amplitude, period");
 		} else if (ez->type == iam_ease_cubic_bezier) {
 			float b[4] = { ez->p0, ez->p1, ez->p2, ez->p3 };
 			if (ImGui::DragFloat4("##bezier", b, 0.005f, -2.0f, 3.0f, "%.3f")) {

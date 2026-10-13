@@ -257,6 +257,10 @@ IM_ANIM_API void   iam_trigger_shake(ImGuiID id);                               
 // Easing evaluation
 IM_ANIM_API float iam_eval_preset(int type, float t);                                           // Evaluate a preset easing function at time t (0-1).
 IM_ANIM_API float iam_ease_eval(iam_ease_desc const& ez, float t);                               // Evaluate any ease descriptor (presets, parametric, custom, curve) at t in [0,1].
+// Back/elastic parameters: iam_ease_back(overshoot) / iam_ease_elastic(amplitude, period) (and p0/p1 of those types,
+// including clip keys) are honored only when enabled. Off by default so existing animations keep their look.
+IM_ANIM_API void  iam_set_preset_ease_params(bool enabled);
+IM_ANIM_API bool  iam_get_preset_ease_params();
 
 // Tween API - smoothly interpolate values over time
 // init_value: Initial value when channel is first created. Defaults to 0 (or white for color).

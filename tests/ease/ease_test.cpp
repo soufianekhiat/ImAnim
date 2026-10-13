@@ -112,6 +112,25 @@ int main() {
 	mouse(graph_pt(mid.x, mid.y)); button(1, true); button(1, false);
 	CHECK(iam_ease_curve_get(EDIT, nullptr, 0) == 4, "right-click removes it (%d points)", iam_ease_curve_get(EDIT, nullptr, 0));
 
+	// --- Back/elastic parameters (opt-in)
+	iam_ease_desc back3 = iam_ease_back(3.0f);
+	float t3 = 0.3f;
+	CHECK(!iam_get_preset_ease_params() && iam_ease_eval(back3, t3) == iam_eval_preset(iam_ease_out_back, t3), "params ignored by default (compatible)");
+	iam_set_preset_ease_params(true);
+	float u3 = 1.0f - t3, expect = 1.0f - u3 * u3 * ((3.0f + 1.0f) * u3 - 3.0f);
+	CHECK(near(iam_ease_eval(back3, t3), expect, 0.01f), "out_back overshoot 3 honored (%.4f vs %.4f)", iam_ease_eval(back3, t3), expect);
+	CHECK(iam_ease_eval(iam_ease_preset(iam_ease_out_back), t3) == iam_eval_preset(iam_ease_out_back, t3), "presets without params unchanged");
+	CHECK(fabsf(iam_ease_eval(iam_ease_elastic(1.0f, 0.15f), 0.3f) - iam_ease_eval(iam_ease_preset(iam_ease_out_elastic), 0.3f)) > 0.01f, "elastic period honored");
+	static float const back_params[4] = { 3.0f, 0.0f, 0.0f, 0.0f };
+	ImGuiID const BC = ImHashStr("backclip");
+	iam_clip::begin(BC).key_float(1, 0.0f, 0.0f, iam_ease_out_back, back_params).key_float(1, 1.0f, 1.0f).end();
+	iam_instance bi = iam_play(BC, ImHashStr("bi")); bi.pause(); bi.seek(t3); bi.refresh();
+	float bv = 0; bi.get_float(1, &bv);
+	CHECK(near(bv, expect, 0.01f), "clip key back params honored (%.4f)", bv);
+	iam_set_preset_ease_params(false);
+	bi.refresh(); bi.get_float(1, &bv);
+	CHECK(near(bv, iam_eval_preset(iam_ease_out_back, t3), 1e-5f), "clip key back params ignored when disabled");
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;

@@ -171,6 +171,20 @@ iam_set_ease_lut_samples(512);  // More accurate
 iam_set_ease_lut_samples(128);  // Faster, less accurate
 ```
 
+## Back and Elastic Parameters
+
+`iam_ease_back(overshoot)` and `iam_ease_elastic(amplitude, period)` (p0/p1 of the
+back/elastic types, also on clip keys) are honored only after opting in, so
+existing animations keep their look:
+
+```cpp
+iam_set_preset_ease_params(true);
+float y = iam_ease_eval(iam_ease_back(3.0f), t);   // bigger overshoot than the default 1.70158
+```
+
+With the option on, the ease editor also shows overshoot / amplitude and period
+for these types, and "Copy C++" exports them.
+
 ## Curve Eases
 
 Define your own ease as a chain of cubic bezier segments from (0,0) to (1,1)
