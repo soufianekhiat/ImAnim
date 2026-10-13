@@ -4062,6 +4062,8 @@ static void ShowClipEditorDemo()
 			.key_float(ch_angle, 1.6f, 6.2831f)
 			.key_color(ch_color, 0.0f, ImVec4(0.36f, 0.76f, 0.91f, 1.0f), iam_col_oklch, iam_ease_in_out_sine)
 			.key_color(ch_color, 1.6f, ImVec4(0.80f, 0.47f, 0.35f, 1.0f), iam_col_oklch)
+			.label(iam_id("hop"), 0.4f)
+			.label(iam_id("turn"), 0.8f)
 			.set_loop(true, iam_dir_alternate)
 			.end();
 		iam_play(clip_id, inst_id);
@@ -4486,6 +4488,73 @@ static void ShowTextScrambleDemo()
 	if (hovered && !was_hovered) hover_start = (float)ImGui::GetTime();
 	was_hovered = hovered;
 	(void)dt; (void)id;
+}
+
+// ============================================================
+// SECTION: Playback Control
+// ============================================================
+static void ShowPlaybackControlDemo()
+{
+	static ImGuiID const clip_id = iam_id("playback_demo");
+	static ImGuiID const inst_id = ImHashStr("playback_demo_inst");
+	static ImGuiID const ch_x = iam_id("x"), ch_y = iam_id("y");
+	static ImGuiID const L_START = iam_id("start"), L_JUMP = iam_id("jump"), L_LAND = iam_id("land"), L_END = iam_id("end");
+	static bool built = false;
+	if (!built) {
+		iam_clip::begin(clip_id)
+			.key_float(ch_x, 0.0f, 0.05f, iam_ease_in_out_sine)
+			.key_float(ch_x, 2.0f, 0.95f)
+			.key_float(ch_y, 0.0f, 0.75f)
+			.key_float(ch_y, 0.6f, 0.75f, iam_ease_out_quad)
+			.key_float(ch_y, 1.0f, 0.15f, iam_ease_in_quad)
+			.key_float(ch_y, 1.4f, 0.75f)
+			.key_float(ch_y, 2.0f, 0.75f)
+			.label(L_START, 0.0f).label(L_JUMP, 0.6f).label(L_LAND, 1.4f).label(L_END, 2.0f)
+			.end();
+		iam_play(clip_id, inst_id).pause();
+		built = true;
+	}
+	ImGui::TextWrapped("iam_instance::reverse() flips direction mid-play, tween_to() eases the playhead to a time and holds, "
+		"and clip labels name times for seek_label() / tween_to_label().");
+	iam_instance inst = iam_get_instance(inst_id);
+	if (ImGui::Button("Play")) { if (!inst.is_playing() || inst.time() >= iam_clip_duration(clip_id)) inst = iam_play(clip_id, inst_id); else inst.resume(); }
+	ImGui::SameLine();
+	if (ImGui::Button("Reverse")) inst.reverse();
+	ImGui::SameLine();
+	ImGui::TextDisabled("|");
+	ImGui::SameLine();
+	ImGuiID labels[4] = { L_START, L_JUMP, L_LAND, L_END };
+	char const* names[4] = { "start", "jump", "land", "end" };
+	for (int i = 0; i < 4; i++) {
+		if (i) ImGui::SameLine();
+		char b[32];
+		snprintf(b, sizeof(b), "-> %s", names[i]);
+		if (ImGui::Button(b)) inst.tween_to_label(labels[i], 0.6f, iam_ease_in_out_cubic);
+	}
+	static float target = 1.0f;
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
+	if (ImGui::SliderFloat("tween_to", &target, 0.0f, iam_clip_duration(clip_id), "%.2fs")) inst.tween_to(target, 0.3f, iam_ease_out_cubic);
+
+	float const fs = ImGui::GetFontSize();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, fs * 7.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	dl->AddLine(ImVec2(p.x, p.y + size.y * 0.75f + fs * 0.7f), ImVec2(p.x + size.x, p.y + size.y * 0.75f + fs * 0.7f), IM_COL32(70, 75, 90, 255));
+	float x = 0, y = 0;
+	inst.get_float(ch_x, &x);
+	inst.get_float(ch_y, &y);
+	dl->AddCircleFilled(ImVec2(p.x + size.x * x, p.y + size.y * y), fs * 0.7f, IM_COL32(91, 194, 231, 255));
+	// Timeline strip with label ticks and playhead
+	float dur = iam_clip_duration(clip_id);
+	float strip_y = p.y + size.y - fs * 0.35f;
+	for (int i = 0; i < 4; i++) {
+		float lx = p.x + size.x * iam_clip_label_time(clip_id, labels[i]) / dur;
+		dl->AddLine(ImVec2(lx, strip_y - fs * 0.4f), ImVec2(lx, strip_y), IM_COL32(230, 190, 90, 200), 1.5f);
+	}
+	dl->AddCircleFilled(ImVec2(p.x + size.x * inst.time() / dur, strip_y - fs * 0.2f), fs * 0.2f, IM_COL32(255, 255, 255, 255));
+	ImGui::Dummy(size);
+	ImGui::Text("t = %.2fs  %s%s", inst.time(), inst.is_reversed() ? "reversed " : "", inst.is_paused() ? "(paused)" : (inst.is_playing() ? "(playing)" : "(stopped)"));
 }
 
 // ============================================================
@@ -8288,6 +8357,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Color Keyframes")) {
 			ShowColorKeyframeDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Playback Control")) {
+			ShowPlaybackControlDemo();
 			ImGui::TreePop();
 		}
 
