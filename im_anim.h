@@ -161,6 +161,13 @@ IM_ANIM_API void iam_set_ease_lut_samples(int count);                           
 IM_ANIM_API void  iam_set_global_time_scale(float scale);                                       // Set global time multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double).
 IM_ANIM_API float iam_get_global_time_scale();                                                  // Get current global time scale.
 
+// Reduced motion (accessibility, e.g. from an OS "reduce motion" setting): tweens and transitions complete
+// instantly, springs/layout/presence jump to their targets, inertia lands without gliding, and procedural
+// motion (oscillate/shake/wiggle/noise) amplitudes are multiplied by procedural_scale (0 = still).
+// Clip playback is not changed: check iam_get_reduced_motion() to skip decorative clips.
+IM_ANIM_API void  iam_set_reduced_motion(bool enabled, float procedural_scale = 0.0f);
+IM_ANIM_API bool  iam_get_reduced_motion();
+
 // Lazy Initialization - defer channel creation until animation is needed
 IM_ANIM_API void iam_set_lazy_init(bool enable);                                                // Enable/disable lazy initialization (default: true).
 IM_ANIM_API bool iam_is_lazy_init_enabled();                                                    // Check if lazy init is enabled.
@@ -445,6 +452,11 @@ IM_ANIM_API void iam_path_draw(ImDrawList* dl, ImGuiID path_id, float t0, float 
 IM_ANIM_API void iam_path_morph_draw(ImDrawList* dl, ImGuiID path_a, ImGuiID path_b, float blend, float t0, float t1, ImU32 col, float thickness = 1.0f,
                                      iam_vec2 offset = iam_v2(0, 0), iam_morph_opts const& opts = iam_morph_opts(), int segments = 0);
 
+// Build a path from SVG path data ("d" attribute): M L H V C S Q T A Z and their relative forms.
+// Arcs are converted to cubic beziers. A new subpath (second M) is joined with a line. Points are
+// transformed as p * scale + offset. Returns false (and builds nothing) if the data can't be parsed.
+IM_ANIM_API bool iam_path_from_svg(ImGuiID path_id, char const* svg_d, float scale = 1.0f, iam_vec2 offset = iam_v2(0, 0));
+
 // Get current morph blend value from a tween (for querying state)
 IM_ANIM_API float  iam_get_morph_blend(ImGuiID id, ImGuiID channel_id);
 
@@ -539,6 +551,19 @@ IM_ANIM_API float iam_text_stagger_width(const char* text, iam_text_stagger_opts
 
 // Get total animation duration for text (accounts for stagger delays)
 IM_ANIM_API float iam_text_stagger_duration(const char* text, iam_text_stagger_opts const& opts = iam_text_stagger_opts());
+
+// Text scramble ("decode" effect): characters not yet revealed show random symbols that change over time.
+// Stateless: writes into out and returns its length, so it works in any label (Text, Button, ...).
+struct iam_text_scramble_opts {
+	char const* charset;        // Symbols for unrevealed characters (default: letters, digits, symbols)
+	float       change_rate;    // Symbol changes per second (default 20)
+	bool        random_order;   // Reveal in random order instead of left to right (default false)
+	bool        keep_spaces;    // Leave spaces untouched (default true)
+	unsigned    seed;           // Varies the random symbols / order between labels
+	iam_text_scramble_opts() : charset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#%&*+=?!<>/"),
+		change_rate(20.0f), random_order(false), keep_spaces(true), seed(0) {}
+};
+IM_ANIM_API int iam_text_scramble(char* out, int out_size, char const* text, float progress, iam_text_scramble_opts const& opts = iam_text_scramble_opts()); // progress 0 = all scrambled, 1 = final text.
 
 // ----------------------------------------------------
 // Noise Channels - Perlin/Simplex noise for organic movement
@@ -840,6 +865,11 @@ enum iam_variation_mode {
 	iam_var_pingpong,       // Alternate +/- each iteration
 	iam_var_callback        // Use custom callback
 };
+
+// Velocity of any value you feed every frame (mouse, scroll position, your own state), smoothed with a
+// time constant in seconds. Units per second; 0 on the first call. Uses real dt (not the global time scale).
+IM_ANIM_API float    iam_track_velocity_float(ImGuiID id, float value, float dt, float smoothing = 0.05f);
+IM_ANIM_API iam_vec2 iam_track_velocity_vec2(ImGuiID id, iam_vec2 value, float dt, float smoothing = 0.05f);
 
 // Callback types for custom variation logic
 typedef float  (*iam_variation_float_fn)(int index, void* user);

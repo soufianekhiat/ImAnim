@@ -558,6 +558,16 @@ static double g_global_time = 0.0;
 // Minimum duration to avoid division by zero
 static float const MIN_DURATION = 1e-6f;
 
+// Reduced motion (iam_set_reduced_motion)
+static bool g_reduced_motion = false;
+static float g_reduced_procedural_scale = 0.0f;
+static float motion_dur(float d) { return g_reduced_motion ? MIN_DURATION : d; }
+static float procedural_scale() { return g_reduced_motion ? g_reduced_procedural_scale : 1.0f; }
+static int g_procedural_depth = 0;  // procedural functions call each other: scale only the outermost call
+struct procedural_guard { bool outer; procedural_guard() : outer(g_procedural_depth++ == 0) {} ~procedural_guard() { g_procedural_depth--; } };
+static ImVec2 procedural_scaled(ImVec2 v) { float k = procedural_scale(); return ImVec2(v.x * k, v.y * k); }
+static ImVec4 procedural_scaled(ImVec4 v) { float k = procedural_scale(); return ImVec4(v.x * k, v.y * k, v.z * k, v.w * k); }
+
 // ----------------------------------------------------
 // Channel interpolation traits - define how each type lerps
 // ----------------------------------------------------
@@ -624,12 +634,14 @@ struct base_chan {
 	void set(T trg, float d, iam_ease_desc const& e, int pol) {
 		start = current;
 		target = trg;
+		d = motion_dur(d);
 		dur = (d <= MIN_DURATION ? MIN_DURATION : d);
 		start_time = g_global_time;
 		t = 0;
 		ez = e;
 		policy = pol;
 		sleeping = 0;
+		if (g_reduced_motion) { current = target; t = 1.0f; sleeping = 1; }  // reduced motion: land immediately
 	}
 
 	float progress() {
@@ -686,6 +698,7 @@ struct color_chan {
 	void set(ImVec4 trg, float d, iam_ease_desc const& e, int pol, int sp) {
 		start = current;
 		target = trg;
+		d = motion_dur(d);
 		dur = (d <= MIN_DURATION ? MIN_DURATION : d);
 		start_time = g_global_time;
 		t = 0;
@@ -693,6 +706,7 @@ struct color_chan {
 		policy = pol;
 		space = sp;
 		sleeping = 0;
+		if (g_reduced_motion) { current = target; t = 1.0f; sleeping = 1; }  // reduced motion: land immediately
 	}
 
 	float progress() {
@@ -853,11 +867,14 @@ static void iam_presence_gc(unsigned max_age);  // Presence section
 static void iam_presence_clear();
 static void iam_inertia_gc(unsigned max_age);  // Inertia section
 static void iam_inertia_clear();
+static void iam_track_velocity_gc(unsigned max_age);  // Velocity tracking section
+static void iam_track_velocity_clear();
 
 void iam_gc(unsigned int max_age_frames) {
 	iam_spring_gc(max_age_frames);
 	iam_presence_gc(max_age_frames);
 	iam_inertia_gc(max_age_frames);
+	iam_track_velocity_gc(max_age_frames);
 	iam_detail::g_float.gc(max_age_frames);
 	iam_detail::g_vec2.gc(max_age_frames);
 	iam_detail::g_vec4.gc(max_age_frames);
@@ -870,6 +887,7 @@ void iam_pool_clear() {
 	iam_spring_clear();
 	iam_presence_clear();
 	iam_inertia_clear();
+	iam_track_velocity_clear();
 	iam_detail::g_float.pool.Clear();
 	iam_detail::g_vec2.pool.Clear();
 	iam_detail::g_vec4.pool.Clear();
@@ -896,6 +914,15 @@ void iam_set_global_time_scale(float scale) {
 
 float iam_get_global_time_scale() {
 	return iam_detail::g_time_scale;
+}
+
+void iam_set_reduced_motion(bool enabled, float procedural_scale) {
+	iam_detail::g_reduced_motion = enabled;
+	iam_detail::g_reduced_procedural_scale = ImClamp(procedural_scale, 0.0f, 1.0f);
+}
+
+bool iam_get_reduced_motion() {
+	return iam_detail::g_reduced_motion;
 }
 
 // ----------------------------------------------------
@@ -1326,7 +1353,7 @@ static void iam_rebase_vec2_impl(ImGuiID id, ImGuiID channel_id, ImVec2 new_targ
 	c->start = c->current;
 	c->target = new_target;
 	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
-	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+	c->dur = iam_detail::motion_dur(remain <= 1e-6f ? 1e-6f : remain);
 }
 
 // Additional resolved/rel/rebase functions for all types
@@ -1380,7 +1407,7 @@ void iam_rebase_float(ImGuiID id, ImGuiID channel_id, float new_target, float dt
 	c->start = c->current;
 	c->target = new_target;
 	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
-	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+	c->dur = iam_detail::motion_dur(remain <= 1e-6f ? 1e-6f : remain);
 }
 
 static void iam_rebase_vec4_impl(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt) {
@@ -1393,7 +1420,7 @@ static void iam_rebase_vec4_impl(ImGuiID id, ImGuiID channel_id, ImVec4 new_targ
 	c->start = c->current;
 	c->target = new_target;
 	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
-	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+	c->dur = iam_detail::motion_dur(remain <= 1e-6f ? 1e-6f : remain);
 }
 
 static void iam_rebase_color_impl(ImGuiID id, ImGuiID channel_id, ImVec4 new_target, float dt) {
@@ -1406,7 +1433,7 @@ static void iam_rebase_color_impl(ImGuiID id, ImGuiID channel_id, ImVec4 new_tar
 	c->start = c->current;
 	c->target = new_target;
 	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
-	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+	c->dur = iam_detail::motion_dur(remain <= 1e-6f ? 1e-6f : remain);
 }
 
 void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt) {
@@ -1419,7 +1446,7 @@ void iam_rebase_int(ImGuiID id, ImGuiID channel_id, int new_target, float dt) {
 	c->start = c->current;
 	c->target = new_target;
 	c->start_time = iam_detail::g_global_time; c->sleeping = 0;
-	c->dur = (remain <= 1e-6f ? 1e-6f : remain);
+	c->dur = iam_detail::motion_dur(remain <= 1e-6f ? 1e-6f : remain);
 }
 
 static ImVec4 iam_get_blended_color_impl(ImVec4 a_srgb, ImVec4 b_srgb, float t, int color_space) {
@@ -1466,6 +1493,11 @@ namespace iam_spring_detail {
 		bool moved_target = false;
 		for (int i = 0; i < n; i++) moved_target |= ImFabs(s->x[i] - target[i]) > 1e-6f;
 		if (s->settled && !moved_target) return;
+		if (iam_detail::g_reduced_motion) {  // reduced motion: jump to the target
+			for (int i = 0; i < n; i++) { s->x[i] = target[i]; s->v[i] = 0.0f; }
+			s->settled = true;
+			return;
+		}
 		if (s->last_step_frame == iam_detail::g_frame) return;
 		s->last_step_frame = iam_detail::g_frame;
 		dt *= iam_detail::g_time_scale;
@@ -1712,7 +1744,7 @@ bool iam_presence(ImGuiID id, bool visible, float* out_t, float dt, iam_presence
 		s->entering = visible;
 		float full = visible ? opts.enter_duration : opts.exit_duration;
 		float dist = ImClamp(ImFabs(target - s->value), 0.0f, 1.0f);
-		s->dur = full * dist;
+		s->dur = iam_detail::motion_dur(full * dist);
 	}
 
 	// Advance once per frame
@@ -1972,6 +2004,15 @@ namespace iam_inertia_detail {
 			} else if (s->mode == mode_idle) {
 				for (int i = 0; i < n; i++) s->x[i] = pos[i];  // follow programmatic changes
 			}
+			if (iam_detail::g_reduced_motion && (s->mode == mode_coast || s->mode == mode_spring)) {
+				// Reduced motion: no glide; land on the snap target (or stay, clamped to bounds)
+				for (int i = 0; i < n; i++) {
+					if (s->mode == mode_spring) s->x[i] = s->target[i];
+					else if (o.use_bounds) { float mn, mx; bounds(o, i, &mn, &mx); s->x[i] = ImClamp(s->x[i], mn, mx); }
+					s->v[i] = 0.0f;
+				}
+				s->mode = mode_idle;
+			}
 			if (step && h > 0.0f && s->mode == mode_coast) {
 				float k = expf(-h / tau);
 				bool slow = true, outside = false;
@@ -2049,6 +2090,290 @@ void iam_inertia_set(ImGuiID id, iam_vec2 pos_in) {
 	s->mode = iam_inertia_detail::mode_idle;
 	s->last_seen_frame = iam_detail::g_frame;
 	s->last_step_frame = iam_detail::g_frame - 1;
+}
+
+// ----------------------------------------------------
+// Velocity tracking
+// ----------------------------------------------------
+namespace iam_track_velocity_detail {
+	struct track_state {
+		float prev[2], vel[2];
+		unsigned last_seen_frame, last_step_frame;
+	};
+	static ImPool<track_state> g_states;
+
+	static void update(ImGuiID id, float const* value, int n, float dt, float smoothing, float* out) {
+		ImGuiID k = ImHashData(&n, sizeof(n), id);
+		track_state* s = g_states.GetByKey(k);
+		if (!s) {
+			s = g_states.GetOrAddByKey(k);
+			for (int i = 0; i < 2; i++) { s->prev[i] = i < n ? value[i] : 0.0f; s->vel[i] = 0.0f; }
+			s->last_step_frame = iam_detail::g_frame;
+		}
+		s->last_seen_frame = iam_detail::g_frame;
+		if (s->last_step_frame != iam_detail::g_frame && dt > 0.0f) {
+			s->last_step_frame = iam_detail::g_frame;
+			float a = smoothing > 0.0f ? 1.0f - expf(-dt / smoothing) : 1.0f;
+			for (int i = 0; i < n; i++) {
+				float inst = (value[i] - s->prev[i]) / dt;
+				s->vel[i] += (inst - s->vel[i]) * a;
+				s->prev[i] = value[i];
+			}
+		}
+		for (int i = 0; i < n; i++) out[i] = s->vel[i];
+	}
+
+	static void gc(unsigned max_age) {
+		for (int i = 0; i < g_states.GetMapSize(); ++i) {
+			if (track_state* s = g_states.TryGetMapData(i)) {
+				if (iam_detail::g_frame - s->last_seen_frame > max_age) {
+					ImGuiID k = g_states.Map.Data[i].key;
+					g_states.Remove(k, g_states.GetIndex(s));
+				}
+			}
+		}
+	}
+} // namespace iam_track_velocity_detail
+
+static void iam_track_velocity_gc(unsigned max_age) { iam_track_velocity_detail::gc(max_age); }
+static void iam_track_velocity_clear() { iam_track_velocity_detail::g_states.Clear(); }
+
+float iam_track_velocity_float(ImGuiID id, float value, float dt, float smoothing) {
+	float out;
+	iam_track_velocity_detail::update(id, &value, 1, dt, smoothing, &out);
+	return out;
+}
+
+iam_vec2 iam_track_velocity_vec2(ImGuiID id, iam_vec2 value_in, float dt, float smoothing) {
+	ImVec2 v = IAM_VEC2_TO_IM(value_in);
+	float in[2] = { v.x, v.y }, out[2];
+	iam_track_velocity_detail::update(id, in, 2, dt, smoothing, out);
+	return IAM_VEC2_FROM_IM(ImVec2(out[0], out[1]));
+}
+
+// ----------------------------------------------------
+// SVG path import
+// ----------------------------------------------------
+namespace iam_svg_detail {
+	struct parser {
+		char const* p;
+		bool ok;
+		void skip_sep() { while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',') p++; }
+		bool at_number() {
+			skip_sep();
+			return (*p >= '0' && *p <= '9') || *p == '-' || *p == '+' || *p == '.';
+		}
+		float number() {
+			skip_sep();
+			char const* s = p;
+			if (*p == '+' || *p == '-') p++;
+			bool digits = false, dot = false;
+			while ((*p >= '0' && *p <= '9') || (*p == '.' && !dot)) { if (*p == '.') dot = true; else digits = true; p++; }
+			if (digits && (*p == 'e' || *p == 'E')) {
+				char const* e = p + 1;
+				if (*e == '+' || *e == '-') e++;
+				if (*e >= '0' && *e <= '9') { p = e; while (*p >= '0' && *p <= '9') p++; }
+			}
+			if (!digits) { ok = false; return 0.0f; }
+			return (float)atof(s);  // atof stops at the right place; we already advanced p
+		}
+		float flag() {  // arc flags may be written without separators ("a1 1 0 01 1 1")
+			skip_sep();
+			if (*p == '0' || *p == '1') { float f = (float)(*p - '0'); p++; return f; }
+			ok = false;
+			return 0.0f;
+		}
+	};
+
+	// Parsed segment (path coordinates, before scale/offset)
+	struct op { int type; ImVec2 p[3]; };  // 0 line, 1 quadratic (c, e), 2 cubic (c1, c2, e), 3 close
+	static void push(ImVector<op>& ops, int type, ImVec2 a, ImVec2 b = ImVec2(0, 0), ImVec2 c = ImVec2(0, 0)) {
+		op o; o.type = type; o.p[0] = a; o.p[1] = b; o.p[2] = c; ops.push_back(o);
+	}
+
+	static float arc_angle(float ux, float uy, float vx, float vy) {
+		float d = ux * vx + uy * vy, l = ImSqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+		float a = acosf(ImClamp(l > 0.0f ? d / l : 1.0f, -1.0f, 1.0f));
+		return (ux * vy - uy * vx < 0.0f) ? -a : a;
+	}
+
+	// SVG arc (endpoint parameterization) as cubic beziers
+	static void arc_to(ImVector<op>& ops, ImVec2 p0, float rx, float ry, float angle_deg, bool large, bool sweep, ImVec2 p1) {
+		if (rx == 0.0f || ry == 0.0f || (p0.x == p1.x && p0.y == p1.y)) { push(ops, 0, p1); return; }
+		rx = ImFabs(rx); ry = ImFabs(ry);
+		float phi = angle_deg * IAM_PI / 180.0f, cp = ImCos(phi), sp = ImSin(phi);
+		float dx = (p0.x - p1.x) * 0.5f, dy = (p0.y - p1.y) * 0.5f;
+		float x1 = cp * dx + sp * dy, y1 = -sp * dx + cp * dy;
+		float lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+		if (lambda > 1.0f) { float sq = ImSqrt(lambda); rx *= sq; ry *= sq; }
+		float num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+		float den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+		float coef = (den > 0.0f && num > 0.0f) ? ImSqrt(num / den) : 0.0f;
+		if (large == sweep) coef = -coef;
+		float cx1 = coef * rx * y1 / ry, cy1 = -coef * ry * x1 / rx;
+		float cx = cp * cx1 - sp * cy1 + (p0.x + p1.x) * 0.5f, cy = sp * cx1 + cp * cy1 + (p0.y + p1.y) * 0.5f;
+		float th1 = arc_angle(1.0f, 0.0f, (x1 - cx1) / rx, (y1 - cy1) / ry);
+		float dth = arc_angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
+		if (!sweep && dth > 0.0f) dth -= IAM_2PI;
+		else if (sweep && dth < 0.0f) dth += IAM_2PI;
+		int segs = ImMax(1, (int)ImCeil(ImFabs(dth) / (IAM_PI * 0.5f) - 1e-4f));
+		float delta = dth / segs;
+		float t = 4.0f / 3.0f * tanf(delta * 0.25f);
+		float a0 = th1;
+		for (int i = 0; i < segs; i++) {
+			float a1 = a0 + delta;
+			float c0 = ImCos(a0), s0 = ImSin(a0), c1 = ImCos(a1), s1 = ImSin(a1);
+			ImVec2 e0(cx + rx * c0 * cp - ry * s0 * sp, cy + rx * c0 * sp + ry * s0 * cp);
+			ImVec2 e1 = (i == segs - 1) ? p1 : ImVec2(cx + rx * c1 * cp - ry * s1 * sp, cy + rx * c1 * sp + ry * s1 * cp);
+			ImVec2 d0(-rx * s0 * cp - ry * c0 * sp, -rx * s0 * sp + ry * c0 * cp), d1(-rx * s1 * cp - ry * c1 * sp, -rx * s1 * sp + ry * c1 * cp);
+			push(ops, 2, ImVec2(e0.x + t * d0.x, e0.y + t * d0.y), ImVec2(e1.x - t * d1.x, e1.y - t * d1.y), e1);
+			a0 = a1;
+		}
+	}
+
+	// Parse into start + ops; false on error
+	static bool parse(char const* d, ImVec2* out_start, ImVector<op>& ops) {
+		parser ps = { d, true };
+		bool begun = false;
+		ImVec2 cur(0, 0), start(0, 0), last_ctrl(0, 0);
+		char prev = 0, cmd = 0;
+		while (true) {
+			ps.skip_sep();
+			if (!*ps.p) break;
+			if ((*ps.p >= 'A' && *ps.p <= 'Z') || (*ps.p >= 'a' && *ps.p <= 'z')) cmd = *ps.p++;
+			else if (!cmd) return false;  // number before any command
+			bool rel = (cmd >= 'a' && cmd <= 'z');
+			char C = (char)(rel ? cmd - 32 : cmd);
+			ImVec2 base = rel ? cur : ImVec2(0, 0);
+			if (C == 'Z') {
+				if (!begun) return false;
+				push(ops, 3, start);
+				cur = start; prev = 'Z'; cmd = 0;
+				continue;
+			}
+			if (!ps.at_number()) return false;
+			if (C != 'M' && !begun) return false;
+			switch (C) {
+				case 'M': {
+					float x = ps.number(), y = ps.number();
+					ImVec2 p(base.x + x, base.y + y);
+					if (!begun) { *out_start = p; begun = true; }
+					else push(ops, 0, p);  // new subpath: joined with a line
+					cur = start = p;
+					cmd = rel ? 'l' : 'L';  // further pairs are implicit linetos
+					break;
+				}
+				case 'L': { float x = ps.number(), y = ps.number(); cur = ImVec2(base.x + x, base.y + y); push(ops, 0, cur); break; }
+				case 'H': { float x = ps.number(); cur.x = base.x + x; push(ops, 0, cur); break; }
+				case 'V': { float y = ps.number(); cur.y = (rel ? cur.y : 0.0f) + y; push(ops, 0, cur); break; }
+				case 'C': {
+					float x1 = ps.number(), y1 = ps.number(), x2 = ps.number(), y2 = ps.number(), x = ps.number(), y = ps.number();
+					ImVec2 c2(base.x + x2, base.y + y2), e(base.x + x, base.y + y);
+					push(ops, 2, ImVec2(base.x + x1, base.y + y1), c2, e);
+					last_ctrl = c2; cur = e;
+					break;
+				}
+				case 'S': {
+					float x2 = ps.number(), y2 = ps.number(), x = ps.number(), y = ps.number();
+					ImVec2 c1 = (prev == 'C' || prev == 'S') ? ImVec2(2 * cur.x - last_ctrl.x, 2 * cur.y - last_ctrl.y) : cur;
+					ImVec2 c2(base.x + x2, base.y + y2), e(base.x + x, base.y + y);
+					push(ops, 2, c1, c2, e);
+					last_ctrl = c2; cur = e;
+					break;
+				}
+				case 'Q': {
+					float x1 = ps.number(), y1 = ps.number(), x = ps.number(), y = ps.number();
+					ImVec2 c(base.x + x1, base.y + y1), e(base.x + x, base.y + y);
+					push(ops, 1, c, e);
+					last_ctrl = c; cur = e;
+					break;
+				}
+				case 'T': {
+					float x = ps.number(), y = ps.number();
+					ImVec2 c = (prev == 'Q' || prev == 'T') ? ImVec2(2 * cur.x - last_ctrl.x, 2 * cur.y - last_ctrl.y) : cur;
+					ImVec2 e(base.x + x, base.y + y);
+					push(ops, 1, c, e);
+					last_ctrl = c; cur = e;
+					break;
+				}
+				case 'A': {
+					float rx = ps.number(), ry = ps.number(), rot = ps.number();
+					bool large = ps.flag() != 0.0f, sweep = ps.flag() != 0.0f;
+					float x = ps.number(), y = ps.number();
+					ImVec2 e(base.x + x, base.y + y);
+					arc_to(ops, cur, rx, ry, rot, large, sweep, e);
+					cur = e;
+					break;
+				}
+				default: return false;
+			}
+			if (!ps.ok) return false;
+			prev = C;
+		}
+		return begun;
+	}
+} // namespace iam_svg_detail
+
+bool iam_path_from_svg(ImGuiID path_id, char const* svg_d, float scale, iam_vec2 offset_in) {
+	using namespace iam_svg_detail;
+	if (!svg_d) return false;
+	ImVec2 start(0, 0);
+	ImVector<op> ops;
+	if (!parse(svg_d, &start, ops)) return false;
+	ImVec2 const off = IAM_VEC2_TO_IM(offset_in);
+	#define IAM_SVG_TX(q) IAM_VEC2_FROM_IM(ImVec2((q).x * scale + off.x, (q).y * scale + off.y))
+	iam_path b = iam_path::begin(path_id, IAM_SVG_TX(start));
+	for (int i = 0; i < ops.Size; i++) {
+		op const& o = ops[i];
+		switch (o.type) {
+			case 0: b.line_to(IAM_SVG_TX(o.p[0])); break;
+			case 1: b.quadratic_to(IAM_SVG_TX(o.p[0]), IAM_SVG_TX(o.p[1])); break;
+			case 2: b.cubic_to(IAM_SVG_TX(o.p[0]), IAM_SVG_TX(o.p[1]), IAM_SVG_TX(o.p[2])); break;
+			case 3: b.close(); break;
+		}
+	}
+	#undef IAM_SVG_TX
+	b.end();
+	return true;
+}
+
+// ----------------------------------------------------
+// Text scramble
+// ----------------------------------------------------
+int iam_text_scramble(char* out, int out_size, char const* text, float progress, iam_text_scramble_opts const& opts) {
+	if (!out || out_size <= 0) return 0;
+	out[0] = 0;
+	if (!text) return 0;
+	char const* charset = (opts.charset && opts.charset[0]) ? opts.charset : "#";
+	int const charset_len = (int)strlen(charset);
+	int count = 0;  // codepoints
+	for (char const* c = text; *c; ) { unsigned int cp; c += ImTextCharFromUtf8(&cp, c, nullptr); count++; }
+	unsigned const tick = (unsigned)(iam_detail::g_global_time * (opts.change_rate > 0.0f ? opts.change_rate : 0.0f));
+	int len = 0, i = 0;
+	for (char const* c = text; *c && len < out_size - 1; i++) {
+		unsigned int cp;
+		int bytes = ImTextCharFromUtf8(&cp, c, nullptr);
+		float threshold;
+		if (opts.random_order) {
+			unsigned h = (unsigned)i * 0x9E3779B9u ^ (opts.seed + 0x7F4A7C15u);  // murmur3 finalizer: uniform for sequential i
+			h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+			threshold = (float)(h & 0xFFFFFF) / (float)0x1000000;
+		} else {
+			threshold = (float)i / (float)(count > 0 ? count : 1);
+		}
+		bool keep = progress >= 1.0f || (progress > threshold) || (opts.keep_spaces && (cp == ' ' || cp == '\t' || cp == '\n'));
+		if (keep) {
+			if (len + bytes >= out_size) break;
+			memcpy(out + len, c, bytes);
+			len += bytes;
+		} else {
+			unsigned key[3] = { (unsigned)i, tick, opts.seed };
+			out[len++] = charset[ImHashData(key, sizeof(key), 0) % (unsigned)charset_len];
+		}
+		c += bytes;
+	}
+	out[len] = 0;
+	return len;
 }
 
 // ============================================================
@@ -4918,6 +5243,7 @@ static float eval_wave(int wave_type, float t) {
 } // namespace iam_osc_detail
 
 float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude *= iam_detail::procedural_scale();
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -4931,6 +5257,7 @@ float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type,
 }
 
 static ImVec2 iam_oscillate_vec2_impl(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -4944,6 +5271,7 @@ static ImVec2 iam_oscillate_vec2_impl(ImGuiID id, ImVec2 amplitude, ImVec2 frequ
 }
 
 static ImVec4 iam_oscillate_vec4_impl(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -4964,6 +5292,7 @@ static ImVec4 iam_oscillate_vec4_impl(ImGuiID id, ImVec4 amplitude, ImVec4 frequ
 }
 
 static ImVec4 iam_oscillate_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -5064,6 +5393,7 @@ void iam_trigger_shake(ImGuiID id) {
 }
 
 float iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) intensity *= iam_detail::procedural_scale();
 	using namespace iam_shake_detail;
 	dt *= iam_detail::g_time_scale;
 	shake_state* s = get_shake(id);
@@ -5100,6 +5430,7 @@ float iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, 
 }
 
 static ImVec2 iam_shake_vec2_impl(ImGuiID id, ImVec2 intensity, float frequency, float decay_time, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) intensity = iam_detail::procedural_scaled(intensity);
 	ImGuiID id_x = id;
 	ImGuiID id_y = id ^ 0x12345678;
 	return ImVec2(
@@ -5109,6 +5440,7 @@ static ImVec2 iam_shake_vec2_impl(ImGuiID id, ImVec2 intensity, float frequency,
 }
 
 static ImVec4 iam_shake_vec4_impl(ImGuiID id, ImVec4 intensity, float frequency, float decay_time, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) intensity = iam_detail::procedural_scaled(intensity);
 	ImGuiID id_x = id;
 	ImGuiID id_y = id ^ 0x12345678;
 	ImGuiID id_z = id ^ 0x23456789;
@@ -5122,6 +5454,7 @@ static ImVec4 iam_shake_vec4_impl(ImGuiID id, ImVec4 intensity, float frequency,
 }
 
 static ImVec4 iam_shake_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 intensity, float frequency, float decay_time, int color_space, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) intensity = iam_detail::procedural_scaled(intensity);
 	ImVec4 shake = iam_shake_vec4_impl(id, intensity, frequency, decay_time, dt);
 
 	// Apply shake offset in the specified color space
@@ -5166,6 +5499,7 @@ static ImVec4 iam_shake_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 intensi
 }
 
 float iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude *= iam_detail::procedural_scale();
 	using namespace iam_shake_detail;
 	dt *= iam_detail::g_time_scale;
 	shake_state* s = get_shake(id);
@@ -5191,6 +5525,7 @@ float iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt) {
 }
 
 static ImVec2 iam_wiggle_vec2_impl(ImGuiID id, ImVec2 amplitude, float frequency, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	ImGuiID id_x = id;
 	ImGuiID id_y = id ^ 0x12345678;
 	return ImVec2(
@@ -5200,6 +5535,7 @@ static ImVec2 iam_wiggle_vec2_impl(ImGuiID id, ImVec2 amplitude, float frequency
 }
 
 static ImVec4 iam_wiggle_vec4_impl(ImGuiID id, ImVec4 amplitude, float frequency, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	ImGuiID id_x = id;
 	ImGuiID id_y = id ^ 0x12345678;
 	ImGuiID id_z = id ^ 0x23456789;
@@ -5213,6 +5549,7 @@ static ImVec4 iam_wiggle_vec4_impl(ImGuiID id, ImVec4 amplitude, float frequency
 }
 
 static ImVec4 iam_wiggle_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int color_space, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	ImVec4 wiggle = iam_wiggle_vec4_impl(id, amplitude, frequency, dt);
 
 	// Apply wiggle offset in the specified color space
@@ -7221,6 +7558,7 @@ float iam_noise_3d(float x, float y, float z, iam_noise_opts const& opts) {
 }
 
 float iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_noise_opts const& opts, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude *= iam_detail::procedural_scale();
 	using namespace iam_noise_detail;
 	noise_state* s = get_noise_state(id);
 
@@ -7230,6 +7568,7 @@ float iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_
 }
 
 static ImVec2 iam_noise_channel_vec2_impl(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, iam_noise_opts const& opts, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	using namespace iam_noise_detail;
 	noise_state* s = get_noise_state(id);
 
@@ -7240,6 +7579,7 @@ static ImVec2 iam_noise_channel_vec2_impl(ImGuiID id, ImVec2 frequency, ImVec2 a
 }
 
 static ImVec4 iam_noise_channel_vec4_impl(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, iam_noise_opts const& opts, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	using namespace iam_noise_detail;
 	noise_state* s = get_noise_state(id);
 
@@ -7252,6 +7592,7 @@ static ImVec4 iam_noise_channel_vec4_impl(ImGuiID id, ImVec4 frequency, ImVec4 a
 }
 
 float iam_smooth_noise_float(ImGuiID id, float amplitude, float speed, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude *= iam_detail::procedural_scale();
 	iam_noise_opts opts;
 	opts.octaves = 2;
 	opts.persistence = 0.5f;
@@ -7259,6 +7600,7 @@ float iam_smooth_noise_float(ImGuiID id, float amplitude, float speed, float dt)
 }
 
 static ImVec2 iam_smooth_noise_vec2_impl(ImGuiID id, ImVec2 amplitude, float speed, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);
 	iam_noise_opts opts;
 	opts.octaves = 2;
 	opts.persistence = 0.5f;
@@ -7266,7 +7608,10 @@ static ImVec2 iam_smooth_noise_vec2_impl(ImGuiID id, ImVec2 amplitude, float spe
 }
 
 // ============================================================
-static ImVec4 iam_smooth_noise_vec4_impl(ImGuiID id, ImVec4 amplitude, float speed, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_vec4_impl(id, ImVec4(speed, speed, speed, speed), amplitude, opts, dt);}ImVec4 iam_noise_channel_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt) {	ImVec4 noise = iam_noise_channel_vec4_impl(id, ImVec4(frequency, frequency, frequency, frequency), amplitude, opts, dt);	ImVec4 working;	switch (color_space) {		case iam_col_srgb_linear:			working = iam_detail::color::srgb_to_linear(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::linear_to_srgb(working);		case iam_col_hsv:			working = iam_detail::color::srgb_to_hsv(base_color);			working.x = ImFmod(working.x + noise.x + 1.0f, 1.0f);			working.y = ImClamp(working.y + noise.y, 0.0f, 1.0f);			working.z = ImClamp(working.z + noise.z, 0.0f, 1.0f);			working.w = ImClamp(working.w + noise.w, 0.0f, 1.0f);			return iam_detail::color::hsv_to_srgb(working);		case iam_col_oklab:			working = iam_detail::color::srgb_to_oklab(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::oklab_to_srgb(working);		case iam_col_oklch:			working = iam_detail::color::srgb_to_oklch(base_color);			working.x += noise.x; working.y += noise.y;			working.z = ImFmod(working.z + noise.z + 360.0f, 360.0f);			working.w += noise.w;			return iam_detail::color::oklch_to_srgb(working);		default:			return ImVec4(ImClamp(base_color.x + noise.x, 0.0f, 1.0f), ImClamp(base_color.y + noise.y, 0.0f, 1.0f), ImClamp(base_color.z + noise.z, 0.0f, 1.0f), ImClamp(base_color.w + noise.w, 0.0f, 1.0f));	}}ImVec4 iam_smooth_noise_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt) {	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_color_impl(id, base_color, amplitude, speed, opts, color_space, dt);}
+static ImVec4 iam_smooth_noise_vec4_impl(ImGuiID id, ImVec4 amplitude, float speed, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_vec4_impl(id, ImVec4(speed, speed, speed, speed), amplitude, opts, dt);}ImVec4 iam_noise_channel_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, iam_noise_opts const& opts, int color_space, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);	ImVec4 noise = iam_noise_channel_vec4_impl(id, ImVec4(frequency, frequency, frequency, frequency), amplitude, opts, dt);	ImVec4 working;	switch (color_space) {		case iam_col_srgb_linear:			working = iam_detail::color::srgb_to_linear(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::linear_to_srgb(working);		case iam_col_hsv:			working = iam_detail::color::srgb_to_hsv(base_color);			working.x = ImFmod(working.x + noise.x + 1.0f, 1.0f);			working.y = ImClamp(working.y + noise.y, 0.0f, 1.0f);			working.z = ImClamp(working.z + noise.z, 0.0f, 1.0f);			working.w = ImClamp(working.w + noise.w, 0.0f, 1.0f);			return iam_detail::color::hsv_to_srgb(working);		case iam_col_oklab:			working = iam_detail::color::srgb_to_oklab(base_color);			working.x += noise.x; working.y += noise.y; working.z += noise.z; working.w += noise.w;			return iam_detail::color::oklab_to_srgb(working);		case iam_col_oklch:			working = iam_detail::color::srgb_to_oklch(base_color);			working.x += noise.x; working.y += noise.y;			working.z = ImFmod(working.z + noise.z + 360.0f, 360.0f);			working.w += noise.w;			return iam_detail::color::oklch_to_srgb(working);		default:			return ImVec4(ImClamp(base_color.x + noise.x, 0.0f, 1.0f), ImClamp(base_color.y + noise.y, 0.0f, 1.0f), ImClamp(base_color.z + noise.z, 0.0f, 1.0f), ImClamp(base_color.w + noise.w, 0.0f, 1.0f));	}}ImVec4 iam_smooth_noise_color_impl(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float speed, int color_space, float dt) {
+	iam_detail::procedural_guard procedural_guard_; if (procedural_guard_.outer) amplitude = iam_detail::procedural_scaled(amplitude);	iam_noise_opts opts;	opts.octaves = 2;	opts.persistence = 0.5f;	return iam_noise_channel_color_impl(id, base_color, amplitude, speed, opts, color_space, dt);}
 // STYLE INTERPOLATION - Animate between ImGuiStyle themes
 // ============================================================
 
@@ -7549,6 +7894,7 @@ struct gradient_chan {
 	void set(iam_gradient const& trg, float d, iam_ease_desc const& e, int pol, int cs) {
 		start = current;
 		target = trg;
+		d = iam_detail::motion_dur(d);
 		dur = (d <= 1e-6f ? 1e-6f : d);
 		start_time = iam_detail::g_global_time;
 		t = 0;
@@ -7556,6 +7902,7 @@ struct gradient_chan {
 		policy = pol;
 		color_space = cs;
 		sleeping = 0;
+		if (iam_detail::g_reduced_motion) { current = target; t = 1.0f; sleeping = 1; }  // reduced motion: land immediately
 	}
 
 	float progress() {
@@ -7827,6 +8174,7 @@ struct transform_chan {
 	void set(iam_transform const& trg, float d, iam_ease_desc const& e, int pol, int rot_mode) {
 		start = current;
 		target = trg;
+		d = iam_detail::motion_dur(d);
 		dur = (d <= 1e-6f ? 1e-6f : d);
 		start_time = iam_detail::g_global_time;
 		t = 0;
@@ -7834,6 +8182,7 @@ struct transform_chan {
 		policy = pol;
 		rotation_mode = rot_mode;
 		sleeping = 0;
+		if (iam_detail::g_reduced_motion) { current = target; t = 1.0f; sleeping = 1; }  // reduced motion: land immediately
 	}
 
 	float progress() {

@@ -248,6 +248,29 @@ ImGui::Dummy(item_size);                              // keep the layout using t
 `iam_layout_opts` sets the spring (default stiffness 320, damping 36: fast,
 no overshoot) and whether position and size animate.
 
+## Velocity of Any Value
+
+`iam_track_velocity_float()` / `iam_track_velocity_vec2()` return the smoothed
+velocity (units per second) of any value you feed every frame: mouse position,
+scroll offset, your own state. Handy to drive secondary motion:
+
+```cpp
+ImVec2 v = iam_track_velocity_vec2(id, ImGui::GetMousePos(), dt);   // smoothing: 0.05s default
+float tilt = ImClamp(v.x * 0.0005f, -0.3f, 0.3f);
+```
+
+## Reduced Motion
+
+```cpp
+iam_set_reduced_motion(true, 0.2f);   // e.g. from an OS "reduce motion" setting
+```
+
+Tweens and transitions complete instantly, springs, layout and presence jump to
+their targets, inertia lands without gliding, and procedural motion
+(oscillate, shake, wiggle, noise) is scaled by the second argument (0 = still).
+Clip playback is unchanged: check `iam_get_reduced_motion()` to skip decorative
+clips.
+
 ## Memory Management
 
 ```cpp

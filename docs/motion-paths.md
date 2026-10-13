@@ -188,6 +188,23 @@ iam_path_draw(dl, loop_id, a, fmodf(a + 0.25f, 1.0f), IM_COL32_WHITE, 4.0f, orig
 `iam_path_morph_draw()` does the same on a morph between two paths.
 `segments = 0` picks a segment count from the drawn length.
 
+## Paths from SVG
+
+`iam_path_from_svg()` builds a path from SVG path data (the `d` attribute), so
+icons and logos drawn in a vector editor can be used directly:
+
+```cpp
+iam_path_from_svg(ImHashStr("heart"),
+    "M50 88 C20 65 5 48 5 30 A22 22 0 0 1 50 22 A22 22 0 0 1 95 30 C95 48 80 65 50 88 Z",
+    2.0f,                    // scale
+    iam_v2(10, 10));         // offset
+iam_path_draw(dl, ImHashStr("heart"), 0.0f, t, col, 3.0f, origin);
+```
+
+Supports `M L H V C S Q T A Z` and their relative forms; arcs become cubic
+beziers. A second `M` (new subpath) is joined with a line, since a path is a
+single continuous curve. Returns false and builds nothing on malformed data.
+
 ## See Also
 
 - [Text Along Paths](text-along-paths.md) - Render text along curves

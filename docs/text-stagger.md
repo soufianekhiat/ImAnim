@@ -176,6 +176,23 @@ void HoverAnimatedLabel(const char* label, bool hovered) {
 | Effects | Many built-in | Position/rotation |
 | Use Case | Reveal effects | Curved text |
 
+## Text Scramble
+
+`iam_text_scramble()` writes `text` into a buffer with the characters not yet
+revealed replaced by random symbols that change over time ("decode" effect).
+It is stateless, so drive `progress` with any tween and use the result in any
+label:
+
+```cpp
+float t = iam_tween_float(id, ImHashStr("decode"), 1.0f, 1.2f, iam_ease_preset(iam_ease_linear), iam_policy_crossfade, dt);
+char buf[64];
+iam_text_scramble(buf, sizeof(buf), "ACCESS GRANTED", t);
+ImGui::TextUnformatted(buf);
+```
+
+`iam_text_scramble_opts`: `charset`, `change_rate` (symbol changes per second),
+`random_order` (reveal order), `keep_spaces`, `seed`.
+
 ## See Also
 
 - [Text Along Paths](text-along-paths.md) - Text on curves
