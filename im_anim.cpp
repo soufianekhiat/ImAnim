@@ -21,6 +21,22 @@ typedef ImFont FontType;
 typedef ImFontBaked FontType;
 #endif
 
+// AddPolyline(): 'thickness' and 'flags' were swapped in Dear ImGui 1.92.8
+static void add_polyline(ImDrawList* dl, ImVec2 const* pts, int count, ImU32 col, float thickness, ImDrawFlags flags = 0) {
+#if IMGUI_VERSION_NUM < 19276
+	dl->AddPolyline(pts, count, col, flags, thickness);
+#else
+	dl->AddPolyline(pts, count, col, thickness, flags);
+#endif
+}
+
+// ImGuiColorEditFlags_AlphaPreview became the default (and was removed) in Dear ImGui 1.91.8
+#if IMGUI_VERSION_NUM < 19180
+static ImGuiColorEditFlags const IAM_COLOR_ALPHA_PREVIEW = ImGuiColorEditFlags_AlphaPreview;
+#else
+static ImGuiColorEditFlags const IAM_COLOR_ALPHA_PREVIEW = 0;
+#endif
+
 static FontType* GetBakedFont(ImFont* font, float font_size) {
 #ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	(void)font_size; // suppress unused warning
@@ -1893,7 +1909,7 @@ namespace iam_path_draw_detail {
 			int n = segments > 0 ? segments : ImClamp((int)(length * (b - a) / 4.0f), 8, 512);
 			pts.resize(0);
 			sample_range(pts, a, b, n, offset, sample);
-			dl->AddPolyline(pts.Data, pts.Size, col, 0, thickness);
+			add_polyline(dl, pts.Data, pts.Size, col, thickness);
 		}
 	}
 } // namespace iam_path_draw_detail
@@ -9353,7 +9369,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 						ImGui::Text("Value: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
 						{
 							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
-							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | IAM_COLOR_ALPHA_PREVIEW, ImVec2(16, 16));
 						}
 						break;
 					case iam_chan_int:
@@ -9363,7 +9379,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 						ImGui::Text("Color: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
 						{
 							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
-							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | IAM_COLOR_ALPHA_PREVIEW, ImVec2(16, 16));
 							char const* space_names[] = { "sRGB", "Linear", "HSV", "OKLAB", "OKLCH" };
 							if (key.color_space >= 0 && key.color_space < 5) {
 								ImGui::SameLine();
@@ -9837,7 +9853,7 @@ namespace iam_clip_editor_detail {
 			float w = key_ease_weight(k0, track_type, u);
 			pts[i] = ImVec2(p0.x + (p1.x - p0.x) * u, p1.y - (p1.y - p0.y) * w);
 		}
-		dl->AddPolyline(pts, N + 1, col, 0, thickness);
+		add_polyline(dl, pts, N + 1, col, thickness);
 	}
 
 	// ---- C++ export ----
@@ -10823,7 +10839,7 @@ namespace iam_ease_editor_detail {
 		dl->AddLine(ImVec2(g1.x, g0.y), ImVec2(g1.x, g1.y), col_grid);
 		ImVec2 line[97];
 		for (int i = 0; i <= 96; i++) { float t = i / 96.0f; line[i] = ImVec2(IAM_EE_X(t), IAM_EE_Y(iam_detail::eval(*ez, t))); }
-		dl->AddPolyline(line, 97, col_curve, 0, 2.0f);
+		add_polyline(dl, line, 97, col_curve, 2.0f);
 
 		// Interactive handles
 		ImVec2 const mouse = io.MousePos;
