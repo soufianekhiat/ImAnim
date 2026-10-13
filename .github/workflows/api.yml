@@ -146,3 +146,17 @@ jobs:
 
       - name: Run
         run: sh tests/bench/run.sh
+
+  lottie:
+    runs-on: ubuntu-latest
+    name: Lottie player
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Dear ImGui
+        run: git submodule update --init --depth 1 examples/extern/imgui
+
+      - name: Run
+        run: sh tests/lottie/run.sh

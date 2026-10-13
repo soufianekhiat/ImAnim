@@ -27,16 +27,16 @@ jobs:
 
       - name: Compile with IMGUI_DISABLE_OBSOLETE_FUNCTIONS
         run: |
-          for f in im_anim.cpp im_anim_demo.cpp im_anim_doc.cpp im_anim_usecase.cpp; do
+          for f in im_anim.cpp im_anim_lottie.cpp im_anim_demo.cpp im_anim_doc.cpp im_anim_usecase.cpp; do
             echo "== $f"
-            g++ -std=c++11 -fsyntax-only -DIMGUI_DISABLE_OBSOLETE_FUNCTIONS -Iimgui_head -I. $f
+            g++ -std=c++11 -fsyntax-only -DIMGUI_DISABLE_OBSOLETE_FUNCTIONS -DIAM_DEMO_LOTTIE -Iimgui_head -I. $f
           done
 
       - name: Run tests
         env:
           IMGUI_DIR: imgui_head
         run: |
-          for t in vec_types clip_editor springs presence motion utils clip_control ease extras; do
+          for t in vec_types clip_editor springs presence motion utils clip_control ease extras lottie; do
             echo "== $t"
             OUT_DIR=build/head_$t sh tests/$t/run.sh
           done

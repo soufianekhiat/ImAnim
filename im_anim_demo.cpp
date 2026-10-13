@@ -4913,6 +4913,83 @@ static void ShowParticlesDemo()
 }
 
 // ============================================================
+// SECTION: Lottie Player (optional: build with im_anim_lottie.cpp and IAM_DEMO_LOTTIE)
+// ============================================================
+#ifdef IAM_DEMO_LOTTIE
+#include "im_anim_lottie.h"
+
+// Hand-written sample: trim-path spinner, overshooting check mark, gradient star over an even-odd ring
+static char const s_demo_lottie[] = R"({"v":"5.7.0","fr":30,"ip":0,"op":60,"w":360,"h":120,"layers":[
+{"ty":4,"ind":1,"ip":0,"op":60,"st":0,"ks":{"p":{"a":0,"k":[60,60]},"r":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.3],"y":[0]},"i":{"x":[0.7],"y":[1]}},{"t":60,"s":[360]}]}},
+ "shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[70,70]}},
+  {"ty":"tm","s":{"a":1,"k":[{"t":15,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.2],"y":[1]}},{"t":60,"s":[100]}]},"e":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.4],"y":[0]},"i":{"x":[0.2],"y":[1]}},{"t":45,"s":[100]}]},"o":{"a":0,"k":0},"m":1},
+  {"ty":"st","c":{"a":0,"k":[0.357,0.761,0.906,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":8},"lc":2,"lj":2},{"ty":"tr"}]}]},
+{"ty":4,"ind":2,"ip":0,"op":60,"st":0,"ks":{"p":{"a":0,"k":[180,60]}},"shapes":[
+ {"ty":"gr","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"v":[[-16,2],[-5,13],[17,-11]],"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]]}}},
+  {"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":14,"s":[0],"o":{"x":[0.3],"y":[0]},"i":{"x":[0.2],"y":[1]}},{"t":30,"s":[100]}]},"o":{"a":0,"k":0},"m":1},
+  {"ty":"st","c":{"a":0,"k":[1,1,1,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":7},"lc":2,"lj":2},{"ty":"tr"}]},
+ {"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[76,76]}},{"ty":"fl","c":{"a":0,"k":[0.18,0.75,0.42,1]},"o":{"a":0,"k":100},"r":1},
+  {"ty":"tr","s":{"a":1,"k":[{"t":0,"s":[0,0],"o":{"x":[0.3,0.3],"y":[0,0]},"i":{"x":[0.6,0.6],"y":[1.6,1.6]}},{"t":16,"s":[100,100]}]}}]}]},
+{"ty":4,"ind":3,"ip":0,"op":60,"st":0,"ks":{"p":{"a":0,"k":[300,60]},"r":{"a":1,"k":[{"t":0,"s":[0],"o":{"x":[0.5],"y":[0]},"i":{"x":[0.5],"y":[1]}},{"t":60,"s":[144]}]}},"shapes":[
+ {"ty":"gr","it":[{"ty":"sr","sy":1,"p":{"a":0,"k":[0,0]},"or":{"a":0,"k":34},"ir":{"a":0,"k":15},"os":{"a":0,"k":0},"is":{"a":0,"k":0},"r":{"a":0,"k":0},"pt":{"a":0,"k":5}},
+  {"ty":"rd","r":{"a":0,"k":3}},
+  {"ty":"gf","o":{"a":0,"k":100},"r":1,"t":1,"s":{"a":0,"k":[0,-34]},"e":{"a":0,"k":[0,30]},"g":{"p":2,"k":{"a":0,"k":[0,1,0.85,0.3,1,0.95,0.45,0.2]}}},{"ty":"tr"}]},
+ {"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[104,104]}},{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[84,84]}},
+  {"ty":"fl","c":{"a":0,"k":[0.55,0.4,0.95,1]},"o":{"a":0,"k":60},"r":2},
+  {"ty":"tr","s":{"a":1,"k":[{"t":0,"s":[90,90],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":30,"s":[105,105],"o":{"x":[0.5,0.5],"y":[0,0]},"i":{"x":[0.5,0.5],"y":[1,1]}},{"t":60,"s":[90,90]}]}}]}]}
+]})";
+
+static void ShowLottieDemo()
+{
+	static iam_lottie* builtin = nullptr;
+	static iam_lottie* file = nullptr;
+	static char path[512] = "";
+	static char status[600] = "";
+	static float time = 0.0f, speed = 1.0f;
+	static bool paused = false;
+	if (!builtin) builtin = iam_lottie_load_from_memory(s_demo_lottie, sizeof(s_demo_lottie) - 1);
+	iam_lottie* anim = file ? file : builtin;
+	if (!anim) { ImGui::TextDisabled("Failed to load the built-in animation."); return; }
+
+	ImGui::TextWrapped("iam_lottie_draw() plays Lottie (Bodymovin JSON) files straight into a draw list: shapes, strokes, "
+		"gradients, trim paths, masks and mattes, with non-zero / even-odd fills. Load your own file below.");
+	float const dur = iam_lottie_duration(anim);
+	if (!paused) time = fmodf(time + GetSafeDeltaTime() * speed, dur);
+	ImGui::Checkbox("Pause", &paused);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+	ImGui::SliderFloat("Speed", &speed, 0.1f, 3.0f, "%.1fx");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
+	if (ImGui::SliderFloat("Time", &time, 0.0f, dur, "%.2fs")) paused = true;
+
+	float const fs = ImGui::GetFontSize();
+	ImVec2 const p = ImGui::GetCursorScreenPos();
+	ImVec2 const size(ImGui::GetContentRegionAvail().x, fs * 9.0f);
+	ImGui::Dummy(size);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	dl->PushClipRect(p, ImVec2(p.x + size.x, p.y + size.y), true);
+	iam_lottie_draw(dl, anim, time, iam_v2(p.x, p.y), iam_v2(size.x, size.y));
+	dl->PopClipRect();
+
+	ImGui::SetNextItemWidth(-fs * 9.0f);
+	ImGui::InputTextWithHint("##lottie_path", "path/to/animation.json", path, sizeof(path));
+	ImGui::SameLine();
+	if (ImGui::Button("Load")) {
+		iam_lottie* loaded = iam_lottie_load(path);
+		if (loaded) { iam_lottie_free(file); file = loaded; time = 0.0f; }
+		snprintf(status, sizeof(status), loaded ? "Loaded." : "Could not load '%s'.", path);
+	}
+	if (file) { ImGui::SameLine(); if (ImGui::Button("Built-in")) { iam_lottie_free(file); file = nullptr; status[0] = 0; time = 0.0f; } }
+	iam_vec2 const sz = iam_lottie_size(anim);
+	ImGui::Text("%.0f x %.0f, %.2fs at %.0f fps", IAM_VEC2_TO_IM(sz).x, IAM_VEC2_TO_IM(sz).y, dur, iam_lottie_frame_rate(anim));
+	if (status[0]) { ImGui::SameLine(); ImGui::TextDisabled("%s", status); }
+	if (iam_lottie_warnings(anim)[0]) ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Not supported in this file: %s", iam_lottie_warnings(anim));
+}
+#endif
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -8778,6 +8855,14 @@ void ImAnimDemoWindow()
 			ShowParticlesDemo();
 			ImGui::TreePop();
 		}
+
+#ifdef IAM_DEMO_LOTTIE
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Lottie Player")) {
+			ShowLottieDemo();
+			ImGui::TreePop();
+		}
+#endif
 
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Shake & Wiggle")) {

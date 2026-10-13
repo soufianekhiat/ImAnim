@@ -43,6 +43,7 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
 | **Advanced** | Layering/blending, resolved tweens, layout animation, drag feedback with inertia, scroll animation and scroll-linked triggers |
 | **Tools** | Visual clip editor, debug inspector, profiler, save/load, reduced motion, memory management |
+| **Lottie** (optional) | Play Lottie files: shapes, strokes, gradients, trim paths, masks, mattes, non-zero / even-odd fills |
 
 ## Quick Integration
 
@@ -187,6 +188,7 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 ### Tools & Debug
 - [Clip Editor](clip-editor.md) - Edit clips visually while they play, export to C++
 - [Particles](particles.md) - Immediate-mode particle emitter
+- [Lottie Player](lottie.md) - Play Lottie (Bodymovin JSON) files into a draw list (optional file)
 - [Debug](debug.md) - Inspector and debugging tools
 - [Advanced](advanced.md) - Profiler, persistence, memory management
 

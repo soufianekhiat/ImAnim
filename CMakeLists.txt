@@ -51,6 +51,7 @@ set(IMANIM_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(IMANIM_SOURCES
     ${IMANIM_ROOT}/im_anim.cpp
+    ${IMANIM_ROOT}/im_anim_lottie.cpp
     ${IMANIM_ROOT}/im_anim_demo.cpp
     ${IMANIM_ROOT}/im_anim_doc.cpp
     ${IMANIM_ROOT}/im_anim_usecase.cpp
@@ -84,6 +85,7 @@ function(imanim_add_demo TARGET_NAME IMPLATFORM_LIB)
     add_executable(${TARGET_NAME} ${IMANIM_MAIN} ${IMANIM_SOURCES})
 
     target_include_directories(${TARGET_NAME} PRIVATE ${IMANIM_ROOT})
+    target_compile_definitions(${TARGET_NAME} PRIVATE IAM_DEMO_LOTTIE)
     target_link_libraries(${TARGET_NAME} PRIVATE ${IMPLATFORM_LIB})
 
     if(WIN32)

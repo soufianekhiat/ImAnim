@@ -21,6 +21,8 @@ namespace ImAnim
             // Add im_anim from repository root
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim.h"));
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim.cpp"));
+            SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_lottie.h"));
+            SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_lottie.cpp"));
 
             // Add im_anim_demo.cpp, im_anim_doc.cpp, and im_anim_usecase.cpp from repository root (shared by all configs)
             SourceFiles.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "..", "im_anim_demo.cpp"));
@@ -62,6 +64,7 @@ namespace ImAnim
 
             // Add root include path for im_anim.h
             conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", ".."));
+            conf.Defines.Add("IAM_DEMO_LOTTIE");
 
             // Add imgui include paths
             conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "..", "extern", "imgui"));
