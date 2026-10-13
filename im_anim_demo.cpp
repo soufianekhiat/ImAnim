@@ -4109,6 +4109,163 @@ static void ShowClipEditorDemo()
 }
 
 // ============================================================
+// SECTION: Springs
+// ============================================================
+static void ShowSpringsDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped(
+		"iam_spring_vec2() follows a moving target with a simulated spring: changing the target mid-motion keeps the "
+		"velocity. The coral ball uses iam_tween_vec2() (0.4s out_cubic) for comparison, which restarts from rest on "
+		"every new target. Move the mouse over the canvas.");
+	static iam_spring_params sp = iam_spring_default();
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+	ImGui::SliderFloat("Stiffness", &sp.stiffness, 10.0f, 600.0f);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+	ImGui::SliderFloat("Damping", &sp.damping, 1.0f, 60.0f);
+
+	ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 14.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImGui::InvisibleButton("##spring_canvas", size);
+	bool hovered = ImGui::IsItemHovered();
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+
+	ImVec2 center(size.x * 0.5f, size.y * 0.5f);
+	ImVec2 target = hovered ? ImVec2(ImGui::GetMousePos().x - p.x, ImGui::GetMousePos().y - p.y) : center;
+	ImGuiID id = ImGui::GetID("springs_demo");
+	ImVec2 s = iam_spring_vec2(id, ImHashStr("ball"), target, sp, dt, center);
+	ImVec2 t = iam_tween_vec2(id, ImHashStr("tween_ball"), target, 0.4f, iam_ease_preset(iam_ease_out_cubic), iam_policy_crossfade, dt, center);
+	ImVec2 v = iam_tween_velocity_vec2(id, ImHashStr("ball"));
+
+	dl->AddCircle(ImVec2(p.x + target.x, p.y + target.y), 6.0f, IM_COL32(255, 255, 255, 80), 0, 1.5f);
+	dl->AddCircleFilled(ImVec2(p.x + t.x, p.y + t.y), ImGui::GetFontSize() * 0.7f, IM_COL32(204, 120, 88, 200));
+	// Stretch the spring ball along its velocity
+	float speed = ImSqrt(v.x * v.x + v.y * v.y);
+	float stretch = 1.0f + ImMin(speed / 2500.0f, 0.6f);
+	ImVec2 dir = speed > 1.0f ? ImVec2(v.x / speed, v.y / speed) : ImVec2(1, 0);
+	ImVec2 c(p.x + s.x, p.y + s.y);
+	float r = ImGui::GetFontSize() * 0.9f;
+	ImVec2 pts[24];
+	for (int i = 0; i < 24; i++) {
+		float a = i * IAM_2PI / 24.0f;
+		float lx = ImCos(a) * r * stretch, ly = ImSin(a) * r / stretch;
+		pts[i] = ImVec2(c.x + lx * dir.x - ly * dir.y, c.y + lx * dir.y + ly * dir.x);
+	}
+	dl->AddConvexPolyFilled(pts, 24, IM_COL32(91, 194, 231, 255));
+	ImGui::Text("Spring speed: %.0f px/s  %s", speed, iam_tween_is_active(id, ImHashStr("ball")) ? "(moving)" : "(settled)");
+}
+
+// ============================================================
+// SECTION: Enter / Exit (Presence)
+// ============================================================
+static void ShowPresenceDemo()
+{
+	float dt = GetSafeDeltaTime();
+	ImGui::TextWrapped(
+		"iam_presence() animates an element in and out. It keeps returning true while the exit animation runs, so the "
+		"element can still be drawn; reversing mid-way continues smoothly.");
+
+	static bool show_card = true;
+	ImGui::Checkbox("Show card", &show_card);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	float const fs = ImGui::GetFontSize();
+	ImVec2 area(ImGui::GetContentRegionAvail().x, fs * 6.0f);
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImGui::Dummy(area);
+	float t;
+	if (iam_presence(ImGui::GetID("presence_card"), show_card, &t, dt)) {
+		float scale = 0.9f + 0.1f * t;
+		char const* txt = "Hello from iam_presence()";
+		ImVec2 ts = ImGui::CalcTextSize(txt);
+		ImVec2 c(p.x + area.x * 0.5f, p.y + area.y * 0.5f + (1.0f - t) * fs);
+		ImVec2 half((ts.x * 0.5f + fs * 1.5f) * scale, fs * 2.0f * scale);
+		int a = (int)(ImClamp(t, 0.0f, 1.0f) * 255);
+		dl->AddRectFilled(ImVec2(c.x - half.x, c.y - half.y), ImVec2(c.x + half.x, c.y + half.y), IM_COL32(45, 50, 64, a), 8.0f);
+		dl->AddRect(ImVec2(c.x - half.x, c.y - half.y), ImVec2(c.x + half.x, c.y + half.y), IM_COL32(91, 194, 231, a), 8.0f, 0, 1.5f);
+		dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), IM_COL32(230, 230, 235, a), txt);
+	}
+
+	// Notification list: dismissed items animate out before being removed
+	struct note { int id; bool alive; };
+	static ImVector<note> notes;
+	static int next_id = 1;
+	if (ImGui::Button("Add notification")) { note n = { next_id++, true }; notes.push_back(n); }
+	iam_presence_opts opts;
+	opts.enter_duration = 0.3f;
+	opts.enter_ease = iam_ease_preset(iam_ease_out_back);
+	opts.exit_duration = 0.25f;
+	for (int i = 0; i < notes.Size; i++) {
+		note& n = notes[i];
+		ImGui::PushID(n.id);
+		float nt;
+		if (!iam_presence(ImGui::GetID("note"), n.alive, &nt, dt, opts)) {
+			ImGui::PopID();
+			notes.erase(notes.Data + i);
+			i--;
+			continue;
+		}
+		ImVec2 np = ImGui::GetCursorScreenPos();
+		float w = ImGui::GetContentRegionAvail().x * 0.6f;
+		float h = ImGui::GetFrameHeight() * 1.4f * ImClamp(nt, 0.0f, 1.0f);  // collapses while leaving
+		float slide = (1.0f - nt) * ImGui::GetFontSize() * 3.0f;
+		int a = (int)(ImClamp(nt, 0.0f, 1.0f) * 255);
+		dl->AddRectFilled(ImVec2(np.x + slide, np.y), ImVec2(np.x + slide + w, np.y + h - 3), IM_COL32(204, 120, 88, a / 3), 4.0f);
+		char label[64];
+		snprintf(label, sizeof(label), "Notification #%d", n.id);
+		if (h > ImGui::GetFontSize()) dl->AddText(ImVec2(np.x + slide + 8, np.y + (h - 3 - ImGui::GetFontSize()) * 0.5f), IM_COL32(230, 230, 235, a), label);
+		ImGui::SetCursorScreenPos(ImVec2(np.x + slide + w + 4, np.y));
+		if (n.alive && h > ImGui::GetFrameHeight() * 0.8f && ImGui::SmallButton("x")) n.alive = false;
+		ImGui::SetCursorScreenPos(np);
+		ImGui::Dummy(ImVec2(w, h));
+		ImGui::PopID();
+	}
+}
+
+// ============================================================
+// SECTION: Path Drawing
+// ============================================================
+static void ShowPathDrawDemo()
+{
+	static ImGuiID const wave = ImHashStr("demo_draw_wave");
+	static ImGuiID const loop = ImHashStr("demo_draw_loop");
+	static float built_k = 0.0f;
+	float const k = ImGui::GetFontSize() / 13.0f;  // scale with font/DPI
+	if (built_k != k) {
+		iam_path::begin(wave, ImVec2(0 * k, 60 * k))
+			.cubic_to(ImVec2(60 * k, -20 * k), ImVec2(100 * k, 140 * k), ImVec2(160 * k, 60 * k))
+			.cubic_to(ImVec2(220 * k, -20 * k), ImVec2(260 * k, 140 * k), ImVec2(320 * k, 60 * k))
+			.end();
+		iam_path::begin(loop, ImVec2(60 * k, 10 * k))
+			.cubic_to(ImVec2(100 * k, 10 * k), ImVec2(110 * k, 50 * k), ImVec2(110 * k, 60 * k))
+			.cubic_to(ImVec2(110 * k, 90 * k), ImVec2(80 * k, 110 * k), ImVec2(60 * k, 110 * k))
+			.cubic_to(ImVec2(30 * k, 110 * k), ImVec2(10 * k, 90 * k), ImVec2(10 * k, 60 * k))
+			.cubic_to(ImVec2(10 * k, 30 * k), ImVec2(30 * k, 10 * k), ImVec2(60 * k, 10 * k))
+			.end();
+		built_k = k;
+	}
+	ImGui::TextWrapped("iam_path_draw() strokes part of a path by arc length: animate the end for a draw-on effect, "
+		"or move a short window around a closed path (t1 < t0 wraps).");
+	static float T = 0.0f;
+	T += GetSafeDeltaTime();
+	float draw_t = iam_eval_preset(iam_ease_in_out_cubic, ImClamp(ImFmod(T, 2.5f) / 2.0f, 0.0f, 1.0f));
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	ImVec2 p = ImGui::GetCursorScreenPos();
+	ImVec2 size(ImGui::GetContentRegionAvail().x, 140.0f * k);
+	dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), IM_COL32(25, 27, 34, 255), 4.0f);
+	ImVec2 wave_off(p.x + 16 * k, p.y + 10 * k), loop_off(p.x + 360 * k, p.y + 15 * k);
+	iam_path_draw(dl, wave, 0.0f, 1.0f, IM_COL32(255, 255, 255, 25), 2.0f * k, wave_off);
+	iam_path_draw(dl, wave, 0.0f, draw_t, IM_COL32(91, 194, 231, 255), 3.0f * k, wave_off);
+	ImVec2 head = iam_path_evaluate_at_distance(wave, draw_t * iam_path_length(wave));
+	dl->AddCircleFilled(ImVec2(wave_off.x + head.x, wave_off.y + head.y), 4.5f * k, IM_COL32(255, 255, 255, 255));
+	float m0 = ImFmod(T * 0.4f, 1.0f), m1 = ImFmod(m0 + 0.25f, 1.0f);
+	iam_path_draw(dl, loop, 0.0f, 1.0f, IM_COL32(255, 255, 255, 25), 2.0f * k, loop_off);
+	iam_path_draw(dl, loop, m0, m1, IM_COL32(204, 120, 88, 255), 4.0f * k, loop_off);
+	ImGui::Dummy(size);
+}
+
+// ============================================================
 // SECTION: Resize-Aware Helpers
 // ============================================================
 static void ShowResizeHelpersDemo()
@@ -7845,6 +8002,18 @@ void ImAnimDemoWindow()
 			ImGui::TreePop();
 		}
 
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Springs")) {
+			ShowSpringsDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Enter / Exit (Presence)")) {
+			ShowPresenceDemo();
+			ImGui::TreePop();
+		}
+
 		iam_profiler_end();
 	}
 
@@ -7954,6 +8123,12 @@ void ImAnimDemoWindow()
 		ApplyOpenAll();
 		if (ImGui::TreeNode("Text Along Paths")) {
 			ShowTextAlongPathDemo();
+			ImGui::TreePop();
+		}
+
+		ApplyOpenAll();
+		if (ImGui::TreeNode("Path Drawing")) {
+			ShowPathDrawDemo();
 			ImGui::TreePop();
 		}
 
