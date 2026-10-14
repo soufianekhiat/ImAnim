@@ -13,9 +13,11 @@ static int g_fail = 0;
 static float coverage(ImDrawList* dl, int idx0, ImVec2 p, float* rgb = nullptr) {
 	float a = 0.0f, c[3] = { 0, 0, 0 };
 	for (int i = idx0; i + 2 < dl->IdxBuffer.Size; i += 3) {
-		ImDrawVert const& A = dl->VtxBuffer[dl->IdxBuffer[i]];
-		ImDrawVert const& B = dl->VtxBuffer[dl->IdxBuffer[i + 1]];
-		ImDrawVert const& C = dl->VtxBuffer[dl->IdxBuffer[i + 2]];
+		unsigned vofs = 0;  // index values are relative to their command's vertex offset
+		for (int k = 0; k < dl->CmdBuffer.Size; k++) if ((int)dl->CmdBuffer[k].IdxOffset <= i) vofs = dl->CmdBuffer[k].VtxOffset;
+		ImDrawVert const& A = dl->VtxBuffer[vofs + dl->IdxBuffer[i]];
+		ImDrawVert const& B = dl->VtxBuffer[vofs + dl->IdxBuffer[i + 1]];
+		ImDrawVert const& C = dl->VtxBuffer[vofs + dl->IdxBuffer[i + 2]];
 		float const d = (B.pos.y - C.pos.y) * (A.pos.x - C.pos.x) + (C.pos.x - B.pos.x) * (A.pos.y - C.pos.y);
 		if (fabsf(d) < 1e-9f) continue;
 		float const l1 = ((B.pos.y - C.pos.y) * (p.x - C.pos.x) + (C.pos.x - B.pos.x) * (p.y - C.pos.y)) / d;
@@ -76,7 +78,7 @@ int main() {
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = ImVec2(800, 600); io.DeltaTime = 1.0f / 60.0f; io.IniFilename = nullptr;
-	io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures | ImGuiBackendFlags_RendererHasVtxOffset;
 	ImGui::NewFrame();
 	g_dl = ImGui::GetForegroundDrawList();
 
@@ -457,6 +459,67 @@ int main() {
 		iam_lottie_free(a);
 		a = draw(doc(text("\\u00e9", 0, 0, 20), fonts), 0.0f);
 		CHECK(cov_at(25, 97) > 0.99f && cov_at(35, 97) < 0.01f, "text: \\u escapes map to glyphs");
+		iam_lottie_free(a);
+	}
+
+	// ---------------- Replay cache ----------------
+	{
+		std::string const json = doc(layer(group(rect(100, 100, 100, 100) + "," + rect(100, 100, 40, 40) + "," + fill(1, 0, 0, 2)) + "," + group(line_path(20, 20, 180, 30) + "," + stroke(6, 2))));
+		iam_lottie* a = iam_lottie_load_from_memory(json.data(), json.size());
+		ImVector<ImDrawVert> first;
+		ImVector<ImDrawIdx> first_idx;
+		bool same = true;
+		for (int pass = 0; pass < 3; pass++) {
+			int const v0 = g_dl->VtxBuffer.Size, i0 = g_dl->IdxBuffer.Size;
+			unsigned const base = g_dl->_VtxCurrentIdx;
+			iam_lottie_draw(g_dl, a, 0.25f, iam_v2(10, 10), iam_v2(150, 150));
+			int const nv = g_dl->VtxBuffer.Size - v0, ni = g_dl->IdxBuffer.Size - i0;
+			if (pass == 0) {
+				first.resize(nv); memcpy(first.Data, g_dl->VtxBuffer.Data + v0, sizeof(ImDrawVert) * nv);
+				first_idx.resize(ni); for (int j = 0; j < ni; j++) first_idx[j] = (ImDrawIdx)(g_dl->IdxBuffer[i0 + j] - base);
+			} else {
+				same = same && nv == first.Size && ni == first_idx.Size && memcmp(first.Data, g_dl->VtxBuffer.Data + v0, sizeof(ImDrawVert) * nv) == 0;
+				for (int j = 0; same && j < ni; j++) same = (ImDrawIdx)(g_dl->IdxBuffer[i0 + j] - base) == first_idx[j];
+			}
+		}
+		CHECK(same && first.Size > 0, "replayed draws match the evaluated one (%d vertices)", first.Size);
+		g_idx0 = g_dl->IdxBuffer.Size;
+		iam_lottie_draw(g_dl, a, 0.25f, iam_v2(10, 10), iam_v2(150, 150));
+		CHECK(cov_at(10 + 150 * 0.5f, 10 + 150 * 0.3f) > 0.99f, "replayed draw covers the shape");
+		{
+			// A draw recorded across ImDrawList's 16-bit vertex offset wrap replays the same triangles
+			auto abs_tris = [](ImDrawList* dl, int idx0, int vtx0, ImVector<int>& out) {
+				out.resize(0);
+				for (int c = 0; c < dl->CmdBuffer.Size; c++) {
+					ImDrawCmd const& cmd = dl->CmdBuffer[c];
+					int const end = c + 1 < dl->CmdBuffer.Size ? (int)dl->CmdBuffer[c + 1].IdxOffset : dl->IdxBuffer.Size;
+					for (int j = ImMax((int)cmd.IdxOffset, idx0); j < end; j++) out.push_back((int)cmd.VtxOffset + (int)dl->IdxBuffer[j] - vtx0);
+				}
+			};
+			iam_lottie_set_cache(a, true);
+			ImVector<int> rec, rep;
+			ImVector<ImDrawVert> rec_v;
+			for (int pass = 0; pass < 3; pass++) {
+				if (pass == 1) {
+					// Push the vertex counter close to 65535 so this draw wraps
+					int const k = 65536 - (int)g_dl->_VtxCurrentIdx - first.Size / 2;
+					if (k > 0) { g_dl->PrimReserve(0, k); memset(g_dl->_VtxWritePtr, 0, sizeof(ImDrawVert) * k); g_dl->_VtxWritePtr += k; g_dl->_VtxCurrentIdx += k; }
+				}
+				unsigned const ofs_before = g_dl->_CmdHeader.VtxOffset;
+				int const v0b = g_dl->VtxBuffer.Size, i0b = g_dl->IdxBuffer.Size;
+				iam_lottie_draw(g_dl, a, 0.5f, iam_v2(10, 10), iam_v2(150, 150));
+				if (pass == 1) { abs_tris(g_dl, i0b, v0b, rec); rec_v.resize(g_dl->VtxBuffer.Size - v0b); memcpy(rec_v.Data, g_dl->VtxBuffer.Data + v0b, sizeof(ImDrawVert) * rec_v.Size);
+				                 CHECK(g_dl->_CmdHeader.VtxOffset != ofs_before, "test setup: the recorded draw wrapped the vertex offset"); }
+				if (pass == 2) abs_tris(g_dl, i0b, v0b, rep);
+			}
+			bool ok = rec.Size == rep.Size && rec.Size > 0;
+			for (int j = 0; ok && j < rec.Size; j++) ok = memcmp(&rec_v[rec[j]], &g_dl->VtxBuffer[g_dl->VtxBuffer.Size - rec_v.Size + rep[j]], sizeof(ImDrawVert)) == 0;
+			CHECK(ok, "replay after a vertex offset wrap draws the same triangles (%d / %d indices)", rep.Size, rec.Size);
+		}
+		iam_lottie_set_cache(a, false);
+		int const v0 = g_dl->VtxBuffer.Size;
+		iam_lottie_draw(g_dl, a, 0.25f, iam_v2(10, 10), iam_v2(150, 150));
+		CHECK(g_dl->VtxBuffer.Size - v0 == first.Size, "cache off: same output, evaluated");
 		iam_lottie_free(a);
 	}
 

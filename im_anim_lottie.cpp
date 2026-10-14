@@ -252,6 +252,17 @@ struct iam_lottie {
 	ImVector<char> strings;
 	ImVector<char> warnings;
 	unsigned warn;
+
+	// Replay cache: a draw repeated with the same key (paused animation, idle widget) copies
+	// the vertices it produced last time instead of evaluating and filling again
+	struct draw_key { float frame, pos[2], size[2], uv[2], clip[4]; int gpu; };  // plain floats: compared bytewise
+	struct draw_entry { draw_key key; unsigned stamp; bool valid; ImVector<ImDrawVert> vtx; ImVector<ImDrawIdx> idx; };
+	enum { CACHE = 8 };
+	mutable draw_entry cache[CACHE];
+	mutable draw_key seen[CACHE];  // keys drawn once: stored when they come again
+	mutable int seen_next;
+	mutable unsigned stamp;
+	mutable bool cache_enabled;
 };
 
 namespace iam_lottie_detail {
@@ -3123,6 +3134,8 @@ iam_lottie* iam_lottie_load_from_memory(char const* json, size_t size) {
 
 	iam_lottie* L = IM_NEW(iam_lottie)();
 	L->warn = 0;
+	L->cache_enabled = true;
+	memset(L->seen, 0xFF, sizeof(L->seen));  // no key matches NaN frames
 	L->w = (float)doc.num(root, "w", 0.0);
 	L->h = (float)doc.num(root, "h", 0.0);
 	L->fr = (float)doc.num(root, "fr", 0.0);
@@ -3219,6 +3232,35 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	if (size.x <= 0.0f || size.y <= 0.0f) size = ImVec2(anim->w, anim->h);
 	float const frame = ImClamp(anim->ip + time * anim->fr, anim->ip, anim->op - 1e-3f);
 	float const k = ImMin(size.x / anim->w, size.y / anim->h);
+
+	// Replay cache
+	iam_lottie::draw_key key;
+	memset(&key, 0, sizeof(key));  // compared bytewise
+	key.frame = frame;
+	key.pos[0] = pos.x; key.pos[1] = pos.y; key.size[0] = size.x; key.size[1] = size.y;
+	key.uv[0] = dl->_Data->TexUvWhitePixel.x; key.uv[1] = dl->_Data->TexUvWhitePixel.y;
+	key.clip[0] = dl->_CmdHeader.ClipRect.x; key.clip[1] = dl->_CmdHeader.ClipRect.y; key.clip[2] = dl->_CmdHeader.ClipRect.z; key.clip[3] = dl->_CmdHeader.ClipRect.w;
+	key.gpu = (s_gpu_enabled ? 1 : 0) | (ImGui::GetCurrentContext() ? (int)(ImGui::GetIO().DisplayFramebufferScale.x * 100.0f) << 1 : 0);
+	if (anim->cache_enabled) {
+		for (int i = 0; i < iam_lottie::CACHE; i++) {
+			iam_lottie::draw_entry& e = anim->cache[i];
+			if (!e.valid || memcmp(&e.key, &key, sizeof(key)) != 0) continue;
+			e.stamp = ++anim->stamp;
+			dl->PrimReserve(e.idx.Size, e.vtx.Size);
+			memcpy(dl->_VtxWritePtr, e.vtx.Data, sizeof(ImDrawVert) * (size_t)e.vtx.Size);
+			ImDrawIdx const base = (ImDrawIdx)dl->_VtxCurrentIdx;
+			for (int j = 0; j < e.idx.Size; j++) dl->_IdxWritePtr[j] = (ImDrawIdx)(base + e.idx[j]);
+			dl->_VtxWritePtr += e.vtx.Size;
+			dl->_IdxWritePtr += e.idx.Size;
+			dl->_VtxCurrentIdx += (unsigned)e.vtx.Size;
+			return;
+		}
+	}
+	bool repeat = false;
+	for (int i = 0; i < iam_lottie::CACHE && anim->cache_enabled; i++) if (memcmp(&anim->seen[i], &key, sizeof(key)) == 0) repeat = true;
+	int const cmd0 = dl->CmdBuffer.Size, vtx0 = dl->VtxBuffer.Size, idx0 = dl->IdxBuffer.Size;
+	unsigned const cur0 = dl->_VtxCurrentIdx, vofs0 = dl->_CmdHeader.VtxOffset;
+
 	ctx C;
 	C.dl = dl;
 	C.L = anim;
@@ -3233,6 +3275,43 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	mat const M = mat_make(k, 0, 0, k, pos.x + (size.x - anim->w * k) * 0.5f, pos.y + (size.y - anim->h * k) * 0.5f);
 	C.cur_comp = 0; C.cur_w = anim->w; C.cur_h = anim->h;
 	C.render_comp(0, frame, M, 1.0f, anim->w, anim->h);
+
+	if (!anim->cache_enabled) return;
+	if (!repeat) { anim->seen[anim->seen_next] = key; anim->seen_next = (anim->seen_next + 1) % iam_lottie::CACHE; return; }
+	// Second time with this key: keep the output if it is plain geometry (no callback, texture
+	// or clip change; new commands only from ImDrawList's vertex offset wrap) that fits one
+	// replay (16-bit indices: < 65536 vertices)
+	int const nv = dl->VtxBuffer.Size - vtx0, ni = dl->IdxBuffer.Size - idx0;
+	if (nv <= 0 || (sizeof(ImDrawIdx) == 2 && nv >= 65536)) return;
+	ImDrawCmd const& start_cmd = dl->CmdBuffer[cmd0 - 1];
+	for (int c = cmd0; c < dl->CmdBuffer.Size; c++) {
+		ImDrawCmd const& cmd = dl->CmdBuffer[c];
+		if (cmd.UserCallback || cmd.TexRef.GetTexID() != start_cmd.TexRef.GetTexID() || memcmp(&cmd.ClipRect, &start_cmd.ClipRect, sizeof(ImVec4)) != 0) return;
+	}
+	(void)vofs0; (void)cur0;
+	int slot = 0;
+	for (int i = 1; i < iam_lottie::CACHE; i++) if (!anim->cache[i].valid || (anim->cache[slot].valid && anim->cache[i].stamp < anim->cache[slot].stamp)) slot = i;
+	iam_lottie::draw_entry& e = anim->cache[slot];
+	e.key = key;
+	e.valid = true;
+	e.stamp = ++anim->stamp;
+	e.vtx.resize(nv);
+	memcpy(e.vtx.Data, dl->VtxBuffer.Data + vtx0, sizeof(ImDrawVert) * (size_t)nv);
+	e.idx.resize(ni);
+	// Index values are relative to their command's vertex offset: make them relative to our first vertex
+	for (int c = cmd0 - 1; c < dl->CmdBuffer.Size; c++) {
+		ImDrawCmd const& cmd = dl->CmdBuffer[c];
+		int const b = ImMax((int)cmd.IdxOffset, idx0), e2 = (c + 1 < dl->CmdBuffer.Size) ? (int)dl->CmdBuffer[c + 1].IdxOffset : dl->IdxBuffer.Size;
+		int const end = c == dl->CmdBuffer.Size - 1 ? dl->IdxBuffer.Size : e2;
+		for (int j = b; j < end; j++) e.idx[j - idx0] = (ImDrawIdx)((int)cmd.VtxOffset + (int)dl->IdxBuffer[j] - vtx0);
+	}
+}
+
+void iam_lottie_set_cache(iam_lottie* anim, bool enabled) {
+	if (!anim) return;
+	anim->cache_enabled = enabled;
+	for (int i = 0; i < iam_lottie::CACHE; i++) { anim->cache[i].valid = false; anim->cache[i].vtx.clear(); anim->cache[i].idx.clear(); }
+	memset(anim->seen, 0xFF, sizeof(anim->seen));
 }
 
 bool iam_lottie_gpu_active() {

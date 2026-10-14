@@ -41,6 +41,11 @@ IM_ANIM_API bool         iam_lottie_marker(iam_lottie const* anim, char const* n
 // [pos, pos + size], keeping the aspect ratio. size 0 = composition size.
 IM_ANIM_API void         iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec2 pos, iam_vec2 size = iam_v2(0, 0));
 
+// A draw repeated with the same time, position, size and clip rect (paused animation, idle
+// widget) replays the vertices it produced the previous time. On by default; turn it off
+// to always evaluate (for example when profiling).
+IM_ANIM_API void         iam_lottie_set_cache(iam_lottie* anim, bool enabled);
+
 // GPU fill: build with IAM_LOTTIE_IMPLATFORM (and ImPlatform on the include path, with
 // IM_CURRENT_GFX defined) to fill solid shapes with a winding-number shader through
 // ImPlatform's custom shaders on the D3D10/11/12 backends, and on D3D10/11 to draw layers
