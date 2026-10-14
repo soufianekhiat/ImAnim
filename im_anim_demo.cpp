@@ -5189,6 +5189,11 @@ static void ShowLottieDemo()
 	if (ImGui::Checkbox("GPU fill", &gpu)) iam_lottie_set_gpu(gpu);
 	ImGui::SameLine();
 	ImGui::TextDisabled(iam_lottie_gpu_active() ? "(winding shader)" : "(CPU fill; the shader needs IAM_LOTTIE_IMPLATFORM on a D3D backend)");
+	static bool snap = false;
+	ImGui::Checkbox("Snap to file frames", &snap);
+	iam_lottie_set_frame_snap(anim, snap);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(repeats each frame of the file, replayed from the cache, instead of interpolating)");
 
 	float const fs = ImGui::GetFontSize();
 	ImVec2 const p = ImGui::GetCursorScreenPos();

@@ -263,6 +263,7 @@ struct iam_lottie {
 	mutable int seen_next;
 	mutable unsigned stamp;
 	mutable bool cache_enabled;
+	bool frame_snap;
 };
 
 namespace iam_lottie_detail {
@@ -3167,6 +3168,7 @@ iam_lottie* iam_lottie_load_from_memory(char const* json, size_t size) {
 	iam_lottie* L = IM_NEW(iam_lottie)();
 	L->warn = 0;
 	L->cache_enabled = true;
+	L->frame_snap = false;
 	memset(L->seen, 0xFF, sizeof(L->seen));  // no key matches NaN frames
 	L->w = (float)doc.num(root, "w", 0.0);
 	L->h = (float)doc.num(root, "h", 0.0);
@@ -3262,7 +3264,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	ImVec2 const pos = IAM_VEC2_TO_IM(pos_in);
 	ImVec2 size = IAM_VEC2_TO_IM(size_in);
 	if (size.x <= 0.0f || size.y <= 0.0f) size = ImVec2(anim->w, anim->h);
-	float const frame = ImClamp(anim->ip + time * anim->fr, anim->ip, anim->op - 1e-3f);
+	float frame = ImClamp(anim->ip + time * anim->fr, anim->ip, anim->op - 1e-3f);
+	if (anim->frame_snap) frame = ImMax(ImFloor(frame + 1e-3f), anim->ip);  // epsilon: t = n / fr lands on frame n despite rounding
 	float const k = ImMin(size.x / anim->w, size.y / anim->h);
 
 	// Replay cache
@@ -3309,8 +3312,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	C.render_comp(0, frame, M, 1.0f, anim->w, anim->h);
 
 	if (!anim->cache_enabled) return;
-	if (!repeat) { anim->seen[anim->seen_next] = key; anim->seen_next = (anim->seen_next + 1) % iam_lottie::CACHE; return; }
-	// Second time with this key: keep the output if it is plain geometry (no callback, texture
+	if (!repeat && !anim->frame_snap) { anim->seen[anim->seen_next] = key; anim->seen_next = (anim->seen_next + 1) % iam_lottie::CACHE; return; }
+	// Second time with this key (first with frame snap: frames repeat): keep the output if it is plain geometry (no callback, texture
 	// or clip change; new commands only from ImDrawList's vertex offset wrap) that fits one
 	// replay (16-bit indices: < 65536 vertices)
 	int const nv = dl->VtxBuffer.Size - vtx0, ni = dl->IdxBuffer.Size - idx0;
@@ -3338,6 +3341,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 		for (int j = b; j < end; j++) e.idx[j - idx0] = (ImDrawIdx)((int)cmd.VtxOffset + (int)dl->IdxBuffer[j] - vtx0);
 	}
 }
+
+void iam_lottie_set_frame_snap(iam_lottie* anim, bool enabled) { if (anim) anim->frame_snap = enabled; }
 
 void iam_lottie_set_cache(iam_lottie* anim, bool enabled) {
 	if (!anim) return;

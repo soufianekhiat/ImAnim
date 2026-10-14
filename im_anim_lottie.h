@@ -46,6 +46,11 @@ IM_ANIM_API void         iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim,
 // to always evaluate (for example when profiling).
 IM_ANIM_API void         iam_lottie_set_cache(iam_lottie* anim, bool enabled);
 
+// Draw only the file's own frames (time rounded down to 1 / frame rate): a 30 fps animation
+// on a 144 Hz display then repeats each frame ~5 times and replays it from the cache. Off by
+// default (in-between frames are interpolated).
+IM_ANIM_API void         iam_lottie_set_frame_snap(iam_lottie* anim, bool enabled);
+
 // GPU fill: build with IAM_LOTTIE_IMPLATFORM (and ImPlatform on the include path, with
 // IM_CURRENT_GFX defined) to fill solid shapes with a winding-number shader through
 // ImPlatform's custom shaders on the D3D10/11/12 backends, and on D3D10/11 to draw layers

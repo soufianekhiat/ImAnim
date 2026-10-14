@@ -112,14 +112,16 @@ where the CPU fill fades across the edge.
 
 Every draw rebuilds the frame on the CPU. Single convex contours and smooth,
 opaque, undashed strokes go straight to `AddConvexPolyFilled` / `AddPolyline`; the
-rest uses the sweep fill, with its scratch buffers kept across draws (a few dozen
+rest uses the sweep fill, with its scratch buffers kept across draws (about ten
 allocations per draw on typical files).
 
 A draw repeated with the same time, position, size and clip (a paused animation,
 an icon drawn several times) replays the vertices recorded the second time it is
 seen: each animation keeps the last 8 such frames. Turn it off with
 `iam_lottie_set_cache(anim, false)` to save that memory on animations that never
-repeat a frame.
+repeat a frame. `iam_lottie_set_frame_snap(anim, true)` draws only the file's own
+frames, recorded the first time: a 30 fps animation on a 144 Hz display then evaluates
+one draw in five and replays the others, instead of interpolating between frames.
 
 ## Limits
 

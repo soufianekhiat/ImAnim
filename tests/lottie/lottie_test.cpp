@@ -523,6 +523,29 @@ int main() {
 		iam_lottie_free(a);
 	}
 
+	// ---------------- Frame snap ----------------
+	{
+		// Square moving from x = 50 to 150 over frames 0..30 (30 fps)
+		std::string const m = doc("{\"ty\":4,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[50,100]},{\"t\":30,\"s\":[150,100]}]}},"
+		                          "\"shapes\":[" + group(rect(0, 0, 20, 20) + "," + fill(1, 1, 1)) + "]}");
+		iam_lottie* a = iam_lottie_load_from_memory(m.data(), m.size());
+		iam_lottie_set_cache(a, false);
+		auto draw_at = [&](float t, ImVector<ImDrawVert>& out) {
+			int const v0 = g_dl->VtxBuffer.Size;
+			iam_lottie_draw(g_dl, a, t, iam_v2(0, 0), iam_v2(200, 200));
+			out.resize(g_dl->VtxBuffer.Size - v0);
+			memcpy(out.Data, g_dl->VtxBuffer.Data + v0, sizeof(ImDrawVert) * out.Size);
+		};
+		auto same = [](ImVector<ImDrawVert> const& x, ImVector<ImDrawVert> const& y) { return x.Size == y.Size && x.Size > 0 && memcmp(x.Data, y.Data, sizeof(ImDrawVert) * x.Size) == 0; };
+		ImVector<ImDrawVert> f10, f10b, f11;
+		draw_at(10.2f / 30.0f, f10); draw_at(10.8f / 30.0f, f10b);
+		CHECK(f10.Size > 0 && !same(f10, f10b), "no snap: in-between frames interpolate");
+		iam_lottie_set_frame_snap(a, true);
+		draw_at(10.0f / 30.0f, f10); draw_at(10.9f / 30.0f, f10b); draw_at(11.0f / 30.0f, f11);
+		CHECK(same(f10, f10b) && !same(f10, f11), "snap: one image per file frame, the next frame differs");
+		iam_lottie_free(a);
+	}
+
 	// ---------------- Markers, warnings, robustness ----------------
 	{
 		std::string const m = doc(layer(group(rect(100, 100, 10, 10) + "," + fill(1, 1, 1))), "\"markers\":[{\"tm\":30,\"cm\":\"loop\",\"dr\":15}],");
