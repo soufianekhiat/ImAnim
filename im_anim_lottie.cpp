@@ -1373,10 +1373,14 @@ struct fill_writer {
 	ImVec2 uv;
 	paint_eval const* paint;
 	ImVector<pvert> pa, pb, quad, row;
+	int reserved;  // quad vertices reserved ahead and not yet written (one PrimReserve per 64 quads)
+
+	void flush() { if (reserved) dl->PrimUnreserve(reserved / 4 * 6, reserved); reserved = 0; }
 
 	// Convex polygon with per-vertex coverage, coloured by the gradient (t clamped into [lo, hi])
 	void paint_poly(ImVector<pvert> const& poly, float lo, float hi) {
 		if (poly.Size < 3) return;
+		flush();
 		dl->PrimReserve((poly.Size - 2) * 3, poly.Size);
 		ImDrawIdx const base = (ImDrawIdx)dl->_VtxCurrentIdx;
 		for (int i = 0; i < poly.Size; ++i) {
@@ -1435,7 +1439,8 @@ struct fill_writer {
 			paint_quad(a, b, c, d, k(ca), k(cb), k(cc), k(cd));
 			return;
 		}
-		dl->PrimReserve(6, 4);
+		if (reserved < 4) { flush(); dl->PrimReserve(6 * 64, 4 * 64); reserved = 4 * 64; }
+		reserved -= 4;
 		ImDrawIdx const base = (ImDrawIdx)dl->_VtxCurrentIdx;
 		dl->PrimWriteVtx(a, uv, ca); dl->PrimWriteVtx(b, uv, cb); dl->PrimWriteVtx(c, uv, cc); dl->PrimWriteVtx(d, uv, cd);
 		dl->PrimWriteIdx(base); dl->PrimWriteIdx((ImDrawIdx)(base + 1)); dl->PrimWriteIdx((ImDrawIdx)(base + 2));
@@ -1548,6 +1553,7 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 	w.aa = aa;
 	w.uv = dl->_Data->TexUvWhitePixel;
 	w.paint = paint ? &pe : nullptr;
+	w.reserved = 0;
 
 	ImVector<int>& active = S.active;
 	ImVector<slab_edge>& slab = S.slab;
@@ -1752,6 +1758,7 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 	if (aa > 0.0f)
 		for (int i = 0; i < prev_bottom.Size; ++i)
 			w.FringeOuter(ImVec2(prev_bottom[i].l, prev_bottom_y), ImVec2(prev_bottom[i].r, prev_bottom_y), ImVec2(0.0f, 1.0f));
+	w.flush();
 }
 
 // ----------------------------------------------------------------------------
@@ -2389,7 +2396,8 @@ struct ctx {
 	void push_clip(ImVector<ImVec2> const& segs, int even_odd) {
 		if (nclips >= MAX_CLIPS) { overflow++; return; }  // shortcut: deeper clips are ignored, raise MAX_CLIPS if files need more
 		clip_t& c = clips[nclips++];
-		c.segs = segs;
+		c.segs.resize(segs.Size);
+		if (segs.Size) memcpy(c.segs.Data, segs.Data, (size_t)segs.Size * sizeof(ImVec2));
 		c.even_odd = even_odd;
 		c.bounds = ImRect(ImVec2(FLT_MAX, FLT_MAX), ImVec2(-FLT_MAX, -FLT_MAX));
 		for (int i = 0; i < segs.Size; i++) c.bounds.Add(segs[i]);
@@ -2412,9 +2420,10 @@ struct ctx {
 	// linear ramp. Grown = shape OR a stroke of its outline; shrunk = shape minus that stroke.
 	void soft_fill(ImVector<ImVec2> const& segs, ImU32 col, int even_odd, paint_t const* paint, float width) {
 		// Outline contours from the segment soup (fills and stroke outlines are chained loops)
-		ImVector<ImVec2> pts;
-		ImVector<int> counts;
-		ImVector<bool> closed;
+		static ImVector<ImVec2> pts, stroke, comp;  // soft_fill is not re-entered
+		static ImVector<int> counts;
+		static ImVector<bool> closed;
+		pts.resize(0); counts.resize(0); closed.resize(0);
 		for (int i = 0; i < segs.Size; i += 2) {
 			if (i == 0 || segs[i].x != segs[i - 1].x || segs[i].y != segs[i - 1].y) {
 				if (counts.Size) closed.back() = pts.Size > 0 && pts.back().x == pts[pts.Size - counts.back()].x && pts.back().y == pts[pts.Size - counts.back()].y;
@@ -2427,7 +2436,6 @@ struct ctx {
 		float const h = width * 0.5f;
 		int const K = ImClamp((int)(width / 2.0f + 0.5f), 2, 12);
 		float const base_a = ((col >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
-		ImVector<ImVec2> stroke, comp;
 		for (int j = 0; j < K; j++) {
 			float const d = h - (j + 0.5f) * (width / K);   // outermost first
 			float const a = 1.0f / (K - j);                  // so that the stack ends fully covered
@@ -2629,7 +2637,8 @@ struct ctx {
 	}
 
 	void fill_geom(geom const& g, ImU32 col) {
-		ImVector<ImVec2> poly, segs;
+		static ImVector<ImVec2> poly, segs;  // fill_geom is not re-entered
+		segs.resize(0);
 		for (int c = 0; c < g.cs.Size; c++) {
 			flatten_contour(g, g.cs[c], poly, tol);
 			if (poly.Size < 3) continue;
@@ -2658,7 +2667,8 @@ struct ctx {
 		for (int i = 0; i < ly.docn; i++) if (L->docs[ly.doc + i].t <= lt) di = i;
 		textdoc_t const& d = L->docs[ly.doc + di];
 		float const scale = d.size * 0.01f, track = d.tracking * 0.001f * d.size;
-		geom g;
+		static geom g;  // draw_text is not re-entered
+		g.clear();
 		char const* line = L->strings.Data + d.text;
 		for (float y = 0.0f; ; y += d.lh) {
 			char const* e = line;
@@ -2688,7 +2698,7 @@ struct ctx {
 		fx_color(scol);
 		ImU32 const fc = ImGui::ColorConvertFloat4ToU32(ImVec4(fcol[0], fcol[1], fcol[2], a));
 		ImU32 const sc = ImGui::ColorConvertFloat4ToU32(ImVec4(scol[0], scol[1], scol[2], a));
-		ImVector<ImVec2> poly, segs;
+		static ImVector<ImVec2> poly, segs;
 		float const hw = d.sw * mat_scale(W) * 0.5f;
 		for (int pass = 0; pass < 2; pass++) {
 			bool const stroke_pass = (pass == 0) != (d.stroke_over != 0);  // "of": stroke over fill
@@ -2948,13 +2958,15 @@ struct ctx {
 
 	int push_masks(layer_t const& ly, mat const& W, float lt) {
 		int pushed = 0;
-		ImVector<ImVec2> uni, segs, poly;
+		static ImVector<ImVec2> uni, segs, poly, comp;  // push_masks is not re-entered
+		static geom g;
+		uni.resize(0);
 		bool uni_eo = false;  // a difference mask in the group: even-odd gives the XOR with the masks before it
 		auto flush = [&]() { if (uni.Size) { push_clip(uni, uni_eo ? 1 : 0); pushed++; uni.resize(0); } uni_eo = false; };
 		for (int i = 0; i < ly.maskn; i++) {
 			mask_t const& mk = L->masks[ly.mask + i];
 			if (mk.mode == 'n') continue;
-			geom g;
+			g.clear();
 			eval(L, mk.pt, lt, scratch);
 			if (scratch.Size >= 2) {
 				int const n = (int)scratch[1];
@@ -2969,7 +2981,7 @@ struct ctx {
 				continue;
 			}
 			flush();
-			if (subtract) { ImVector<ImVec2> comp; complement(comp, segs); push_clip(comp, 2); }
+			if (subtract) { complement(comp, segs); push_clip(comp, 2); }
 			else push_clip(segs, 0);
 			pushed++;
 		}
@@ -3052,13 +3064,16 @@ struct ctx {
 #endif
 		if (a > 0.0f || collect) {
 			if (ly.matte >= 0 && ly.matte != li && li != skip_matte) {
-				ImVector<ImVec2> matte;
+				// Pool by depth: the matte layer renders deeper than the layer it clips
+				static ImVector<ImVec2> s_matte[34], s_comp[34];
+				ImVector<ImVec2>& matte = s_matte[depth];
+				matte.resize(0);
 				ImVector<ImVec2>* const prev = collect;
 				collect = &matte;
 				layer_t const& ml = L->layers[ly.matte];
 				if (t >= ml.ip && t < ml.op) render_layer(ly.matte, t, M, 1.0f);
 				collect = prev;
-				if (ly.tt == 2 || ly.tt == 4) { ImVector<ImVec2> comp; complement(comp, matte); push_clip(comp, 2); }
+				if (ly.tt == 2 || ly.tt == 4) { complement(s_comp[depth], matte); push_clip(s_comp[depth], 2); }
 				else push_clip(matte, 0);
 				pushed++;
 			}
@@ -3278,7 +3293,7 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	int const cmd0 = dl->CmdBuffer.Size, vtx0 = dl->VtxBuffer.Size, idx0 = dl->IdxBuffer.Size;
 	unsigned const cur0 = dl->_VtxCurrentIdx, vofs0 = dl->_CmdHeader.VtxOffset;
 
-	ctx C;
+	static ctx C;  // its clip and scratch buffers are reused across draws
 	C.dl = dl;
 	C.L = anim;
 	C.nclips = C.overflow = C.depth = C.nfx = 0;
