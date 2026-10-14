@@ -464,7 +464,8 @@ int main() {
 			       verts + "],\"i\":[" + zeros + "],\"o\":[" + zeros + "]}}},{\"ty\":\"tr\"}]}]}}";
 		};
 		std::string const fonts = "\"fonts\":{\"list\":[{\"fName\":\"TestSans\",\"fFamily\":\"Test\",\"fStyle\":\"Regular\",\"ascent\":70}]},\"chars\":[" +
-			glyph("A", "[0,0],[60,0],[60,-70],[0,-70]", 4) + "," + glyph("B", "[0,0],[60,0],[30,-70]", 3) + "," + glyph("\\u00e9", "[0,0],[20,0],[20,-20],[0,-20]", 4) + "],";
+			glyph("A", "[0,0],[60,0],[60,-70],[0,-70]", 4) + "," + glyph("B", "[0,0],[60,0],[30,-70]", 3) + "," + glyph("\\u00e9", "[0,0],[20,0],[20,-20],[0,-20]", 4) +
+			",{\"ch\":\" \",\"fFamily\":\"Test\",\"style\":\"Regular\",\"size\":100,\"w\":30,\"data\":{}}],";
 		auto text = [](char const* t, int j, float tr, float x) {
 			char b[400];
 			snprintf(b, sizeof(b), "{\"ty\":5,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":0,\"k\":[%g,100]}},\"t\":{\"d\":{\"k\":[{\"t\":0,\"s\":{\"s\":50,\"f\":\"TestSans\",\"t\":\"%s\",\"j\":%d,\"tr\":%g,\"lh\":60,\"fc\":[1,0,0]}}]},\"a\":[]}}", x, t, j, tr);
@@ -488,6 +489,20 @@ int main() {
 		iam_lottie_free(a);
 		a = draw(doc(text("\\u00e9", 0, 0, 20), fonts), 0.0f);
 		CHECK(cov_at(25, 97) > 0.99f && cov_at(35, 97) < 0.01f, "text: \\u escapes map to glyphs");
+		iam_lottie_free(a);
+		// Paragraph text, size 50 (A: 30 wide, advance 35; space 15) in a 90 wide box at (20, 20):
+		// "A A A" wraps after "A A"; first baseline at the box top + ascent 70% of 50
+		auto boxed = [](int j) {
+			char b[400];
+			snprintf(b, sizeof(b), "{\"ty\":5,\"ind\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":0,\"k\":[20,20]}},\"t\":{\"d\":{\"k\":[{\"t\":0,\"s\":{\"s\":50,\"f\":\"TestSans\",\"t\":\"A A A\",\"j\":%d,\"lh\":60,\"sz\":[90,200],\"ps\":[0,0],\"fc\":[1,0,0]}}]},\"a\":[]}}", j);
+			return std::string(b);
+		};
+		a = draw(doc(boxed(0), fonts), 0.0f);
+		CHECK(cov_at(35, 40) > 0.99f && cov_at(85, 40) > 0.99f && cov_at(135, 40) < 0.01f && cov_at(35, 17) < 0.01f, "text box: first line \"A A\" below the box top");
+		CHECK(cov_at(35, 100) > 0.99f && cov_at(85, 100) < 0.01f, "text box: the last word wraps to the next line");
+		iam_lottie_free(a);
+		a = draw(doc(boxed(1), fonts), 0.0f);
+		CHECK(cov_at(90, 100) > 0.99f && cov_at(35, 100) < 0.01f, "text box: right-aligned to the box edge");
 		iam_lottie_free(a);
 	}
 

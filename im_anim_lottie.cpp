@@ -216,10 +216,11 @@ enum { FX_FILL = 1, FX_TINT, FX_BLUR, FX_SHADOW };
 struct effect_t { int kind; prop_t v[8]; };
 struct comp_t { int layer, layern, camera, has3d; };  // camera: layer index or -1
 struct marker_t { int name; float t, dur; };
-struct font_t { int name, family, style; };        // strings[]
+struct font_t { int name, family, style; float ascent; };  // names in strings[]; ascent in % of the size
 struct glyph_t { unsigned cp; int family, style; float w; int shapes, shapesn; };  // outlines at size 100
 struct textdoc_t {
 	float t, size, tracking, lh, sw;
+	float box[2], box_pos[2];  // paragraph text: box size (0 = point text) and top-left corner
 	int text, font, justify, fill, stroke, stroke_over;
 	float fc[3], sc[3];
 };
@@ -708,6 +709,13 @@ struct builder {
 				d.tracking = (float)D->num(sd, "tr", 0.0);
 				d.lh = (float)D->num(sd, "lh", d.size * 1.2);
 				d.justify = (int)D->num(sd, "j", 0.0);
+				auto pair = [&](char const* key, float* out) {
+					int const arr = D->get(sd, key);
+					int i = 0;
+					for (int c = D->type(arr) == J_ARR ? D->n[arr].child : -1; c >= 0 && i < 2; c = D->n[c].next) out[i++] = (float)D->num(c, 0.0);
+				};
+				pair("sz", d.box);
+				pair("ps", d.box_pos);
 				d.text = add_json_string(D->get(sd, "t"));
 				d.font = -1;
 				int const f = D->get(sd, "f");
@@ -734,6 +742,7 @@ struct builder {
 				ft.name = add_json_string(D->get(f, "fName"));
 				ft.family = add_json_string(D->get(f, "fFamily"));
 				ft.style = add_json_string(D->get(f, "fStyle"));
+				ft.ascent = (float)D->num(f, "ascent", 75.0);
 				L->fonts.push_back(ft);
 			}
 		int const chars = D->get(root, "chars");
@@ -2661,7 +2670,8 @@ struct ctx {
 		return any;
 	}
 
-	// Text layer: lines laid out from the embedded glyph outlines (point text; boxes do not wrap)
+	// Text layer: lines laid out from the embedded glyph outlines; paragraph text wraps at
+	// spaces to its box width (lottie-web: first baseline at the box top + the font ascent)
 	void draw_text(layer_t const& ly, mat const& W, float alpha, float lt) {
 		if (ly.docn == 0 || L->glyphs.Size == 0) return;
 		int di = 0;
@@ -2670,19 +2680,47 @@ struct ctx {
 		float const scale = d.size * 0.01f, track = d.tracking * 0.001f * d.size;
 		static geom g;  // draw_text is not re-entered
 		g.clear();
-		char const* line = L->strings.Data + d.text;
-		for (float y = 0.0f; ; y += d.lh) {
+		auto advance = [&](unsigned cp) { glyph_t const* gl = find_glyph(cp, d.font); return (gl ? gl->w * scale : 0.0f) + track; };
+		bool const boxed = d.box[0] > 0.0f;
+		// Lines: hard breaks, then (paragraph text) greedy wrapping at the last space that fits
+		static ImVector<char const*> lines;  // begin, end pairs
+		lines.resize(0);
+		for (char const* line = L->strings.Data + d.text; ; ) {
 			char const* e = line;
 			while (*e && *e != '\r' && *e != '\n' && *e != 3) e++;
-			float width = 0.0f;
-			for (char const* c = line; c < e; ) {
+			char const* ls = line;
+			char const* sp = nullptr;
+			float w = 0.0f;
+			for (char const* c = line; boxed && c < e; ) {
 				unsigned cp = 0;
-				c += ImTextCharFromUtf8(&cp, c, e);
-				glyph_t const* gl = find_glyph(cp, d.font);
-				width += (gl ? gl->w * scale : 0.0f) + track;
+				int const n = ImTextCharFromUtf8(&cp, c, e);
+				float const aw = advance(cp);
+				if (cp != ' ' && c > ls && w + aw > d.box[0]) {
+					char const* const brk = sp ? sp : c;
+					lines.push_back(ls); lines.push_back(brk);
+					ls = c = sp ? sp + 1 : c;
+					sp = nullptr; w = 0.0f;
+					continue;
+				}
+				if (cp == ' ') sp = c;
+				w += aw;
+				c += n;
 			}
-			float x = d.justify == 1 ? -width : d.justify == 2 ? -width * 0.5f : 0.0f;
-			for (char const* c = line; c < e; ) {
+			lines.push_back(ls); lines.push_back(e);
+			if (!*e) break;
+			line = e + 1;
+		}
+		float const ascent = d.font >= 0 ? L->fonts[d.font].ascent * d.size * 0.01f : d.size * 0.75f;
+		float y = boxed ? d.box_pos[1] + ascent : 0.0f;
+		for (int li = 0; li < lines.Size; li += 2, y += d.lh) {
+			char const* b = lines[li];
+			char const* e = lines[li + 1];
+			while (boxed && e > b && e[-1] == ' ') e--;  // wrapped lines align without their trailing spaces
+			float width = 0.0f;
+			for (char const* c = b; c < e; ) { unsigned cp = 0; c += ImTextCharFromUtf8(&cp, c, e); width += advance(cp); }
+			float x = boxed ? d.box_pos[0] + (d.justify == 1 ? d.box[0] - width : d.justify == 2 ? (d.box[0] - width) * 0.5f : 0.0f)
+			                : (d.justify == 1 ? -width : d.justify == 2 ? -width * 0.5f : 0.0f);
+			for (char const* c = b; c < e; ) {
 				unsigned cp = 0;
 				c += ImTextCharFromUtf8(&cp, c, e);
 				glyph_t const* gl = find_glyph(cp, d.font);
@@ -2690,8 +2728,6 @@ struct ctx {
 				collect_geom(gl->shapes, gl->shapesn, mul(W, mat_make(scale, 0, 0, scale, x, y)), lt, g);
 				x += gl->w * scale + track;
 			}
-			if (!*e) break;
-			line = e + 1;
 		}
 		float const a = collect ? 1.0f : ImSaturate(alpha);
 		float fcol[3] = { d.fc[0], d.fc[1], d.fc[2] }, scol[3] = { d.sc[0], d.sc[1], d.sc[2] };

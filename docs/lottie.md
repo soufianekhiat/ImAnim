@@ -137,7 +137,8 @@ Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded g
 - Merge paths (add, subtract, intersect, exclude) and offset path change how the
   shapes are filled; a stroke after them still follows the original paths, and an
   offset path fills the holes of the shapes it offsets.
-- Text boxes do not wrap; the text is laid out as point text.
+- Paragraph text wraps at spaces to its box width; text that overflows the box is not
+  shrunk or clipped.
 - Without the GPU path, blur and drop shadow are drawn without an offscreen layer: each shape's edge becomes a
   soft ramp (the shape stacked grown and shrunk across the edge), so a blur softens
   edges rather than mixing colours of shapes that touch, and directional blur is
