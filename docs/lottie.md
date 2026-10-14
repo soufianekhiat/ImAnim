@@ -62,7 +62,7 @@ animations were made for the demo and ship under ImAnim's license.
 ## What is supported
 
 - Layers: shape, solid, null, precomp (with time remap), text, parenting, auto-orient, in/out points, time stretch
-- 3D layers (position / anchor / scale in z, X / Y / Z rotation, orientation) seen through the comp's camera layer (zoom, point of interest, parenting) or After Effects' default 50 mm camera; 2D layers in the same comp stay flat
+- 3D layers (position / anchor / scale in z, X / Y / Z rotation, orientation) seen through the active camera layer (zoom, point of interest, parenting; cameras switch with their in / out points) or After Effects' default 50 mm camera; 2D layers in the same comp stay flat
 - Older Bodymovin exports are upgraded on load like lottie-web (0..255 colours, closed flags on shapes, single text documents)
 - Transforms: anchor, position (also split and curved motion paths), scale, rotation, skew, opacity
 - Keyframes: bezier easing (per component), hold keys, old (`e`) and new formats
@@ -146,9 +146,8 @@ Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded g
   it follows After Effects' description, each point turning by angle * (1 - d / R)
   around the centre, so it can differ from After Effects in detail.
 - 3D: consecutive 3D layers are sorted by the depth of their anchor point, as whole
-  layers (intersecting layers do not cut each other), the top camera layer is used for
-  the whole animation, and curves are projected through their control points (a
-  close-up in strong perspective can bend slightly differently).
+  layers (intersecting layers do not cut each other), and curves are projected through
+  their control points (a close-up in strong perspective can bend slightly differently).
 - Layer opacity is applied to each shape, not to the composited layer, so
   overlapping shapes of a translucent layer show through each other.
 - A repeater repeats the shapes and styles above it, not geometry seen by styles below it.

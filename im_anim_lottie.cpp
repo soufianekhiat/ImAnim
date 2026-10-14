@@ -590,7 +590,7 @@ struct builder {
 			}
 		cp.layern = L->layers.Size - cp.layer;
 		for (int i = cp.layer; i < cp.layer + cp.layern; i++) {
-			if (L->layers[i].ty == 13 && cp.camera < 0) cp.camera = i;  // shortcut: the top camera, not the one active at each time
+			if (L->layers[i].ty == 13 && cp.camera < 0) cp.camera = i;  // the top camera (the search for the active one starts there)
 			if (L->layers[i].ddd || L->layers[i].ty == 13) cp.has3d = 1;
 		}
 		// Parents and mattes refer to layers of the same composition
@@ -2930,9 +2930,12 @@ struct ctx {
 	m4 comp_view(float t, float* zoom) {
 		comp_t const& cp = L->comps[cur_comp];
 		*zoom = cur_w / 0.72f;  // 50 mm preset: horizontal view angle ~39.6 degrees
-		if (cp.camera < 0) return m4_translate(-cur_w * 0.5f, -cur_h * 0.5f, *zoom);
-		*zoom = pv(L->layers[cp.camera].pe, t, 0, *zoom);
-		return m4_inverse_affine(layer_world3(cp.camera, t, nullptr));
+		int cam = -1;  // the topmost camera active at t; none: the default camera
+		for (int i = cp.camera; i >= 0 && i < cp.layer + cp.layern && cam < 0; i++)
+			if (L->layers[i].ty == 13 && t >= L->layers[i].ip && t < L->layers[i].op) cam = i;
+		if (cam < 0) return m4_translate(-cur_w * 0.5f, -cur_h * 0.5f, *zoom);
+		*zoom = pv(L->layers[cam].pe, t, 0, *zoom);
+		return m4_inverse_affine(layer_world3(cam, t, nullptr));
 	}
 
 	mat layer_projected(int li, float t, float* opacity) {

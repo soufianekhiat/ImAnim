@@ -413,6 +413,19 @@ int main() {
 		a = draw(doc(cam + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.0f);
 		CHECK(cov_at(147, 103) > 0.99f && cov_at(97, 103) < 0.01f && strcmp(iam_lottie_warnings(a), "") == 0, "camera layer position");
 		iam_lottie_free(a);
+		// Cameras switch with their in / out points: the top one until frame 30, then the next
+		{
+			char two[700];
+			snprintf(two, sizeof(two),
+				"{\"ty\":13,\"ind\":9,\"ip\":0,\"op\":30,\"st\":0,\"pe\":{\"a\":0,\"k\":%g},\"ks\":{\"p\":{\"a\":0,\"k\":[50,100,%g]}}},"
+				"{\"ty\":13,\"ind\":8,\"ip\":30,\"op\":60,\"st\":0,\"pe\":{\"a\":0,\"k\":%g},\"ks\":{\"p\":{\"a\":0,\"k\":[150,100,%g]}}},", zoom, -zoom, zoom, -zoom);
+			a = draw(doc(two + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.5f);
+			CHECK(cov_at(147, 103) > 0.99f && cov_at(53, 103) < 0.01f, "first camera before its out point");
+			iam_lottie_free(a);
+			a = draw(doc(two + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 1.5f);
+			CHECK(cov_at(53, 103) > 0.99f && cov_at(147, 103) < 0.01f, "second camera after the switch");
+			iam_lottie_free(a);
+		}
 		// Two-node camera aimed at the layer from the right: the layer stays centred, seen at an angle
 		snprintf(cam, sizeof(cam), "{\"ty\":13,\"ind\":9,\"ip\":0,\"op\":60,\"st\":0,\"pe\":{\"a\":0,\"k\":%g},\"ks\":{\"p\":{\"a\":0,\"k\":[300,100,-200]},\"a\":{\"a\":0,\"k\":[100,100,0]}}},", zoom);
 		a = draw(doc(cam + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "")), 0.0f);
