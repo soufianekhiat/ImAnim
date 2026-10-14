@@ -2064,6 +2064,51 @@ static void offscreen_pass(ImDrawList* dl, int src, int dst, int pass, int mode,
 #endif
 
 // ----------------------------------------------------------------------------
+// Fast paths: Dear ImGui's own convex fill and thick polyline, for the common simple cases
+// ----------------------------------------------------------------------------
+
+// Convex and simple (turns one way, and x / y each change direction at most twice)
+static bool convex_simple(ImVec2 const* p, int n) {
+	if (n < 3) return false;
+	int sign = 0, xflips = 0, yflips = 0, xs = 0, ys = 0, xs0 = 0, ys0 = 0;
+	ImVec2 prev(0, 0);
+	bool have_prev = false;
+	for (int i = 0; i <= n; i++) {
+		ImVec2 const e(p[(i + 1) % n].x - p[i % n].x, p[(i + 1) % n].y - p[i % n].y);
+		if (e.x == 0.0f && e.y == 0.0f) continue;
+		if (have_prev) {
+			float const cr = prev.x * e.y - prev.y * e.x;
+			if (ImFabs(cr) > 1e-6f * (ImFabs(prev.x) + ImFabs(prev.y)) * (ImFabs(e.x) + ImFabs(e.y))) {
+				int const sg = cr > 0.0f ? 1 : -1;
+				if (sign == 0) sign = sg; else if (sg != sign) return false;
+			}
+		}
+		if (i < n) {
+			int const sx = e.x > 0.0f ? 1 : e.x < 0.0f ? -1 : 0, sy = e.y > 0.0f ? 1 : e.y < 0.0f ? -1 : 0;
+			if (sx) { if (xs && sx != xs) xflips++; if (!xs0) xs0 = sx; xs = sx; }
+			if (sy) { if (ys && sy != ys) yflips++; if (!ys0) ys0 = sy; ys = sy; }
+		}
+		prev = e;
+		have_prev = true;
+	}
+	if (xs && xs0 && xs != xs0) xflips++;  // wrap around
+	if (ys && ys0 && ys != ys0) yflips++;
+	return sign != 0 && xflips <= 2 && yflips <= 2;
+}
+
+// No turn sharper than ~60 degrees (where Dear ImGui's mitred thick lines differ from Lottie joins)
+static bool smooth_polyline(ImVec2 const* p, int n, bool closed) {
+	int const m = closed ? n : n - 2;
+	for (int i = 0; i < m; i++) {
+		ImVec2 const a = p[i], b = p[(i + 1) % n], c = p[(i + 2) % n];
+		ImVec2 const d0(b.x - a.x, b.y - a.y), d1(c.x - b.x, c.y - b.y);
+		float const l = ImSqrt((d0.x * d0.x + d0.y * d0.y) * (d1.x * d1.x + d1.y * d1.y));
+		if (l > 0.0f && (d0.x * d1.x + d0.y * d1.y) < 0.5f * l) return false;
+	}
+	return true;
+}
+
+// ----------------------------------------------------------------------------
 // Stroke outlines (pieces filled once with non-zero, so overlaps never darken)
 // ----------------------------------------------------------------------------
 
@@ -2654,6 +2699,18 @@ struct ctx {
 			if (collect) col |= IM_COL32_A_MASK;
 		}
 		ImVector<ImVec2> poly, segs;
+		bool const fast = !collect && !grad && nclips == 0 && soft <= 1.0f && !shadow;
+		if (!stroke && fast && g.cs.Size == 1 && g.soup.Size == 0) {
+			flatten_contour(g, g.cs[0], poly, tol);
+			if (convex_simple(poly.Data, poly.Size)) {
+				// One convex contour: every fill rule gives the same coverage
+				float area = 0.0f;
+				for (int i = 0; i < poly.Size; i++) { ImVec2 const a = poly[i], b = poly[(i + 1) % poly.Size]; area += a.x * b.y - b.x * a.y; }
+				if (area < 0.0f) for (int i = 0, j = poly.Size - 1; i < j; i++, j--) { ImVec2 const tmp = poly[i]; poly[i] = poly[j]; poly[j] = tmp; }  // ImGui's AA wants clockwise
+				dl->AddConvexPolyFilled(poly.Data, poly.Size, col);
+				return;
+			}
+		}
 		if (!stroke) {
 			for (int c = 0; c < g.cs.Size; c++) {
 				flatten_contour(g, g.cs[c], poly, tol);
@@ -2678,6 +2735,40 @@ struct ctx {
 			else if (np < 16) pattern[np++] = v;
 		}
 		if (np % 2 == 1 && np < 8) { for (int i = 0; i < np; i++) pattern[np + i] = pattern[i]; np *= 2; }  // odd patterns repeat twice
+		if (fast && np == 0 && (col >> IM_COL32_A_SHIFT) == 0xFF && hw >= 0.5f) {
+			// Opaque, undashed, no sharp turn: Dear ImGui's thick polyline (shared joints, no overlap)
+			ImVector<ImVec2>& lines = segs;  // reused as a flat list of the flattened contours
+			ImVector<int> counts;
+			bool ok = true;
+			for (int c = 0; c < g.cs.Size && ok; c++) {
+				flatten_contour(g, g.cs[c], poly, tol);
+				ok = poly.Size >= 2 && smooth_polyline(poly.Data, poly.Size, g.cs[c].closed);
+				for (int i = 0; i < poly.Size; i++) lines.push_back(poly[i]);
+				counts.push_back(poly.Size);
+			}
+			if (ok) {
+				int ofs = 0;
+				for (int c = 0; c < g.cs.Size; c++) {
+					ImVec2* pts = lines.Data + ofs;
+					int const n = counts[c];
+					bool const closed = g.cs[c].closed && n > 2;
+					if (!closed && sh.cap == 3) {
+						// Square caps: extend both ends by half the width
+						for (int e = 0; e < 2; e++) {
+							ImVec2& q = pts[e == 0 ? 0 : n - 1];
+							ImVec2 const r = pts[e == 0 ? 1 : n - 2];
+							float const dx = q.x - r.x, dy = q.y - r.y, l = ImSqrt(dx * dx + dy * dy);
+							if (l > 0.0f) { q.x += dx / l * hw; q.y += dy / l * hw; }
+						}
+					}
+					dl->AddPolyline(pts, n, col, closed ? ImDrawFlags_Closed : ImDrawFlags_None, hw * 2.0f);
+					if (!closed && sh.cap == 2) { dl->AddCircleFilled(pts[0], hw, col); dl->AddCircleFilled(pts[n - 1], hw, col); }
+					ofs += n;
+				}
+				return;
+			}
+			segs.resize(0);
+		}
 		for (int c = 0; c < g.cs.Size; c++) {
 			flatten_contour(g, g.cs[c], poly, tol);
 			if (np > 0) dash_polyline(segs, poly, g.cs[c].closed, pattern, np, dash_offset, hw, sh.cap, sh.join, sh.miter, tol);
