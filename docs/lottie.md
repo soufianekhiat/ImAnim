@@ -108,6 +108,19 @@ mask or matte use the CPU fill, so output is the same everywhere apart from
 anti-aliasing: the shader keeps the inside opaque and fades half a pixel outside,
 where the CPU fill fades across the edge.
 
+## Performance
+
+Every draw rebuilds the frame on the CPU. Single convex contours and smooth,
+opaque, undashed strokes go straight to `AddConvexPolyFilled` / `AddPolyline`; the
+rest uses the sweep fill, with its scratch buffers kept across draws (a few dozen
+allocations per draw on typical files).
+
+A draw repeated with the same time, position, size and clip (a paused animation,
+an icon drawn several times) replays the vertices recorded the second time it is
+seen: each animation keeps the last 8 such frames. Turn it off with
+`iam_lottie_set_cache(anim, false)` to save that memory on animations that never
+repeat a frame.
+
 ## Limits
 
 Reported by `iam_lottie_warnings()` and skipped: expressions, effects other than

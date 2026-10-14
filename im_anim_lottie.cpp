@@ -927,6 +927,9 @@ struct geom {
 	void begin(ImVec2 p) { contour c = { pts.Size, 1, false }; cs.push_back(c); pts.push_back(p); }
 	void cubic(ImVec2 c1, ImVec2 c2, ImVec2 p) { pts.push_back(c1); pts.push_back(c2); pts.push_back(p); cs.back().count += 3; }
 	void line(ImVec2 p) { ImVec2 const a = pts.back(); cubic(a, p, p); }  // Lottie convention: handles on the vertices
+	void clear() { pts.resize(0); cs.resize(0); soup.resize(0); rule = -1; }
+	// Takes o's buffers (modifiers build a new geometry, then replace the old one without copying)
+	void take(geom& o) { pts.swap(o.pts); cs.swap(o.cs); soup.swap(o.soup); rule = o.rule; }
 	void append(geom const& g) {
 		for (int i = 0; i < g.cs.Size; i++) { contour c = g.cs[i]; c.first += pts.Size; cs.push_back(c); }
 		for (int i = 0; i < g.pts.Size; i++) pts.push_back(g.pts[i]);
@@ -1009,7 +1012,7 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 	if (s > e) { float const t = s; s = e; e = t; }
 	if (e - s >= 1.0f) return;
 	geom out;
-	if (e - s <= 1e-6f) { out.rule = g.rule; out.soup.swap(g.soup); g = out; return; }
+	if (e - s <= 1e-6f) { out.rule = g.rule; out.soup.swap(g.soup); g.take(out); return; }
 	float start = s + o;
 	start -= ImFloor(start);
 	float const end = start + (e - s);
@@ -1045,7 +1048,7 @@ static void trim(geom& g, float s, float e, float o, int mode, float tol) {
 			out.polyline(piece.Data, piece.Size, false);
 		}
 	}
-	out.rule = g.rule; out.soup.swap(g.soup); g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g.take(out);
 }
 
 // Contour as vertices with absolute handles (in = handle before the vertex, out = after)
@@ -1088,7 +1091,7 @@ static void pucker_bloat(geom& g, float amount) {
 		}
 		add_contour_vertices(out, v, vin, vout, g.cs[ci].closed);
 	}
-	out.rule = g.rule; out.soup.swap(g.soup); g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g.take(out);
 }
 
 // Zig-zag: `ridges` points per segment (vertex to vertex), alternately pushed `size` to each
@@ -1149,7 +1152,7 @@ static void zigzag(geom& g, float size, int ridges, bool smooth, float tol) {
 		}
 		add_contour_vertices(out, v, vin, vout, c.closed);
 	}
-	out.rule = g.rule; out.soup.swap(g.soup); g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g.take(out);
 }
 
 // Reverses contour ci if needed so it fills with winding +1 (positive = true) or -1
@@ -1264,7 +1267,7 @@ static void round_corners(geom& g, float r) {
 		if (c.closed) out.cubic(vout.back(), vin[0], v[0]);
 		out.cs.back().closed = c.closed;
 	}
-	out.rule = g.rule; out.soup.swap(g.soup); g = out;
+	out.rule = g.rule; out.soup.swap(g.soup); g.take(out);
 }
 
 // ----------------------------------------------------------------------------
@@ -1408,7 +1411,8 @@ struct fill_writer {
 			return;
 		}
 		// Radial: not linear in position; evaluate on a small grid
-		float const cell = 4.0f;
+		// Cells scale with the radius: across one, t changes by at most ~1/20 (colours interpolate linearly inside)
+		float const cell = ImClamp(pe->inv_r > 0.0f ? 0.05f / pe->inv_r : 4.0f, 4.0f, 32.0f);
 		float x0 = FLT_MAX, y0 = FLT_MAX, x1 = -FLT_MAX, y1 = -FLT_MAX;
 		for (int i = 0; i < 4; ++i) { x0 = ImMin(x0, quad[i].p.x); y0 = ImMin(y0, quad[i].p.y); x1 = ImMax(x1, quad[i].p.x); y1 = ImMax(y1, quad[i].p.y); }
 		for (float gy = ImFloor(y0 / cell) * cell; gy < y1; gy += cell) {
@@ -1554,14 +1558,8 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 	float prev_bottom_y = -FLT_MAX;
 	int next = 0;
 
+	// Insertion sort: the active edges arrive in the previous slab's order, nearly sorted
 	auto sort_slab = [](ImVector<slab_edge>& v) {
-		if (v.Size > 24) {
-			ImQsort(v.Data, (size_t)v.Size, sizeof(slab_edge), [](void const* a, void const* b) -> int {
-				float const fa = ((slab_edge const*)a)->xa + ((slab_edge const*)a)->xb;
-				float const fb = ((slab_edge const*)b)->xa + ((slab_edge const*)b)->xb;
-				return fa < fb ? -1 : fa > fb ? 1 : 0; });
-			return;
-		}
 		for (int i = 1; i < v.Size; ++i) {
 			slab_edge const t = v[i];
 			float const key = t.xa + t.xb;
@@ -1688,9 +1686,11 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 	for (int yi = 0; yi + 1 < ys.Size; ++yi) {
 		float const ya = ys[yi], yb = ys[yi + 1];
 		while (next < edges.Size && edges[next].y0 <= ya) active.push_back(next++);
-		for (int k = 0; k < active.Size; ) {
-			if (edges[active[k]].y1 <= ya) { active[k] = active.back(); active.pop_back(); }
-			else ++k;
+		{
+			// Drop finished edges, keeping the order (it carries over from slab to slab)
+			int w2 = 0;
+			for (int k = 0; k < active.Size; ++k) if (edges[active[k]].y1 > ya) active[w2++] = active[k];
+			active.resize(w2);
 		}
 		if (ya > clip.w + aa) { flush_all(ya); break; }  // everything below is clipped
 		if (yb < clip.y - aa) { flush_all(ya); continue; }
@@ -1699,17 +1699,22 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 		sub_ys.resize(0);
 		sub_ys.push_back(ya);
 		int crossings = 0;
-		if (active.Size > 1 && yb - ya > 0.25f) {  // thinner slabs: crossing order is off by < 0.25 px anyway
+		if (active.Size > 1) {
 			slab.resize(0);
 			for (int k = 0; k < active.Size; ++k) {
 				fill_edge const& e = edges[active[k]];
 				slab_edge se = { edge_x_at(e, ya), edge_x_at(e, yb), 0, active[k], e.set };
 				slab.push_back(se);
 			}
-			ImQsort(slab.Data, (size_t)slab.Size, sizeof(slab_edge), [](void const* a, void const* b) -> int {
-				slab_edge const* ea = (slab_edge const*)a; slab_edge const* eb = (slab_edge const*)b;
-				if (ea->xa != eb->xa) return ea->xa < eb->xa ? -1 : 1;
-				return ea->xb < eb->xb ? -1 : ea->xb > eb->xb ? 1 : 0; });
+			// By top x then bottom x; linear on the order kept from the previous slab
+			for (int i = 1; i < slab.Size; ++i) {
+				slab_edge const t = slab[i];
+				int j = i - 1;
+				while (j >= 0 && (slab[j].xa > t.xa || (slab[j].xa == t.xa && slab[j].xb > t.xb))) { slab[j + 1] = slab[j]; --j; }
+				slab[j + 1] = t;
+			}
+		}
+		if (active.Size > 1 && yb - ya > 0.25f) {  // thinner slabs: crossing order is off by < 0.25 px anyway
 			int const max_exact = 16;
 			for (int i = 1; i < slab.Size; ++i) {
 				slab_edge const t = slab[i];
@@ -1734,6 +1739,8 @@ static void fill_segments(ImDrawList* dl, ImVec2 const* seg_pts, int seg_count, 
 				for (int k = 1; k < n; ++k) sub_ys.push_back(ya + (yb - ya) * (float)k / (float)n);
 			}
 		}
+		if (active.Size > 1)
+			for (int k = 0; k < slab.Size; ++k) active[k] = slab[k].id;  // carry the order to the next slab
 		sub_ys.push_back(yb);
 		if (sub_ys.Size > 2)
 			ImQsort(sub_ys.Data, (size_t)sub_ys.Size, sizeof(float), [](void const* a, void const* b) -> int {
@@ -2150,7 +2157,9 @@ static void add_circle(ImVector<ImVec2>& segs, ImVec2 c, float r, float tol) {
 
 // cap: 1 butt, 2 round, 3 square; join: 1 miter, 2 round, 3 bevel
 static void stroke_polyline(ImVector<ImVec2>& segs, ImVec2 const* in, int n_in, bool closed, float hw, int cap, int join, float miter, float tol) {
-	ImVector<ImVec2> q;
+	// Scratch kept across calls (not re-entered)
+	static ImVector<ImVec2> q, d, A, B, rb;
+	q.resize(0); A.resize(0); B.resize(0); rb.resize(0);
 	for (int i = 0; i < n_in; i++)
 		if (q.Size == 0 || ImFabs(in[i].x - q.back().x) > 1e-4f || ImFabs(in[i].y - q.back().y) > 1e-4f) q.push_back(in[i]);
 	if (closed && q.Size > 1 && ImFabs(q[0].x - q.back().x) <= 1e-4f && ImFabs(q[0].y - q.back().y) <= 1e-4f) q.pop_back();
@@ -2164,7 +2173,6 @@ static void stroke_polyline(ImVector<ImVec2>& segs, ImVec2 const* in, int n_in, 
 	}
 	if (m == 2) closed = false;
 	int const nseg = closed ? m : m - 1;
-	ImVector<ImVec2> d;
 	d.resize(nseg);
 	for (int i = 0; i < nseg; i++) {
 		ImVec2 const a = q[i], b = q[(i + 1) % m];
@@ -2174,7 +2182,6 @@ static void stroke_polyline(ImVector<ImVec2>& segs, ImVec2 const* in, int n_in, 
 	// Outline: the offset chain of each side (one loop when open, two when closed). The
 	// straight link between offsets is the bevel; on the inner side the chain goes through
 	// the vertex itself, so inner overlaps add up under non-zero instead of cancelling.
-	ImVector<ImVec2> A, B;
 	for (int i = 0; i < nseg; i++) {
 		ImVec2 const a = q[i], b = q[(i + 1) % m], nn(-d[i].y * hw, d[i].x * hw);
 		if (i > 0 || closed) {
@@ -2190,7 +2197,6 @@ static void stroke_polyline(ImVector<ImVec2>& segs, ImVec2 const* in, int n_in, 
 		A[0].x -= d0.x * hw; A[0].y -= d0.y * hw; B[0].x -= d0.x * hw; B[0].y -= d0.y * hw;
 		A.back().x += d1.x * hw; A.back().y += d1.y * hw; B.back().x += d1.x * hw; B.back().y += d1.y * hw;
 	}
-	ImVector<ImVec2> rb;
 	for (int i = B.Size - 1; i >= 0; i--) rb.push_back(B[i]);
 	if (!closed) { for (int i = 0; i < rb.Size; i++) A.push_back(rb[i]); rb.resize(0); }
 	float area = 0.0f;
@@ -2256,7 +2262,8 @@ static void dash_polyline(ImVector<ImVec2>& segs, ImVector<ImVec2> const& p, boo
 	while (phase >= ImMax(pattern[idx], 0.0f)) { phase -= ImMax(pattern[idx], 0.0f); idx = (idx + 1) % count; }
 	float left = ImMax(pattern[idx], 0.0f) - phase;
 	bool on = (idx % 2) == 0;
-	ImVector<ImVec2> piece;
+	static ImVector<ImVec2> piece;
+	piece.resize(0);
 	if (on) piece.push_back(p[0]);
 	int const n = closed ? p.Size : p.Size - 1;
 	for (int i = 0; i < n; i++) {
@@ -2519,7 +2526,7 @@ struct ctx {
 				int const n = star ? pts * 2 : pts;
 				float const dir = rev ? -1.0f : 1.0f;
 				float const step = 2.0f * IM_PI / n;
-				ImVector<float> v;
+				static ImVector<float> v;
 				v.resize(n * 6);
 				float ang = -IM_PI * 0.5f + rotation;
 				for (int i = 0; i < n; i++) {
@@ -2553,7 +2560,10 @@ struct ctx {
 				case SK_GROUP: {
 					if (depth > 64) break;
 					depth++;
-					geom sub;
+					// Pool by depth: nested collections are always deeper than the one using them
+					static geom s_sub[66];
+					geom& sub = s_sub[depth];
+					sub.clear();
 					collect_geom(sh.child, sh.childn, mul(M, xform(sh.tr, t, nullptr)), t, sub);
 					depth--;
 					out.append(sub);
@@ -2709,7 +2719,8 @@ struct ctx {
 			col = ImGui::ColorConvertFloat4ToU32(ImVec4(rgb[0], rgb[1], rgb[2], ImSaturate(a) * ImSaturate(opacity)));
 			if (collect) col |= IM_COL32_A_MASK;
 		}
-		ImVector<ImVec2> poly, segs;
+		static ImVector<ImVec2> poly, segs;  // draw_style is not re-entered
+		poly.resize(0); segs.resize(0);
 		bool const fast = !collect && !grad && nclips == 0 && soft <= 1.0f && !shadow;
 		if (!stroke && fast && g.cs.Size == 1 && g.soup.Size == 0) {
 			flatten_contour(g, g.cs[0], poly, tol);
@@ -2749,7 +2760,8 @@ struct ctx {
 		if (fast && np == 0 && (col >> IM_COL32_A_SHIFT) == 0xFF && hw >= 0.5f) {
 			// Opaque, undashed, no sharp turn: Dear ImGui's thick polyline (shared joints, no overlap)
 			ImVector<ImVec2>& lines = segs;  // reused as a flat list of the flattened contours
-			ImVector<int> counts;
+			static ImVector<int> counts;
+			counts.resize(0);
 			bool ok = true;
 			for (int c = 0; c < g.cs.Size && ok; c++) {
 				flatten_contour(g, g.cs[c], poly, tol);
@@ -2772,7 +2784,11 @@ struct ctx {
 							if (l > 0.0f) { q.x += dx / l * hw; q.y += dy / l * hw; }
 						}
 					}
+#if IMGUI_VERSION_NUM < 19276  // AddPolyline(): 'thickness' and 'flags' were swapped in Dear ImGui 1.92.8
 					dl->AddPolyline(pts, n, col, closed ? ImDrawFlags_Closed : ImDrawFlags_None, hw * 2.0f);
+#else
+					dl->AddPolyline(pts, n, col, hw * 2.0f, closed ? ImDrawFlags_Closed : ImDrawFlags_None);
+#endif
 					if (!closed && sh.cap == 2) { dl->AddCircleFilled(pts[0], hw, col); dl->AddCircleFilled(pts[n - 1], hw, col); }
 					ofs += n;
 				}
@@ -2796,7 +2812,8 @@ struct ctx {
 			if (sh.hidden) continue;
 			switch (sh.kind) {
 				case SK_FILL: case SK_STROKE: case SK_GFILL: case SK_GSTROKE: {
-					geom g;
+					static geom g;  // only alive within this style (styles do not draw groups)
+					g.clear();
 					collect_geom(ofs, i, M, t, g);
 					draw_style(sh, g, M, alpha, t);
 					break;
