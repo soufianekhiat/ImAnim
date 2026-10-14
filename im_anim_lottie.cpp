@@ -2926,16 +2926,19 @@ struct ctx {
 
 	// 3D layer in a comp of size cw x ch: its plane through the comp camera (or After
 	// Effects' default 50 mm camera) as a projective 2D transform
-	mat layer_projected(int li, float t, float* opacity) {
+	// World to camera space of the current comp (camera looking down +z) and its zoom
+	m4 comp_view(float t, float* zoom) {
 		comp_t const& cp = L->comps[cur_comp];
+		*zoom = cur_w / 0.72f;  // 50 mm preset: horizontal view angle ~39.6 degrees
+		if (cp.camera < 0) return m4_translate(-cur_w * 0.5f, -cur_h * 0.5f, *zoom);
+		*zoom = pv(L->layers[cp.camera].pe, t, 0, *zoom);
+		return m4_inverse_affine(layer_world3(cp.camera, t, nullptr));
+	}
+
+	mat layer_projected(int li, float t, float* opacity) {
 		float const cx = cur_w * 0.5f, cy = cur_h * 0.5f;
-		float zoom = cur_w / 0.72f;  // 50 mm preset: horizontal view angle ~39.6 degrees
-		m4 view = m4_translate(-cx, -cy, zoom);
-		if (cp.camera >= 0) {
-			layer_t const& cam = L->layers[cp.camera];
-			zoom = pv(cam.pe, t, 0, zoom);
-			view = m4_inverse_affine(layer_world3(cp.camera, t, nullptr));
-		}
+		float zoom;
+		m4 const view = comp_view(t, &zoom);
 		m4 const K = m4_mul(view, layer_world3(li, t, opacity));
 		mat H;
 		H.a = zoom * K.m[0] + cx * K.m[8]; H.c = zoom * K.m[1] + cx * K.m[9]; H.x = zoom * K.m[3] + cx * K.m[11];
@@ -3141,12 +3144,38 @@ struct ctx {
 		int const prev_comp = cur_comp;
 		float const prev_w = cur_w, prev_h = cur_h;
 		cur_comp = ci; cur_w = cw; cur_h = ch;
+		// Consecutive 3D layers draw far to near (After Effects' depth sort by anchor point
+		// distance along the camera axis; ties keep the layer order, 2D layers break the runs)
+		static ImVector<ImVec2> s_run[34];  // (camera z, layer), by depth: precomps nest deeper
+		ImVector<ImVec2>& run = s_run[ImMin(depth, 33)];
+		run.resize(0);
+		float zoom = 0.0f;
+		m4 const view = cp.has3d ? comp_view(t, &zoom) : m4_id();
+		auto flush = [&]() {
+			for (int i = 1; i < run.Size; ++i) {  // stable insertion sort, farthest first
+				ImVec2 const v = run[i];
+				int j = i - 1;
+				while (j >= 0 && run[j].x < v.x) { run[j + 1] = run[j]; --j; }
+				run[j + 1] = v;
+			}
+			for (int i = 0; i < run.Size; ++i) render_layer((int)run[i].y, t, M, alpha);
+			run.resize(0);
+		};
 		for (int i = cp.layern - 1; i >= 0; --i) {
 			layer_t const& ly = L->layers[cp.layer + i];
 			if (ly.td || ly.hidden || ly.ty == 3 || ly.ty == 13) continue;  // matte sources are drawn through the layer they matte
 			if (t < ly.ip || t >= ly.op) continue;
+			if (cp.has3d && ly.ddd) {
+				float an[3];
+				pv3(ly.ks.a, t, 0.0f, an);
+				m4 const K = m4_mul(view, layer_world3(cp.layer + i, t, nullptr));
+				run.push_back(ImVec2(K.m[8] * an[0] + K.m[9] * an[1] + K.m[10] * an[2] + K.m[11], (float)(cp.layer + i)));
+				continue;
+			}
+			flush();
 			render_layer(cp.layer + i, t, M, alpha);
 		}
+		flush();
 		cur_comp = prev_comp; cur_w = prev_w; cur_h = prev_h;
 	}
 };

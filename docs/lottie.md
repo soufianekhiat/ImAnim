@@ -145,7 +145,8 @@ Fill, Tint, Gaussian blur and drop shadow, image layers, text without embedded g
 - Twist has no reference implementation (lottie-web, Skottie, ThorVG and rlottie skip it):
   it follows After Effects' description, each point turning by angle * (1 - d / R)
   around the centre, so it can differ from After Effects in detail.
-- 3D: layers draw in file order (no depth sorting), the top camera layer is used for
+- 3D: consecutive 3D layers are sorted by the depth of their anchor point, as whole
+  layers (intersecting layers do not cut each other), the top camera layer is used for
   the whole animation, and curves are projected through their control points (a
   close-up in strong perspective can bend slightly differently).
 - Layer opacity is applied to each shape, not to the composited layer, so

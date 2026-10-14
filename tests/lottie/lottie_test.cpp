@@ -423,6 +423,22 @@ int main() {
 		a = draw(doc(null3d + layer3d("\"p\":{\"a\":0,\"k\":[100,100,0]}", "\"parent\":5,")), 0.0f);
 		CHECK(cov_at(147, 103) > 0.99f && cov_at(97, 103) < 0.01f, "3D parenting");
 		iam_lottie_free(a);
+		// Depth sort: the top layer (red) is farther than the bottom one (green), so green draws over it;
+		// at equal depth the layer order holds
+		auto colored3d = [](int ind, float z, char const* rgb) {
+			char b[200];
+			snprintf(b, sizeof(b), "{\"ty\":4,\"ind\":%d,\"ddd\":1,\"ip\":0,\"op\":60,\"st\":0,\"ks\":{\"p\":{\"a\":0,\"k\":[100,100,%g]}},\"shapes\":[", ind, z);
+			return std::string(b) + group(rect(0, 0, 40, 40) + ",{\"ty\":\"fl\",\"c\":{\"a\":0,\"k\":[" + rgb + ",1]},\"o\":{\"a\":0,\"k\":100},\"r\":1}") + "]}";
+		};
+		float rgb[3];
+		a = draw(doc(colored3d(1, 200.0f, "1,0,0") + "," + colored3d(2, 0.0f, "0,1,0")), 0.0f);
+		cov_at(100, 100, rgb);
+		CHECK(rgb[1] > 0.99f && rgb[0] < 0.01f, "3D depth sort: the nearer layer covers the farther one (rgb %.2f %.2f)", rgb[0], rgb[1]);
+		iam_lottie_free(a);
+		a = draw(doc(colored3d(1, 0.0f, "1,0,0") + "," + colored3d(2, 0.0f, "0,1,0")), 0.0f);
+		cov_at(100, 100, rgb);
+		CHECK(rgb[0] > 0.99f && rgb[1] < 0.01f, "3D depth sort: equal depth keeps the layer order");
+		iam_lottie_free(a);
 	}
 
 	// ---------------- Text layers with embedded glyphs ----------------
