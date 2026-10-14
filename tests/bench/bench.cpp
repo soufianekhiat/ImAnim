@@ -1,8 +1,10 @@
 // Performance benchmarks: per-frame cost of common workloads. Prints a table; fails only on gross
 // regressions (generous limits, CI machines vary). Build optimized (-O2).
 #include "im_anim.h"
+#include "im_anim_lottie.h"
 #include "imgui_internal.h"
 #include <stdio.h>
+#include <string>
 #include <chrono>
 
 static int g_fail = 0;
@@ -121,6 +123,39 @@ int main() {
 			iam_show_clip_editor(clip);
 		});
 		report({ "clip editor frame (20 tracks x 8)", 1, ms, 10.0 });
+	}
+
+	{   // Lottie: 24 rotating groups (star + gradient ellipse with animated size + stroke), 8 draws of 256 px per frame
+		std::string sh;
+		char buf[1024];
+		for (int g = 0; g < 24; g++) {
+			float const x = (float)(g % 6) * 32.0f - 80.0f, y = (float)(g / 6) * 40.0f - 60.0f;
+			snprintf(buf, sizeof(buf),
+				"%s{\"ty\":\"gr\",\"it\":["
+				"{\"ty\":\"sr\",\"sy\":1,\"pt\":{\"a\":0,\"k\":5},\"p\":{\"a\":0,\"k\":[%g,%g]},\"r\":{\"a\":0,\"k\":0},\"ir\":{\"a\":0,\"k\":6},\"or\":{\"a\":0,\"k\":14},\"is\":{\"a\":0,\"k\":0},\"os\":{\"a\":0,\"k\":0}},"
+				"{\"ty\":\"el\",\"p\":{\"a\":0,\"k\":[%g,%g]},\"s\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[8,8],\"o\":{\"x\":[0.4],\"y\":[0]},\"i\":{\"x\":[0.6],\"y\":[1]}},{\"t\":60,\"s\":[30,22]}]}},"
+				"{\"ty\":\"st\",\"c\":{\"a\":0,\"k\":[0.1,0.1,0.2,1]},\"o\":{\"a\":0,\"k\":100},\"w\":{\"a\":0,\"k\":2},\"lc\":2,\"lj\":2},"
+				"{\"ty\":\"gf\",\"t\":1,\"s\":{\"a\":0,\"k\":[%g,%g]},\"e\":{\"a\":0,\"k\":[%g,%g]},\"g\":{\"p\":2,\"k\":{\"a\":0,\"k\":[0,1,0.5,0,1,0.2,0.4,1]}},\"o\":{\"a\":0,\"k\":100},\"r\":1},"
+				"{\"ty\":\"tr\",\"p\":{\"a\":0,\"k\":[0,0]},\"a\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[100,100]},\"r\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[0],\"o\":{\"x\":[0.4],\"y\":[0]},\"i\":{\"x\":[0.6],\"y\":[1]}},{\"t\":120,\"s\":[%d]}]},\"o\":{\"a\":0,\"k\":100}}]}",
+				g ? "," : "", x, y, x, y, x - 15, y, x + 15, y, g % 2 ? 360 : -360);
+			sh += buf;
+		}
+		std::string const json = "{\"v\":\"5.7.0\",\"fr\":60,\"ip\":0,\"op\":120,\"w\":256,\"h\":256,\"layers\":[{\"ty\":4,\"ind\":1,\"ip\":0,\"op\":120,\"st\":0,"
+			"\"ks\":{\"o\":{\"a\":0,\"k\":100},\"r\":{\"a\":0,\"k\":0},\"p\":{\"a\":0,\"k\":[128,128]},\"a\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[100,100]}},"
+			"\"shapes\":[" + sh + "]}]}";
+		iam_lottie* anim = iam_lottie_load_from_memory(json.data(), json.size());
+		if (!anim || iam_lottie_warnings(anim)[0]) { printf("lottie bench animation failed to load: %s\n", anim ? iam_lottie_warnings(anim) : "null"); g_fail++; }
+		else {
+			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // replay cache: draw lists past 64k vertices
+			auto draw = [&](int f, bool live) {
+				ImDrawList* dl = ImGui::GetForegroundDrawList();
+				for (int k = 0; k < 8; k++)
+					iam_lottie_draw(dl, anim, live ? (f + k * 15) / 60.0f : k * 0.25f, iam_v2((k % 4) * 260.0f, (k / 4) * 260.0f), iam_v2(256, 256));
+			};
+			report({ "lottie draw (24 groups, live)", 8, measure(frames, [&](int f) { draw(f, true); }), 60.0 });
+			report({ "lottie draw (repeated frames)", 8, measure(frames, [&](int f) { draw(f, false); }), 10.0 });
+			iam_lottie_free(anim);
+		}
 	}
 
 	ImGui::DestroyContext();
