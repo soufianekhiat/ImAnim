@@ -749,9 +749,11 @@ struct base_chan {
 	unsigned has_pending;
 	unsigned sleeping;
 	T		pending_target;
+	T		base;  // relative policies: the value the delta / factor applies to
 
 	base_chan() {
 		current = chan_traits<T>::default_value();
+		base = current;
 		start = current;
 		target = current;
 		pending_target = chan_traits<T>::default_value();
@@ -798,6 +800,12 @@ struct base_chan {
 	void tick(float) { evaluate(); }
 };
 
+// iam_policy_additive / iam_policy_multiply: the absolute target from the base value and the delta / factor
+inline float  rel_target(float b, float d, int pol)   { return pol == iam_policy_multiply ? b * d : b + d; }
+inline int    rel_target(int b, int d, int pol)       { return pol == iam_policy_multiply ? b * d : b + d; }
+inline ImVec2 rel_target(ImVec2 b, ImVec2 d, int pol) { return ImVec2(rel_target(b.x, d.x, pol), rel_target(b.y, d.y, pol)); }
+inline ImVec4 rel_target(ImVec4 b, ImVec4 d, int pol) { return ImVec4(rel_target(b.x, d.x, pol), rel_target(b.y, d.y, pol), rel_target(b.z, d.z, pol), rel_target(b.w, d.w, pol)); }
+
 // Concrete channel types using the base template
 using float_chan = base_chan<float>;
 using vec2_chan = base_chan<ImVec2>;
@@ -814,9 +822,11 @@ struct color_chan {
 	int		space;
 	unsigned last_seen_frame;
 	unsigned sleeping;
+	ImVec4	base;  // relative policies: the value the delta / factor applies to
 
 	color_chan() {
 		current = ImVec4(1, 1, 1, 1);
+		base = current;
 		start = current;
 		target = current;
 		dur = MIN_DURATION;
@@ -1216,6 +1226,10 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
 	float_chan* c = g_float.try_get(key);
 	bool const is_new = (c == nullptr);
+	// Relative policies: the target is a delta / factor on the base value (the value when the policy started)
+	bool const relative = policy == iam_policy_additive || policy == iam_policy_multiply;
+	float const base = !relative ? 0.0f : is_new ? init_value : c->policy == policy ? c->base : c->evaluate();
+	if (relative) target = rel_target(base, target, policy);
 
 	if (is_new) {
 		if (g_lazy_init_enabled && fabsf(target - init_value) <= 1e-6f) {
@@ -1224,6 +1238,7 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 		c = g_float.get(key);
 		c->current = c->start = c->target = init_value;
 	}
+	if (relative) c->base = base;
 
 	// Fast path: sleeping and target unchanged
 	if (c->sleeping && fabsf(c->target - target) <= 1e-6f && !c->has_pending) {
@@ -1244,14 +1259,6 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 		else if (policy == iam_policy_cut) {
 			c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1;
 		}
-		else if (policy == iam_policy_additive) {
-			c->evaluate();
-			c->set(c->current + target, dur, ez, policy);
-		}
-		else if (policy == iam_policy_multiply) {
-			c->evaluate();
-			c->set(c->current * target, dur, ez, policy);
-		}
 		else {
 			c->evaluate();  // Update current before setting new target
 			c->set(target, dur, ez, policy);
@@ -1268,6 +1275,10 @@ static ImVec2 iam_tween_vec2_impl(ImGuiID id, ImGuiID channel_id, ImVec2 target,
 	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
 	vec2_chan* c = g_vec2.try_get(key);
 	bool const is_new = (c == nullptr);
+	// Relative policies: the target is a delta / factor on the base value (the value when the policy started)
+	bool const relative = policy == iam_policy_additive || policy == iam_policy_multiply;
+	ImVec2 const base = !relative ? ImVec2(0, 0) : is_new ? init_value : c->policy == policy ? c->base : c->evaluate();
+	if (relative) target = rel_target(base, target, policy);
 
 	if (is_new) {
 		if (g_lazy_init_enabled && fabsf(target.x - init_value.x) + fabsf(target.y - init_value.y) <= 1e-6f) {
@@ -1276,6 +1287,7 @@ static ImVec2 iam_tween_vec2_impl(ImGuiID id, ImGuiID channel_id, ImVec2 target,
 		c = g_vec2.get(key);
 		c->current = c->start = c->target = init_value;
 	}
+	if (relative) c->base = base;
 
 	if (c->sleeping && fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) <= 1e-6f && !c->has_pending) {
 		return c->current;
@@ -1290,8 +1302,6 @@ static ImVec2 iam_tween_vec2_impl(ImGuiID id, ImGuiID channel_id, ImVec2 target,
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else if (policy == iam_policy_additive) { c->evaluate(); c->set(ImVec2(c->current.x + target.x, c->current.y + target.y), dur, ez, policy); }
-		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(ImVec2(c->current.x * target.x, c->current.y * target.y), dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1305,6 +1315,10 @@ static ImVec4 iam_tween_vec4_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target,
 	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
 	vec4_chan* c = g_vec4.try_get(key);
 	bool const is_new = (c == nullptr);
+	// Relative policies: the target is a delta / factor on the base value (the value when the policy started)
+	bool const relative = policy == iam_policy_additive || policy == iam_policy_multiply;
+	ImVec4 const base = !relative ? ImVec4(0, 0, 0, 0) : is_new ? init_value : c->policy == policy ? c->base : c->evaluate();
+	if (relative) target = rel_target(base, target, policy);
 
 	if (is_new) {
 		if (g_lazy_init_enabled && fabsf(target.x - init_value.x) + fabsf(target.y - init_value.y) + fabsf(target.z - init_value.z) + fabsf(target.w - init_value.w) <= 1e-6f) {
@@ -1313,6 +1327,7 @@ static ImVec4 iam_tween_vec4_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target,
 		c = g_vec4.get(key);
 		c->current = c->start = c->target = init_value;
 	}
+	if (relative) c->base = base;
 
 	if (c->sleeping && fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) <= 1e-6f && !c->has_pending) {
 		return c->current;
@@ -1327,8 +1342,6 @@ static ImVec4 iam_tween_vec4_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target,
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else if (policy == iam_policy_additive) { c->evaluate(); c->set(ImVec4(c->current.x+target.x, c->current.y+target.y, c->current.z+target.z, c->current.w+target.w), dur, ez, policy); }
-		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(ImVec4(c->current.x*target.x, c->current.y*target.y, c->current.z*target.z, c->current.w*target.w), dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1342,6 +1355,10 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
 	int_chan* c = g_int.try_get(key);
 	bool const is_new = (c == nullptr);
+	// Relative policies: the target is a delta / factor on the base value (the value when the policy started)
+	bool const relative = policy == iam_policy_additive || policy == iam_policy_multiply;
+	int const base = !relative ? 0 : is_new ? init_value : c->policy == policy ? c->base : c->evaluate();
+	if (relative) target = rel_target(base, target, policy);
 
 	if (is_new) {
 		if (g_lazy_init_enabled && target == init_value) {
@@ -1350,6 +1367,7 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 		c = g_int.get(key);
 		c->current = c->start = c->target = init_value;
 	}
+	if (relative) c->base = base;
 
 	if (c->sleeping && c->target == target && !c->has_pending) { return c->current; }
 
@@ -1362,8 +1380,6 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 	if (change) {
 		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
-		else if (policy == iam_policy_additive) { c->evaluate(); c->set(c->current + target, dur, ez, policy); }
-		else if (policy == iam_policy_multiply) { c->evaluate(); c->set(c->current * target, dur, ez, policy); }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
 	if (anim_complete && c->has_pending) { c->set(c->pending_target, dur, ez, policy); c->has_pending = 0; }
@@ -1377,6 +1393,10 @@ static ImVec4 iam_tween_color_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target
 	// Lazy init: if channel doesn't exist and target equals init_value, skip channel creation
 	color_chan* c = g_color.try_get(key);
 	bool const is_new = (c == nullptr);
+	// Relative policies: the target is a delta / factor on the base value (the value when the policy started)
+	bool const relative = policy == iam_policy_additive || policy == iam_policy_multiply;
+	ImVec4 const base = !relative ? ImVec4(0, 0, 0, 0) : is_new ? init_value : c->policy == policy ? c->base : c->evaluate();
+	if (relative) target_srgb = rel_target(base, target_srgb, policy);
 
 	if (is_new) {
 		if (g_lazy_init_enabled && fabsf(target_srgb.x - init_value.x) + fabsf(target_srgb.y - init_value.y) + fabsf(target_srgb.z - init_value.z) + fabsf(target_srgb.w - init_value.w) <= 1e-6f) {
@@ -1385,6 +1405,7 @@ static ImVec4 iam_tween_color_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target
 		c = g_color.get(key);
 		c->current = c->start = c->target = init_value;
 	}
+	if (relative) c->base = base;
 
 	if (c->sleeping && (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w)) <= 1e-6f) { return c->current; }
 
@@ -1396,16 +1417,6 @@ static ImVec4 iam_tween_color_impl(ImGuiID id, ImGuiID channel_id, ImVec4 target
 	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || anim_complete;
 	if (change) {
 		if (policy == iam_policy_cut) { c->current = c->start = c->target = target_srgb; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->space = color_space; c->sleeping = 1; }
-		else if (policy == iam_policy_additive) {
-			c->evaluate();
-			ImVec4 add_target(c->current.x+target_srgb.x, c->current.y+target_srgb.y, c->current.z+target_srgb.z, c->current.w+target_srgb.w);
-			c->set(add_target, dur, ez, policy, color_space);
-		}
-		else if (policy == iam_policy_multiply) {
-			c->evaluate();
-			ImVec4 mul_target(c->current.x*target_srgb.x, c->current.y*target_srgb.y, c->current.z*target_srgb.z, c->current.w*target_srgb.w);
-			c->set(mul_target, dur, ez, policy, color_space);
-		}
 		else { c->evaluate(); c->set(target_srgb, dur, ez, policy, color_space); }
 	}
 	return c->evaluate();

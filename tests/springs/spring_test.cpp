@@ -97,6 +97,21 @@ int main() {
 
 	CHECK(!iam_tween_is_active(999, 999) && iam_tween_progress(999, 999) == 1.0f && iam_tween_velocity_float(999, 999) == 0.0f, "unknown channel: inactive/1/0");
 
+	// --- Relative policies: the delta / factor applies to the base value once, called every frame
+	float add = 0, mul = 0;
+	iam_vec2 add2 = iam_v2(0, 0);
+	for (int f = 0; f < 90; f++) {
+		begin_frame();
+		add = iam_tween_float(7, 1, 10.0f, 0.5f, lin, iam_policy_additive, dt, 100.0f);
+		mul = iam_tween_float(7, 2, 2.0f, 0.5f, lin, iam_policy_multiply, dt, 100.0f);
+		add2 = iam_tween_vec2(7, 3, iam_v2(5, -5), 0.5f, lin, iam_policy_additive, dt, iam_v2(1, 1));
+		end_frame();
+	}
+	CHECK(add == 110.0f && mul == 200.0f, "additive / multiply settle on base + delta / base * factor (%.2f, %.2f)", add, mul);
+	CHECK(IAM_VEC2_TO_IM(add2).x == 6.0f && IAM_VEC2_TO_IM(add2).y == -4.0f, "additive vec2 settles on base + delta");
+	for (int f = 0; f < 60; f++) { begin_frame(); add = iam_tween_float(7, 1, 30.0f, 0.5f, lin, iam_policy_additive, dt, 100.0f); end_frame(); }
+	CHECK(add == 130.0f, "a new delta retargets from the same base (%.2f)", add);
+
 	ImGui::DestroyContext();
 	printf("%s (%d failures)\n", g_fail ? "FAILED" : "ALL PASSED", g_fail);
 	return g_fail ? 1 : 0;

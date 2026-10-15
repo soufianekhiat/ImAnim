@@ -119,8 +119,8 @@ enum iam_policy {
 	iam_policy_crossfade = 0,	// smooth into new target
 	iam_policy_cut,				// snap to target
 	iam_policy_queue,			// queue one pending target
-	iam_policy_additive,		// add animated delta to current value
-	iam_policy_multiply			// multiply current value by animated factor
+	iam_policy_additive,		// target is a delta: tween to base + target (base = the value when this policy started)
+	iam_policy_multiply			// target is a factor: tween to base * target
 };
 
 enum iam_color_space {
