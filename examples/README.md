@@ -64,7 +64,7 @@ examples/
 │   ├── imgui/             # Dear ImGui
 │   ├── ImPlatform/        # ImPlatform abstraction
 │   └── Sharpmake/         # Sharpmake build generator
-├── sharpmake/             # Build configurationconfiguration
+├── sharpmake/             # Build configuration
 ├── tools/                 # Sharpmake binaries (after bootstrap)
 ├── bootstrap.bat          # Windows bootstrap script
 ├── bootstrap.sh           # Linux/macOS bootstrap script
@@ -102,7 +102,7 @@ All examples include proper high DPI support:
 
 To add ImAnim to your existing project:
 
-1. Copy `im_anim.h` and `im_anim.cpp` to your project
+1. Copy `im_anim.h` and `im_anim.cpp` to your project (and `im_anim_lottie.h` / `im_anim_lottie.cpp` for the optional [Lottie player](../docs/lottie.md))
 2. Add the two frame setup calls after `ImGui::NewFrame()`
 3. Start animating!
 

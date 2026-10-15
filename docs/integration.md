@@ -13,6 +13,8 @@ im_anim.cpp
 
 Ensure Dear ImGui headers are in your include path. That's it - no other dependencies.
 
+Optional: add `im_anim_lottie.h` and `im_anim_lottie.cpp` to play Lottie files (see [Lottie Player](lottie.md)).
+
 ## Step 2: Include Header
 
 ```cpp
