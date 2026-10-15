@@ -183,7 +183,8 @@ float y = iam_ease_eval(iam_ease_back(3.0f), t);   // bigger overshoot than the 
 ```
 
 With the option on, the ease editor also shows overshoot / amplitude and period
-for these types, and "Copy C++" exports them.
+for these types, and "Copy C++" exports them. `iam_get_preset_ease_params()`
+returns the current setting.
 
 ## Curve Eases
 
@@ -205,6 +206,10 @@ iam_clip::begin(CLIP)
     .key_float(X, 1.0f, 1.0f)
     .end();
 ```
+
+`iam_ease_curve_get(id, out_points, max_count)` copies a curve's points back
+(returns the point count, 0 if undefined) and `iam_ease_curve_exists(id)` tells
+whether it is defined.
 
 Curves are referenced by id, so they can be edited live (every tween and clip
 using them updates) and are embedded in clip files saved with

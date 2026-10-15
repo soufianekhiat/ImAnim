@@ -85,7 +85,15 @@ float time = inst.get_time();
 
 // Loop exactly 3 times
 .set_loop(true, iam_dir_normal, 3)
+
+// Wait 0.5s between iterations
+.set_loop_delay(0.5f)
 ```
+
+`set_stagger(count, each_delay, from_center_bias)` spreads instance start delays;
+`set_stagger_ease(ease_type)` eases that distribution (default linear).
+`iam_play_with_delay(clip, instance, delay)` plays an instance after an explicit
+delay (for example one computed with `iam_stagger_grid_delay`).
 
 ## Callbacks
 
@@ -102,8 +110,17 @@ iam_clip::begin(CLIP_ID)
     .on_complete([](ImGuiID inst_id, void* user) {
         printf("Animation finished!\n");
     }, nullptr)
+    .on_loop([](ImGuiID inst_id, int loop_index, void* user) {
+        // Called at each loop iteration (iam_loop_callback)
+    }, nullptr)
+    .on_pause([](ImGuiID inst_id, void* user) {
+        // Called when the instance is paused
+    }, nullptr)
     .end();
 ```
+
+`inst.refresh()` re-evaluates all tracks at the current time, for example after
+editing the clip's keys.
 
 ## Timeline Markers
 

@@ -38,6 +38,18 @@ Control how animations behave when the target changes mid-animation.
 | `iam_policy_crossfade` | Smoothly blend to new target from current position |
 | `iam_policy_cut` | Snap immediately to new target |
 | `iam_policy_queue` | Queue new target, play after current animation completes |
+| `iam_policy_additive` | `target` is a delta: tween to base + delta |
+| `iam_policy_multiply` | `target` is a factor: tween to base * factor |
+
+For the relative policies the base is the channel's value when the policy
+started (`init_value` for a new channel). Calling every frame with the same
+delta settles on base + delta; a new delta retargets from the same base:
+
+```cpp
+// Nudge a value 20 px right of where it was, without knowing where that is
+float x = iam_tween_float(id, ImHashStr("x"), nudged ? 20.0f : 0.0f, 0.3f,
+    iam_ease_preset(iam_ease_out_cubic), iam_policy_additive, dt, rest_x);
+```
 
 ### Example: Policy Comparison
 
@@ -187,6 +199,7 @@ sp.stiffness = 300.0f;                          // snappier
 float x = iam_spring_float(id, ImHashStr("x"), hovered ? 40.0f : 0.0f, sp, dt);
 iam_vec2 p = iam_spring_vec2(id, ImHashStr("pos"), mouse_pos, sp, dt);
 iam_vec4 c = iam_spring_color(id, ImHashStr("col"), target_col, sp, iam_col_oklab, dt);
+iam_vec4 r = iam_spring_vec4(id, ImHashStr("rect"), iam_v4(x, y, w, h), sp, dt);   // any 4 values
 ```
 
 Lower damping overshoots and wobbles; higher damping glides in. Each
@@ -225,7 +238,8 @@ if (iam_presence(ImGui::GetID("toast"), show_toast, &t, dt)) {
 
 `iam_presence_opts` sets separate enter/exit durations and eases (defaults:
 0.2s out_cubic in, 0.15s in_cubic out) and whether the first appearance
-animates. Reversing mid-way continues from the current value. To remove items
+animates (`animate_first`, default true; false starts fully shown).
+`iam_presence_is_animating(id)` is true while entering or exiting. Reversing mid-way continues from the current value. To remove items
 from a list with an exit animation, mark them dead and erase them once
 `iam_presence()` returns false.
 

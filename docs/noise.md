@@ -25,7 +25,7 @@ opts.lacunarity = 2.0f;     // Frequency increase per octave
 opts.seed = 42;             // Random seed
 
 // 2D noise (returns -1 to 1)
-float value = iam_noise(x, y, opts);
+float value = iam_noise_2d(x, y, opts);
 
 // 3D noise
 float value_3d = iam_noise_3d(x, y, z, opts);
@@ -55,7 +55,7 @@ Continuous noise that evolves over time:
 
 ```cpp
 // 1D noise channel
-float offset = iam_noise_channel(
+float offset = iam_noise_channel_float(
     ImHashStr("wobble"),
     0.5f,     // Frequency
     20.0f,    // Amplitude
@@ -82,10 +82,10 @@ For quick organic motion without configuring options:
 
 ```cpp
 // Simple 1D smooth noise
-float noise = iam_smooth_noise(
+float noise = iam_smooth_noise_float(
     ImHashStr("simple"),
     10.0f,  // Amplitude
-    0.5f,   // Frequency
+    0.5f,   // Speed
     dt
 );
 
@@ -93,7 +93,7 @@ float noise = iam_smooth_noise(
 ImVec2 noise2d = iam_smooth_noise_vec2(
     ImHashStr("simple2d"),
     ImVec2(10.0f, 10.0f),  // Amplitude
-    0.5f,                   // Frequency
+    0.5f,                   // Speed
     dt
 );
 ```

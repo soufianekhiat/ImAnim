@@ -195,7 +195,7 @@ ImGui::TextUnformatted(buf);
 
 ## Split by Word or Line
 
-`split` sets what one stagger step reveals: `iam_text_split_chars` (default),
+`split` (`iam_text_split`) sets what one stagger step reveals: `iam_text_split_chars` (default),
 `iam_text_split_words` or `iam_text_split_lines`. Characters of a word or line
 share its timing, and `char_delay` becomes the delay between units. `'\n'`
 starts a new line (`line_spacing` adds extra space).
@@ -209,7 +209,7 @@ iam_text_stagger(id, "Animate whole words\nor whole lines", progress, opts);
 
 ## Custom Glyph Effects
 
-`glyph_callback` runs for every glyph after the built-in effect and can change
+`glyph_callback` (an `iam_text_glyph_fn`) runs for every glyph after the built-in effect and can change
 its offset, scale, rotation, alpha and color. With `effect = iam_text_fx_none`
 it is a blank slate:
 

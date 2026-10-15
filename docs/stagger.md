@@ -177,6 +177,18 @@ The grid options also gained `reversed` (farthest element first), `jitter`
 (random +/- seconds per element on `iam_stagger_grid_delay`) and `seed`.
 Jitter is deterministic per index and seed.
 
+| `from` (`iam_stagger_from`) | Origin |
+|------|--------|
+| `iam_stagger_first` | First element (index 0) |
+| `iam_stagger_last` | Last element |
+| `iam_stagger_center` | Grid center |
+| `iam_stagger_index` | `from_index` |
+
+`axis` (`iam_stagger_axis`) measures the distance on both axes
+(`iam_stagger_both`), columns only (`iam_stagger_x`) or rows only
+(`iam_stagger_y`). `iam_stagger_grid_delay_index(index, opts)` takes a linear
+index (`row * cols + col`) instead of (col, row).
+
 ## See Also
 
 - [Clips](clips.md) - Clip system basics

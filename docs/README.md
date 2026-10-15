@@ -34,20 +34,23 @@ float alpha = iam_tween_float(id, channel, hovered ? 1.0f : 0.5f, 0.3f, ease, po
 
 | Category | Capabilities |
 |----------|-------------|
-| **Tweens** | Float, Vec2, Vec4, Int, Color with crossfade/cut/queue policies, velocity-preserving springs, enter/exit presence, state queries |
-| **Clips** | Timeline keyframes, looping, callbacks, chaining, stagger, variations |
+| **Tweens** | Float, Vec2, Vec4, Int, Color with crossfade/cut/queue/additive/multiply policies, velocity-preserving springs, enter/exit presence, state queries |
+| **Clips** | Timeline keyframes, looping, callbacks, chaining, stagger and stagger values, variations, labels, reverse and `tween_to`, state blending |
 | **Easing** | Quad to Bounce presets, cubic-bezier, steps, spring physics, custom curves, ease editor widget, per-axis |
-| **Paths** | Bezier curves, Catmull-Rom splines, SVG path import, path morphing, partial stroke drawing, text along paths |
+| **Paths** | Bezier curves, Catmull-Rom splines, SVG path import, path morphing, partial stroke drawing, dashes and trails, text outlines, text along paths |
 | **Transforms** | Position, rotation, scale with rotation modes |
 | **Procedural** | Oscillators, shake, wiggle, Perlin/Simplex noise, particles |
 | **Colors** | Gradients, style interpolation, OKLAB/OKLCH blending |
 | **Advanced** | Layering/blending, resolved tweens, layout animation, drag feedback with inertia, scroll animation and scroll-linked triggers |
+| **Text** | Per-character stagger, split by word or line, custom glyph effects, scramble |
 | **Tools** | Visual clip editor, debug inspector, profiler, save/load, reduced motion, memory management |
-| **Lottie** (optional) | Play Lottie files: shapes, strokes, gradients, trim paths, masks, mattes, non-zero / even-odd fills |
+| **Lottie** (optional) | Play Lottie files and drive them from UI: shapes, strokes, gradients, trim paths, masks, mattes, text, 3D layers and cameras, effects; optional GPU fill and blend modes |
 
 ## Quick Integration
 
-**Step 1:** Copy `im_anim.h` and `im_anim.cpp` to your project.
+**Step 1:** Copy `im_anim.h` and `im_anim.cpp` to your project (add
+`im_anim_lottie.h` and `im_anim_lottie.cpp` too if you want the optional
+[Lottie player](lottie.md)).
 
 **Step 2:** Add two lines after `ImGui::NewFrame()`:
 
@@ -125,7 +128,9 @@ cmake --build build --target ImAnimDemo_GLFW_Vulkan --parallel
 
 Binaries land in `build/bin/`. Configurations whose dependencies are missing are
 skipped at configure time with a message, so a partial toolchain still builds
-whatever it can.
+whatever it can. The CMake demo also builds the Lottie player: it defines
+`IAM_DEMO_LOTTIE` (the demo's Lottie sections) and `IAM_LOTTIE_IMPLATFORM` (the
+optional GPU fill through ImPlatform), see [Lottie Player](lottie.md).
 
 | Configuration | Windows | Linux | macOS |
 |---------------|:-------:|:-----:|:-----:|
@@ -171,6 +176,7 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 - [Oscillators](oscillators.md) - Continuous periodic motion
 - [Shake & Wiggle](shake-wiggle.md) - Feedback and organic motion
 - [Noise](noise.md) - Perlin/Simplex procedural animation
+- [Particles](particles.md) - Immediate-mode particle emitter
 
 ### Colors & Styles
 - [Gradients](gradients.md) - Color gradient animation
@@ -182,12 +188,11 @@ Comprehensive guides for every ImAnim feature, organized by category. Each doc i
 - [Layering](layering.md) - Blend multiple animations
 - [Resolved Tweens](resolved-tweens.md) - Dynamic target computation
 - [Anchors](anchors.md) - Resize-aware animation
-- [Drag Feedback](drag-feedback.md) - Animated drag operations
-- [Scroll Animation](scroll-animation.md) - Smooth scrolling
+- [Drag Feedback](drag-feedback.md) - Animated drag operations, inertia (fling)
+- [Scroll Animation](scroll-animation.md) - Smooth scrolling, scroll-linked progress and triggers
 
 ### Tools & Debug
 - [Clip Editor](clip-editor.md) - Edit clips visually while they play, export to C++
-- [Particles](particles.md) - Immediate-mode particle emitter
 - [Lottie Player](lottie.md) - Play Lottie (Bodymovin JSON) files into a draw list (optional file)
 - [Debug](debug.md) - Inspector and debugging tools
 - [Advanced](advanced.md) - Profiler, persistence, memory management
@@ -200,13 +205,13 @@ The `im_anim_demo.cpp` file provides a comprehensive playground for exploring al
 
 | Category | What You'll Find |
 |----------|-----------------|
-| **Easing & Tweens** | Easing gallery, custom bezier editor, spring physics, per-axis easing |
+| **Easing & Tweens** | Easing gallery, custom bezier editor, ease editor, spring physics, per-axis easing, presence, layout animation, scroll reveal, inertia |
 | **Interactive Widgets** | Animated buttons, toggle switches, hover cards, progress indicators |
-| **Clip-Based Animations** | Timeline keyframes, looping, callbacks, chaining, layering system |
-| **Procedural Animations** | Oscillators, shake/wiggle effects, Perlin/Simplex noise |
-| **Motion Paths** | Bezier curves, Catmull-Rom splines, path morphing, text along paths |
-| **Advanced Interpolation** | Gradients, transforms, style interpolation, text stagger |
-| **Utilities** | ImDrawList animations, resize-aware helpers, scroll animation, drag feedback |
+| **Clip-Based Animations** | Timeline keyframes, playback control, clip editor, looping, callbacks, chaining, layering system, state blending |
+| **Procedural Animations** | Oscillators, particles, Lottie player and interactions (with `IAM_DEMO_LOTTIE`), shake/wiggle effects, Perlin/Simplex noise |
+| **Motion Paths** | Bezier curves, Catmull-Rom splines, path morphing, text along paths, path drawing, dashes and trails, text outlines, SVG paths |
+| **Advanced Interpolation** | Gradients, transforms, style interpolation, text stagger, text split, stagger values |
+| **Utilities** | Text scramble, ImDrawList animations, resize-aware helpers, scroll animation, drag feedback |
 | **Debug Tools** | Inspector, profiler, memory stats |
 | **Stress Test** | Performance benchmarks with thousands of concurrent animations |
 

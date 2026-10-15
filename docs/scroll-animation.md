@@ -262,6 +262,9 @@ if (ev & iam_scroll_entered) iam_play(CLIP_REVEAL, ImGui::GetID("card"));   // a
 if (ev & iam_scroll_left)    { /* ... */ }
 ```
 
+`iam_scroll_trigger()` returns `iam_scroll_event` flags: `iam_scroll_none`,
+`iam_scroll_entered` and `iam_scroll_left`.
+
 Combine with `iam_presence()` for reveal-on-scroll:
 
 ```cpp

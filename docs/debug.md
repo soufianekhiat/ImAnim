@@ -2,17 +2,17 @@
 
 Debug windows and utilities for inspecting and controlling animations.
 
-## Debug Window
+## Inspector Window
 
-Basic debug window with animation stats:
+One window with the animation stats and controls:
 
 ```cpp
-static bool show_debug = true;
-iam_show_debug_window(&show_debug);
+static bool show_inspector = true;
+iam_show_unified_inspector(&show_inspector);
 ```
 
 Provides:
-- Global time scale slider (0.1x to 2x)
+- Global time scale slider
 - Active tween counts by type
 - Clip system statistics
 - Custom easing slot status
@@ -48,18 +48,6 @@ if (ImGui::IsKeyPressed(ImGuiKey_F1)) {
 }
 ```
 
-## Memory Statistics
-
-Query animation system memory usage:
-
-```cpp
-// Get pool sizes
-int float_count = iam_get_tween_count(iam_tween_float);
-int vec2_count = iam_get_tween_count(iam_tween_vec2);
-int clip_count = iam_get_clip_instance_count();
-int path_count = iam_get_path_count();
-```
-
 ## Custom Debug Overlay
 
 Build your own debug display:
@@ -74,17 +62,9 @@ void MyAnimDebugOverlay() {
         iam_set_global_time_scale(scale);
     }
 
-    ImGui::Separator();
-
-    ImGui::Text("Active Tweens:");
-    ImGui::BulletText("Float: %d", iam_get_tween_count(iam_tween_float));
-    ImGui::BulletText("Vec2: %d", iam_get_tween_count(iam_tween_vec2));
-    ImGui::BulletText("Color: %d", iam_get_tween_count(iam_tween_color));
-
-    ImGui::Separator();
-
-    ImGui::Text("Clip Instances: %d", iam_get_clip_instance_count());
-    ImGui::Text("Motion Paths: %d", iam_get_path_count());
+    bool reduced = iam_get_reduced_motion();
+    if (ImGui::Checkbox("Reduced motion", &reduced))
+        iam_set_reduced_motion(reduced);
 
     ImGui::End();
 }
@@ -276,7 +256,7 @@ ImVec4 col = iam_tween_color(..., iam_col_oklch, ...);
 
 ### Getting animation state for debugging
 
-Use `iam_show_debug_window()` or `iam_show_unified_inspector()` to visualize active animations:
+Use `iam_show_unified_inspector()` to visualize active animations (tween counts by type, clip instances):
 
 ```cpp
 static bool show_inspector = false;

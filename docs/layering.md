@@ -217,6 +217,7 @@ iam_state_play(id, state, 0.25f);
 
 float scale; iam_state_get_float(id, CH_SCALE, &scale);
 iam_vec4 col; iam_state_get_color(id, CH_COLOR, &col);    // blended in OKLAB by default
+// also iam_state_get_int, iam_state_get_vec2, iam_state_get_vec4
 ```
 
 - The new state's clip plays from its start; going back to a state that is
