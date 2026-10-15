@@ -515,6 +515,94 @@ static void DocSection_TweenPolicies()
 
 		ImGui::TreePop();
 	}
+
+	// --------------------------------------------------------
+	// Additive / Multiply Policies
+	// --------------------------------------------------------
+	DocApplyOpenAll();
+	if (ImGui::TreeNode("iam_policy_additive / iam_policy_multiply"))
+	{
+		ImGui::TextWrapped(
+			"Relative targets: the value passed is a delta (additive) or a factor (multiply) applied to a base, "
+			"the channel's value when the policy started (init_value for a new channel). Calling every frame "
+			"with the same delta settles on base + delta; a new delta retargets from the same base.");
+
+		DocCodeSnippet("x = iam_tween_float(id, ch, nudge, 0.3f, ez, iam_policy_additive, dt, rest_x);  // rest_x + nudge");
+
+		ImGui::Separator();
+
+		static float delta = 0.0f, factor = 1.0f;
+		if (ImGui::Button("Nudge +0.2##additive")) delta = ImMin(delta + 0.2f, 0.6f);
+		ImGui::SameLine();
+		if (ImGui::Button("Reset##additive")) delta = 0.0f;
+		ImGui::SameLine();
+		if (ImGui::Button("x2 / x1##multiply")) factor = factor > 1.5f ? 1.0f : 2.0f;
+
+		ImGuiID id = ImGui::GetID("relative_demo");
+		float added = iam_tween_float(id, DOC_CH_VALUE, delta, 0.4f,
+			iam_ease_preset(iam_ease_out_cubic), iam_policy_additive, dt, 0.3f);
+		float scaled = iam_tween_float(id, DOC_CH_VALUE + 1, factor, 0.4f,
+			iam_ease_preset(iam_ease_out_cubic), iam_policy_multiply, dt, 0.4f);
+
+		char label[48];
+		snprintf(label, sizeof(label), "Additive: 0.3 + %.1f", delta);
+		ImGui::ProgressBar(added, ImVec2(-1, 20), label);
+		snprintf(label, sizeof(label), "Multiply: 0.4 x %.0f", factor);
+		ImGui::ProgressBar(scaled, ImVec2(-1, 20), label);
+
+		ImGui::TreePop();
+	}
+}
+
+// ============================================================
+// NEW SINCE 1.0.0: where each feature is documented and demonstrated
+// ============================================================
+static void DocSection_NewFeatures()
+{
+	DocSectionHeader("New Since 1.0.0",
+		"Features added after 1.0.0, with their main API, the guide in docs/ and the section of the demo "
+		"window (ImAnimDemoWindow) that shows them.");
+
+	struct entry { char const* feature; char const* api; char const* doc; char const* demo; };
+	static entry const entries[] = {
+		{ "Springs",                 "iam_spring_float/vec2/vec4/color",            "tweens.md",          "Easing & Tweens > Springs" },
+		{ "Enter / exit",            "iam_presence",                                "tweens.md",          "Easing & Tweens > Enter / Exit" },
+		{ "Layout animation",        "iam_layout",                                  "tweens.md",          "Easing & Tweens > Layout Animation" },
+		{ "Relative policies",       "iam_policy_additive / iam_policy_multiply",   "tweens.md",          "this window, section 2" },
+		{ "Tween state queries",     "iam_tween_is_active / progress / velocity_*", "tweens.md",          "-" },
+		{ "Scroll triggers",         "iam_scroll_trigger / item_progress",          "scroll-animation.md","Easing & Tweens > Scroll Reveal" },
+		{ "Inertia (fling)",         "iam_inertia_*",                               "drag-feedback.md",   "Easing & Tweens > Inertia (Fling)" },
+		{ "Curve eases, ease editor","iam_ease_curve_set / iam_ease_editor",        "easing.md",          "Easing & Tweens > Ease Editor" },
+		{ "Back / elastic params",   "iam_set_preset_ease_params",                  "easing.md",          "-" },
+		{ "Clip playback control",   "reverse, tween_to, labels",                   "clips.md",           "Clip-Based Animations > Playback Control" },
+		{ "Clip editor",             "iam_show_clip_editor",                        "clip-editor.md",     "Clip-Based Animations > Clip Editor" },
+		{ "State blending",          "iam_state_play / iam_state_get_*",            "layering.md",        "Clip-Based Animations > State Blending" },
+		{ "Stagger values",          "iam_stagger_value",                           "stagger.md",         "Advanced Interpolation > Stagger Values" },
+		{ "Text split, glyph hook",  "iam_text_split_*, glyph_callback",            "text-stagger.md",    "Advanced Interpolation > Text Split & Glyph Callback" },
+		{ "Text scramble",           "iam_text_scramble",                           "text-stagger.md",    "Utilities > Text Scramble" },
+		{ "Path drawing",            "partial strokes, dashes, trails",             "motion-paths.md",    "Motion Paths > Path Drawing, Dashes & Trails" },
+		{ "SVG paths, text outlines","iam_path_from_svg, text outlines",            "motion-paths.md",    "Motion Paths > SVG Paths, Text Outlines" },
+		{ "Particles",               "iam_particles",                               "particles.md",       "Procedural Animations > Particles" },
+		{ "Reduced motion",          "iam_set_reduced_motion",                      "tweens.md",          "-" },
+		{ "Lottie player",           "iam_lottie_* (im_anim_lottie.h)",             "lottie.md",          "Procedural Animations > Lottie Player / Interactions" },
+	};
+	if (ImGui::BeginTable("new_features", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Feature");
+		ImGui::TableSetupColumn("API");
+		ImGui::TableSetupColumn("Guide (docs/)");
+		ImGui::TableSetupColumn("Demo section");
+		ImGui::TableHeadersRow();
+		for (entry const& e : entries)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(e.feature);
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(e.api);
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(e.doc);
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(e.demo);
+		}
+		ImGui::EndTable();
+	}
 }
 
 // ============================================================
@@ -905,11 +993,9 @@ static void DocSection_ColorSpaces()
 			"Produces smooth, natural transitions without muddy midpoints.");
 
 		ImGui::Separator();
-		static float target_t = 1.0f;
 		static bool toggle = false;
 		if (ImGui::Button("Animate##oklab")) {
 			toggle = !toggle;
-			target_t = toggle ? 1.0f : 0.0f;
 		}
 
 		ImGuiID id = ImGui::GetID("oklab_demo");
@@ -956,7 +1042,6 @@ static void DocSection_ClipSystem()
 		"The Clip API allows authoring timeline-based animations with keyframes. "
 		"Define clips once, play them multiple times with different instances.");
 
-	float dt = GetDocDeltaTime();
 
 	// --------------------------------------------------------
 	// Basic Clip Creation
@@ -1516,7 +1601,6 @@ static void DocSection_ClipSystem()
 		ImGui::Text("Interactive Example:");
 
 		static int marker_hit_count = 0;
-		static float last_marker_time = 0.0f;
 
 		static ImGuiID const DOC_CLIP_MARKER_DEMO = ImHashStr("doc_clip_marker_demo");
 		static bool marker_clip_init = false;
@@ -1524,13 +1608,13 @@ static void DocSection_ClipSystem()
 			iam_clip::begin(DOC_CLIP_MARKER_DEMO)
 				.key_float(DOC_CH_VALUE, 0.0f, 0.0f, iam_ease_out_cubic)
 				.key_float(DOC_CH_VALUE, 2.0f, 1.0f)
-				.marker(0.5f, [](ImGuiID, ImGuiID, float t, void* user) {
+				.marker(0.5f, [](ImGuiID, ImGuiID, float, void* user) {
 					*(int*)user += 1;
 				}, &marker_hit_count)
-				.marker(1.0f, [](ImGuiID, ImGuiID, float t, void* user) {
+				.marker(1.0f, [](ImGuiID, ImGuiID, float, void* user) {
 					*(int*)user += 1;
 				}, &marker_hit_count)
-				.marker(1.5f, [](ImGuiID, ImGuiID, float t, void* user) {
+				.marker(1.5f, [](ImGuiID, ImGuiID, float, void* user) {
 					*(int*)user += 1;
 				}, &marker_hit_count)
 				.end();
@@ -1590,7 +1674,6 @@ static void DocSection_ClipSystem()
 		static ImGuiID const DOC_CLIP_VAR_DEMO = ImHashStr("doc_clip_var_demo");
 		static ImGuiID const DOC_CH_VAR_Y = ImHashStr("doc_ch_var_y");
 		static bool var_clip_init = false;
-		static int var_play_count = 0;
 		if (!var_clip_init) {
 			iam_clip::begin(DOC_CLIP_VAR_DEMO)
 				.key_float(DOC_CH_X, 0.0f, 20.0f, iam_ease_out_cubic)
@@ -1608,14 +1691,12 @@ static void DocSection_ClipSystem()
 			if (old_inst.valid())
 				old_inst.destroy();
 			iam_play(DOC_CLIP_VAR_DEMO, var_inst_id);
-			var_play_count++;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Reset##var")) {
 			iam_instance old_inst = iam_get_instance(var_inst_id);
 			if (old_inst.valid())
 				old_inst.destroy();
-			var_play_count = 0;
 		}
 
 		iam_instance inst = iam_get_instance(var_inst_id);
@@ -2043,7 +2124,6 @@ static void DocSection_MotionPaths()
 		}
 
 		if (morph_animating) {
-			float dt = GetDocDeltaTime();
 			morph_blend += morph_dir * dt * 0.8f;
 			if (morph_blend >= 1.0f) {
 				morph_blend = 1.0f;
@@ -3053,7 +3133,6 @@ static void DocSection_Advanced()
 		// Create an invisible button to capture mouse input and prevent window dragging
 		ImGui::InvisibleButton("drag_canvas", canvas_size);
 		bool canvas_hovered = ImGui::IsItemHovered();
-		bool canvas_active = ImGui::IsItemActive();
 
 		ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -4771,7 +4850,6 @@ static void DocSection_UtilityFunctions()
 		"Standalone helper functions for color blending, easing evaluation, "
 		"anchor size queries, and clip information.");
 
-	float dt = GetDocDeltaTime();
 
 	// --------------------------------------------------------
 	// Color Blending
@@ -6060,6 +6138,10 @@ void ImAnimDocWindow()
 	DocApplyOpenAll();
 	if (ImGui::CollapsingHeader("28. Debug Tools"))
 		DocSection_DebugTools();
+
+	DocApplyOpenAll();
+	if (ImGui::CollapsingHeader("29. New Since 1.0.0"))
+		DocSection_NewFeatures();
 
 	// Reset open all flag
 	s_doc_open_all = 0;
