@@ -113,6 +113,7 @@ namespace ImAnim
                     conf.LibraryPaths.Add(Path.Combine(basePath, "extern", "imgui", "examples", "libs", "glfw", "lib-vc2010-64"));
                     conf.LibraryFiles.Add("glfw3.lib");
                     conf.LibraryFiles.Add("opengl32.lib");
+                    conf.LibraryFiles.Add("legacy_stdio_definitions.lib");  // the prebuilt VS2010 glfw3.lib uses the old stdio symbols
                     break;
 
                 case ExampleType.SDL2_OpenGL3:
