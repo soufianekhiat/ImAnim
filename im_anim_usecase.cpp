@@ -336,12 +336,10 @@ static void ShowUsecase_SidebarNavigation()
 
 	float dt = GetUsecaseDeltaTime();
 	static bool sidebar_open = true;
-	static float sidebar_toggle_time = 0.0f;
 
 	if (ImGui::Button(sidebar_open ? "Close Sidebar" : "Open Sidebar"))
 	{
 		sidebar_open = !sidebar_open;
-		sidebar_toggle_time = 0.0f;
 	}
 
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
@@ -442,7 +440,6 @@ static void ShowUsecase_LoadingSpinners()
 
 	// --- Spinner 2: Arc spinner ---
 	{
-		ImGuiID id = ImGui::GetID("spinner2");
 		ImVec2 center(cursor.x + spinner_size, cursor.y + spinner_size);
 
 		// Continuous rotation using oscillator as time source
@@ -489,18 +486,13 @@ static void ShowUsecase_LoadingSpinners()
 
 	// --- Spinner 4: Morphing square ---
 	{
-		ImGuiID id = ImGui::GetID("spinner4");
 		ImVec2 center(cursor.x + spinner_size, cursor.y + spinner_size);
 
 		static float morph_time = 0.0f;
 		morph_time += dt;
 
-		float morph = (ImSin(morph_time * 2.0f) * 0.5f + 0.5f);
 		float rotation = morph_time * 1.5f;
 		float size = spinner_size * 0.5f;
-
-		// Interpolate between square and circle (approximate with rounded rect)
-		float rounding = morph * size;
 
 		float c = ImCos(rotation), s = ImSin(rotation);
 		ImVec2 corners[4];
@@ -823,12 +815,10 @@ static void ShowUsecase_ModalDialog()
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool modal_open = false;
-	static float modal_time = 0.0f;
 
 	if (ImGui::Button("Open Modal"))
 	{
 		modal_open = true;
-		modal_time = 0.0f;
 	}
 
 	ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
@@ -851,7 +841,6 @@ static void ShowUsecase_ModalDialog()
 
 	if (modal_open)
 	{
-		modal_time += dt;
 		ImGuiID id = ImGui::GetID("modal");
 
 		// Animate backdrop
@@ -1246,7 +1235,6 @@ static void ShowUsecase_AnimatedCounter()
 	for (int i = 0; i < 4; i++)
 	{
 		ImVec2 card_pos(start_pos.x + i * (card_width + spacing), start_pos.y);
-		ImGuiID id = ImGui::GetID(stats[i].label);
 
 		// Calculate animated value
 		float progress = 0.0f;
@@ -1260,7 +1248,6 @@ static void ShowUsecase_AnimatedCounter()
 		int display_value = (int)(stats[i].value * progress);
 
 		// Animate card scale on trigger
-		float target_scale = triggered ? 1.0f : 0.9f;
 		float anim_t = ImClamp((trigger_time - stats[i].delay) / 0.4f, 0.0f, 1.0f);
 		float scale = 0.9f + 0.1f * iam_eval_preset(iam_ease_out_back, anim_t);
 		if (!triggered) scale = 0.9f;
@@ -1365,8 +1352,7 @@ static void ShowUsecase_TypewriterText()
 
 	// Draw text
 	char display_text[256];
-	strncpy(display_text, current, visible_chars);
-	display_text[visible_chars] = '\0';
+	ImStrncpy(display_text, current, (size_t)visible_chars + 1);
 
 	ImVec2 text_pos(pos.x + 20.0f, pos.y + (canvas_size.y - ImGui::GetTextLineHeight()) * 0.5f);
 	dl->AddText(text_pos, IM_COL32(220, 220, 230, 255), display_text);
@@ -1454,7 +1440,7 @@ static void ShowUsecase_SkeletonLoading()
 			for (int j = 0; j < 3; j++)
 			{
 				float offset = j * shimmer_width * 0.3f;
-				float alpha = 0.15f * (1.0f - fabsf(j - 1) * 0.5f);
+				float alpha = 0.15f * (1.0f - fabsf((float)(j - 1)) * 0.5f);
 				dl->AddRectFilledMultiColor(
 					ImVec2(shimmer_x + offset, elem_pos.y),
 					ImVec2(shimmer_x + offset + shimmer_width * 0.3f, elem_pos.y + elem_size.y),
@@ -1800,7 +1786,6 @@ static void ShowUsecase_HamburgerMorph()
 	// Middle line alpha
 	float mid_alpha = 1.0f - morph;
 
-	ImU32 line_color = IM_COL32(220, 220, 230, 255);
 
 	// Draw lines
 	auto DrawRotatedLine = [&](float cy, float rotation, float alpha) {
@@ -2153,7 +2138,6 @@ static void ShowUsecase_TooltipAnimation()
 	// Draw tooltip
 	if (hovered_item >= 0)
 	{
-		ImGuiID id = ImGui::GetID("tooltip");
 
 		// Animate with delay - smooth fade without bouncing/flickering (accessibility)
 		float delay = 0.15f;
@@ -2620,7 +2604,6 @@ static void ShowUsecase_Stepper()
 		ImVec2 step_center(step_x, line_y);
 
 		// Calculate step state
-		float step_progress = progress * (step_count - 1);
 		bool is_complete = i < current_step;
 		bool is_current = i == current_step;
 		bool is_future = i > current_step;
@@ -3774,7 +3757,6 @@ static void ShowUsecase_AnimatedSlider()
 		// Value text
 		char value_text[16];
 		snprintf(value_text, sizeof(value_text), "%.0f%%", slider_values[i] * 100);
-		ImVec2 value_size = ImGui::CalcTextSize(value_text);
 		dl->AddText(ImVec2(track_x + slider_width + 10 * scale, y), IM_COL32(180, 180, 190, 255), value_text);
 
 		ImGui::PopID();
@@ -3793,7 +3775,6 @@ static void ShowUsecase_ColorSwatches()
 	ImGui::TextWrapped("Click to select a color with smooth animation:");
 
 	static int selected_color = 2;
-	static float selection_anim = 1.0f;
 
 	float dt = ImGui::GetIO().DeltaTime;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -4866,7 +4847,6 @@ static void ShowUsecase_RadarChart()
 
 	// Calculate margins needed for labels
 	float top_label_height = ImGui::CalcTextSize(axis_labels[0]).y;  // "Speed"
-	float side_label_width = ImMax(ImGui::CalcTextSize(axis_labels[3]).x, ImGui::CalcTextSize(axis_labels[4]).x);  // "Magic", "Stamina"
 
 	float margin_top = top_label_height + label_margin + 15 * scale;
 	float margin_bottom = top_label_height + label_margin + 15 * scale;  // "Defense" at bottom
@@ -5933,7 +5913,6 @@ static void ShowUsecase_ExpandableListItem()
 		float base_height = 45 * scale;
 		// Dynamic expanded height based on content
 		float content_height = items[i].num_lines * (line_height + 4 * scale) + 15 * scale;
-		float expanded_height = base_height + content_height;
 		float item_height = base_height + content_height * expand_anim;
 
 		ImVec2 item_pos(pos.x, y_cursor);
@@ -6038,7 +6017,6 @@ static void ShowUsecase_ImageGalleryGrid()
 	float scale = UcFontScale();
 
 	static int selected_image = -1;
-	static int hovered_image = -1;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -6056,7 +6034,6 @@ static void ShowUsecase_ImageGalleryGrid()
 	};
 
 	ImVec2 mouse = ImGui::GetMousePos();
-	hovered_image = -1;
 
 	for (int row = 0; row < rows; row++)
 	{
@@ -6069,7 +6046,6 @@ static void ShowUsecase_ImageGalleryGrid()
 			// Check hover
 			bool is_hovered = mouse.x >= x && mouse.x <= x + cell_size &&
 							  mouse.y >= y && mouse.y <= y + cell_size;
-			if (is_hovered) hovered_image = idx;
 
 			bool is_selected = (selected_image == idx);
 
@@ -6290,7 +6266,6 @@ static void ShowUsecase_AnimatedGraphNode()
 	float dt = GetUsecaseDeltaTime();
 	float scale = UcFontScale();
 
-	static int hovered_node = -1;
 	static float connection_anim = 0.0f;
 	connection_anim += dt;
 
@@ -6319,7 +6294,6 @@ static void ShowUsecase_AnimatedGraphNode()
 		IM_COL32(25, 28, 35, 255), 6 * scale);
 
 	ImVec2 mouse = ImGui::GetMousePos();
-	hovered_node = -1;
 
 	// Draw connections with animated flow
 	for (int c = 0; c < 4; c++)
@@ -6350,7 +6324,6 @@ static void ShowUsecase_AnimatedGraphNode()
 
 		bool is_hovered = mouse.x >= node_pos.x && mouse.x <= node_pos.x + node_size.x &&
 						  mouse.y >= node_pos.y && mouse.y <= node_pos.y + node_size.y;
-		if (is_hovered) hovered_node = i;
 
 		float hover_scale = iam_tween_float(ImGui::GetID("node_hover") + i, 0,
 			is_hovered ? 1.05f : 1.0f, 0.15f,
@@ -6416,7 +6389,6 @@ static void ShowUsecase_PlaybackControls()
 
 	static bool is_playing = false;
 	static float playback_pos = 0.3f;
-	static float play_anim = 0.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -7039,8 +7011,6 @@ static void ShowUsecase_DropdownMenu()
 	// Arrow
 	float arrow_x = pos.x + btn_width - 20 * scale;
 	float arrow_y = pos.y + btn_height * 0.5f;
-	float arrow_rot = iam_tween_float(ImGui::GetID("arrow_rot"), ImHashStr("ar"),
-		open ? 3.14159f : 0.0f, 0.2f, iam_ease_preset(iam_ease_out_quad), iam_policy_crossfade, dt);
 	dl->AddTriangleFilled(
 		ImVec2(arrow_x - 5 * scale, arrow_y - 3 * scale * (open ? -1 : 1)),
 		ImVec2(arrow_x + 5 * scale, arrow_y - 3 * scale * (open ? -1 : 1)),
@@ -7220,7 +7190,6 @@ static void ShowUsecase_Snackbar()
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool show_banner = true;
-	static bool accepted = false;
 	static float hover_accept = 0.0f;
 	static float hover_decline = 0.0f;
 	static float hover_settings = 0.0f;
@@ -7251,7 +7220,6 @@ static void ShowUsecase_Snackbar()
 		if (ImGui::Button("Reset Banner"))
 		{
 			show_banner = true;
-			accepted = false;
 		}
 	}
 
@@ -7350,7 +7318,7 @@ static void ShowUsecase_Snackbar()
 
 			if (ImGui::InvisibleButton("btn", ImVec2(btn_w, btn_h)))
 			{
-				if (i == 0) { accepted = true; show_banner = false; }
+				if (i == 0) { show_banner = false; }
 				else if (i == 1) { show_banner = false; }
 				// Settings would open a modal
 			}
@@ -7450,7 +7418,6 @@ static void ShowUsecase_CommandPalette()
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool open = false;
-	static char search[64] = "";
 	const char* commands[] = {"New File", "Open Project", "Save All", "Find in Files", "Git Commit"};
 	int cmd_count = 5;
 
@@ -7929,7 +7896,6 @@ static void ShowUsecase_PullToRefresh()
 		else
 		{
 			// Arrow
-			float arrow_rot = pull_amount * 3.14159f;
 			dl->AddCircle(ind_center, 10 * scale, IM_COL32(100, 150, 255, (int)(pull_amount * 255)), 0, 2 * scale);
 		}
 	}
@@ -8570,7 +8536,6 @@ static void ShowUsecase_SearchInput()
 	static int selected_reaction = -1;
 	static bool picker_open = false;
 	static float picker_time = 0.0f;
-	static float reaction_scales[5] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
 	static float particle_times[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -8789,7 +8754,6 @@ static void ShowUsecase_NotificationCard()
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool visible = false;
-	static float dismiss_x = 0.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 
@@ -9025,10 +8989,7 @@ static void ShowUsecase_HighlightText()
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	static bool highlight = false;
-	static float anim_time = 0.0f;
 
-	if (highlight) anim_time += dt * 2.0f;
-	else anim_time = 0.0f;
 
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	const char* text = "This is highlighted text";
@@ -9461,7 +9422,7 @@ static void ShowUsecase_ConfettiBurst()
 		for (int i = 0; i < 20; i++)
 		{
 			float angle = (float)i / 20.0f * 6.28318f;
-			float speed = 50 + (i % 5) * 30;
+			float speed = 50.0f + (i % 5) * 30.0f;
 			float x = center.x + cosf(angle) * speed * burst_time * scale;
 			float y = center.y + sinf(angle) * speed * burst_time * scale + burst_time * burst_time * 100 * scale;
 			float alpha = 1.0f - burst_time * 0.5f;

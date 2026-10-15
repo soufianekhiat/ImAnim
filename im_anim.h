@@ -1101,27 +1101,27 @@ static inline iam_variation_int iam_vari_seed(iam_variation_int v, unsigned int 
 
 // Vec2 variation helpers (global)
 static inline iam_variation_vec2 iam_varv2_none(void) {
-	iam_variation_vec2 v = {iam_var_none, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_none, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_inc(float x, float y) {
-	iam_variation_vec2 v = {iam_var_increment, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_increment, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_dec(float x, float y) {
-	iam_variation_vec2 v = {iam_var_decrement, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_decrement, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_mul(float f) {
-	iam_variation_vec2 v = {iam_var_multiply, iam_v2(f,f), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_multiply, iam_v2(f,f), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_rand(float x, float y) {
-	iam_variation_vec2 v = {iam_var_random, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_random, iam_v2(x,y), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec2 iam_varv2_fn(iam_variation_vec2_fn fn, void* user) {
-	iam_variation_vec2 v = {iam_var_callback, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, fn, user, {0}, {0}};
+	iam_variation_vec2 v = {iam_var_callback, iam_v2(0,0), iam_v2(-FLT_MAX,-FLT_MAX), iam_v2(FLT_MAX,FLT_MAX), 0, fn, user, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 // Vec2 per-axis helper
@@ -1138,27 +1138,27 @@ static inline iam_variation_vec2 iam_varv2_seed(iam_variation_vec2 v, unsigned i
 
 // Vec4 variation helpers (global)
 static inline iam_variation_vec4 iam_varv4_none(void) {
-	iam_variation_vec4 v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_inc(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_increment, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_increment, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_dec(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_decrement, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_decrement, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_mul(float f) {
-	iam_variation_vec4 v = {iam_var_multiply, iam_v4(f,f,f,f), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_multiply, iam_v4(f,f,f,f), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_rand(float x, float y, float z, float w) {
-	iam_variation_vec4 v = {iam_var_random, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_random, iam_v4(x,y,z,w), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_vec4 iam_varv4_fn(iam_variation_vec4_fn fn, void* user) {
-	iam_variation_vec4 v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, fn, user, {0}, {0}, {0}, {0}};
+	iam_variation_vec4 v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(-FLT_MAX,-FLT_MAX,-FLT_MAX,-FLT_MAX), iam_v4(FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX), 0, fn, user, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 // Vec4 per-axis helper
@@ -1175,27 +1175,27 @@ static inline iam_variation_vec4 iam_varv4_seed(iam_variation_vec4 v, unsigned i
 
 // Color variation helpers (global)
 static inline iam_variation_color iam_varc_none(void) {
-	iam_variation_color v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_none, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_inc(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_increment, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_increment, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_dec(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_decrement, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_decrement, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_mul(float f) {
-	iam_variation_color v = {iam_var_multiply, iam_v4(f,f,f,1), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_multiply, iam_v4(f,f,f,1), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_rand(float r, float g, float b, float a) {
-	iam_variation_color v = {iam_var_random, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_random, iam_v4(r,g,b,a), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, 0, 0, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 static inline iam_variation_color iam_varc_fn(iam_variation_vec4_fn fn, void* user) {
-	iam_variation_color v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, fn, user, {0}, {0}, {0}, {0}};
+	iam_variation_color v = {iam_var_callback, iam_v4(0,0,0,0), iam_v4(0,0,0,0), iam_v4(1,1,1,1), iam_col_oklab, 0, fn, user, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}, {iam_var_none, 0, -FLT_MAX, FLT_MAX, 0, 0, 0}};
 	return v;
 }
 // Color per-channel helper

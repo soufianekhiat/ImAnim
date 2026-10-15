@@ -2,6 +2,9 @@
 // Author: Soufiane KHIAT
 // License: MIT
 
+#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS  // fopen, strncpy, strcat (like imgui.cpp)
+#endif
 #include "im_anim.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -22,10 +25,17 @@
 #if defined(_MSC_VER)
 #pragma warning(push, 0)
 #endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"  // stb functions unused here
+#endif
 #ifdef IMGUI_STB_RECT_PACK_FILENAME
 #include IMGUI_STB_RECT_PACK_FILENAME
 #else
 #include "imstb_rectpack.h"
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 #if defined(_MSC_VER)
 #pragma warning(pop)
@@ -231,7 +241,7 @@ struct ease_lut_pool {
 			float bx = 3.f*mt*mt*t*x1 + 3.f*mt*t*t*x2 + t*t*t;
 			float dx = 3.f*mt*mt*x1 + 6.f*mt*t*(x2 - x1) + 3.f*t*t*(1.f - x2);
 			if (dx != 0.f) t = t - (bx - x) / dx;
-			if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
+			if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
 		}
 		float mt = 1.f - t;
 		float by = 3.f*mt*mt*t*y1 + 3.f*mt*t*t*y2 + t*t*t;
@@ -330,7 +340,7 @@ struct ease_lut_pool {
 	}
 
 	float eval_lut(iam_ease_desc const& d, float t) {
-		if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
+		if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
 		ImGuiID key = hash_desc(d);
 		int idx = map.GetInt(key, -1);
 		ease_lut* lut;
@@ -511,7 +521,7 @@ static float eval(iam_ease_desc const& d, float t) {
 		case iam_ease_custom: {
 			int slot = (int)d.p0;
 			if (slot >= 0 && slot < 16 && g_custom_ease[slot]) {
-				if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
+				if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
 				return g_custom_ease[slot](t);
 			}
 			return t; // fallback to linear if no callback registered
@@ -655,7 +665,7 @@ static ImVec4 lerp_color(ImVec4 a_srgb, ImVec4 b_srgb, float t, int space) {
 			ImVec4 A = srgb_to_hsv(a_srgb), B = srgb_to_hsv(b_srgb);
 			float dh = ImFmod(B.x - A.x + 1.5f, 1.f) - 0.5f;
 			ImVec4 H = ImVec4(A.x + dh * t, lerp1(A.y,B.y,t), lerp1(A.z,B.z,t), lerp1(A.w,B.w,t));
-			if (H.x < 0.f) H.x += 1.f; if (H.x > 1.f) H.x -= 1.f;
+			if (H.x < 0.f) H.x += 1.f; else if (H.x > 1.f) H.x -= 1.f;
 			return hsv_to_srgb(H);
 		}
 		case iam_col_oklab: {
@@ -667,7 +677,7 @@ static ImVec4 lerp_color(ImVec4 a_srgb, ImVec4 b_srgb, float t, int space) {
 			// L,C interpolate linearly; H uses shortest arc
 			float dh = ImFmod(B.z - A.z + 1.5f, 1.f) - 0.5f;
 			ImVec4 LCH = ImVec4(lerp1(A.x,B.x,t), lerp1(A.y,B.y,t), A.z + dh * t, lerp1(A.w,B.w,t));
-			if (LCH.z < 0.f) LCH.z += 1.f; if (LCH.z > 1.f) LCH.z -= 1.f;
+			if (LCH.z < 0.f) LCH.z += 1.f; else if (LCH.z > 1.f) LCH.z -= 1.f;
 			return oklch_to_srgb(LCH);
 		}
 		default:
@@ -3110,9 +3120,9 @@ struct keyframe {
 		value_ext[0] = value_ext[1] = value_ext[2] = value_ext[3] = 0;
 		memset(&var_float, 0, sizeof(var_float));
 		memset(&var_int, 0, sizeof(var_int));
-		memset(&var_vec2, 0, sizeof(var_vec2));
-		memset(&var_vec4, 0, sizeof(var_vec4));
-		memset(&var_color, 0, sizeof(var_color));
+		memset((void*)&var_vec2, 0, sizeof(var_vec2));
+		memset((void*)&var_vec4, 0, sizeof(var_vec4));
+		memset((void*)&var_color, 0, sizeof(var_color));
 	}
 
 	void set_float(float f) { value[0] = f; }
@@ -5666,7 +5676,7 @@ static struct {
 	ImGuiStorage weight_int;
 	ImVector<iam_instance_data::vec2_entry> weight_vec2;  // stores weight in v.x
 	ImVector<iam_instance_data::vec4_entry> weight_vec4;  // stores weight in v.x
-} g_layer_state = { 0, 0 };
+} g_layer_state;
 
 void iam_layer_begin(ImGuiID instance_id) {
 	g_layer_state.target_id = instance_id;
@@ -8007,7 +8017,6 @@ float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts
 
 	float width = 0.0f;
 	char const* p = text;
-	int char_count = 0;
 
 	float line_width = 0.0f;
 	while (*p) {
@@ -8015,7 +8024,7 @@ float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts
 		int char_len = ImTextCharFromUtf8(&c, p, nullptr);
 		if (char_len == 0) break;
 
-		if (c == '\n') { width = ImMax(width, line_width); line_width = 0.0f; p += char_len; char_count++; continue; }
+		if (c == '\n') { width = ImMax(width, line_width); line_width = 0.0f; p += char_len; continue; }
 		ImFontGlyph const* glyph = baked->FindGlyph((ImWchar)c);
 		if (glyph) {
 			line_width += glyph->AdvanceX;
@@ -8024,7 +8033,6 @@ float iam_text_stagger_width(char const* text, iam_text_stagger_opts const& opts
 			}
 		}
 		p += char_len;
-		char_count++;
 	}
 
 	return ImMax(width, line_width);
@@ -8039,6 +8047,7 @@ float iam_text_stagger_duration(char const* text, iam_text_stagger_opts const& o
 }
 
 void iam_text_stagger(ImGuiID id, char const* text, float progress, iam_text_stagger_opts const& opts) {
+	IM_UNUSED(id);
 	if (!text || !*text) return;
 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -11238,14 +11247,13 @@ namespace iam_clip_editor_detail {
 
 			// Hit test keys
 			unsigned hovered_uid = 0;
-			int hovered_track = -1;
 			float const key_r = row_h * 0.32f;
 			if (canvas_hovered && mouse_row >= 0 && mouse_row < clip->iam_tracks.Size) {
 				iam_track& trk = clip->iam_tracks[mouse_row];
 				float best = key_r + 3.0f;
 				for (int k = 0; k < trk.keys.Size; k++) {
 					float d = ImFabs(IAM_ED_T2X(trk.keys[k].time) - mouse.x);
-					if (d <= best) { best = d; hovered_uid = trk.keys[k].uid; hovered_track = mouse_row; }
+					if (d <= best) { best = d; hovered_uid = trk.keys[k].uid; }
 				}
 			}
 

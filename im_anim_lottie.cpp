@@ -3,6 +3,9 @@
 // The polygon fill (non-zero / even-odd, anti-aliased trapezoid sweep), the path clip
 // stack and the gradient paint are adapted from DearWidgets (dear_widgets_path.cpp, CC0).
 
+#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS  // fopen (like imgui.cpp)
+#endif
 #include "im_anim_lottie.h"
 #include "imgui_internal.h"
 #include <stdio.h>

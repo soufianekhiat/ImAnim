@@ -153,7 +153,6 @@ static void ShowHeroAnimation()
 		int color_idx;
 	};
 	static TrailParticle particles[64];
-	static int particle_count = 0;
 	static ImVec2 last_mouse = ImVec2(0, 0);
 	static float spawn_accum = 0.0f;
 
@@ -163,11 +162,6 @@ static void ShowHeroAnimation()
 	ImVec2 BL = ImVec2(cp.x + 50, cp.y + cs.y - 50);
 	ImVec2 BR = ImVec2(cp.x + cs.x - 50, cp.y + cs.y - 50);
 
-	// Edge midpoints (avoiding center)
-	ImVec2 ML = ImVec2(cp.x + 30, cc.y);
-	ImVec2 MR = ImVec2(cp.x + cs.x - 30, cc.y);
-	ImVec2 MT = ImVec2(cc.x, cp.y + 30);
-	ImVec2 MB = ImVec2(cc.x, cp.y + cs.y - 30);
 
 	// === COLORS ===
 	const ImU32 CYAN = IM_COL32(91, 194, 231, 255);
@@ -498,7 +492,7 @@ static void ShowHeroAnimation()
 					float local = (t - start) / dur;
 					float alpha = fade_alpha(local, 0.1f, 0.85f);
 					float angle = (t - start) * orbit_speeds[c] + i * 2.094f;
-					float radius = 35 + i * 15;
+					float radius = 35.0f + i * 15.0f;
 					float px = orbit_centers[c].x + ImCos(angle) * radius;
 					float py = orbit_centers[c].y + ImSin(angle) * radius;
 					int a = (int)(alpha * 200);
@@ -590,7 +584,6 @@ static void ShowHeroAnimation()
 
 		// Hover animation state
 		static float hover_anim = 0.0f;
-		static bool was_hovered = false;
 
 		if (t < 0.15f) {
 			float e = t / 0.15f;
@@ -1031,7 +1024,7 @@ static void ShowEasingDemo()
 					float bx = 3.f*mt*mt*t_guess*x1 + 3.f*mt*t_guess*t_guess*x2 + t_guess*t_guess*t_guess;
 					float dx = 3.f*mt*mt*x1 + 6.f*mt*t_guess*(x2 - x1) + 3.f*t_guess*t_guess*(1.f - x2);
 					if (dx != 0.f) t_guess = t_guess - (bx - x) / dx;
-					if (t_guess < 0.f) t_guess = 0.f; if (t_guess > 1.f) t_guess = 1.f;
+					if (t_guess < 0.f) t_guess = 0.f; else if (t_guess > 1.f) t_guess = 1.f;
 				}
 				float mt = 1.f - t_guess;
 				return 3.f*mt*mt*t_guess*y1 + 3.f*mt*t_guess*t_guess*y2 + t_guess*t_guess*t_guess;
@@ -1300,7 +1293,7 @@ static void ShowEasingDemo()
 		if (cols < 1) cols = 1;
 		if (cols > 4) cols = 4;
 
-		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+		ImDrawList* grid_dl = ImGui::GetWindowDrawList();
 
 		for (int i = 0; i < num_eases; i++) {
 			if (i % cols != 0) ImGui::SameLine();
@@ -1316,15 +1309,15 @@ static void ShowEasingDemo()
 			float graph_h = cell_size.y - label_h - margin;
 
 			// Cell background
-			draw_list->AddRectFilled(cell_pos,
+			grid_dl->AddRectFilled(cell_pos,
 				ImVec2(cell_pos.x + cell_size.x, cell_pos.y + cell_size.y),
 				IM_COL32(30, 30, 35, 255), 4.0f);
-			draw_list->AddRect(cell_pos,
+			grid_dl->AddRect(cell_pos,
 				ImVec2(cell_pos.x + cell_size.x, cell_pos.y + cell_size.y),
 				IM_COL32(60, 60, 70, 255), 4.0f);
 
 			// Graph background
-			draw_list->AddRectFilled(ImVec2(graph_x, graph_y),
+			grid_dl->AddRectFilled(ImVec2(graph_x, graph_y),
 				ImVec2(graph_x + graph_w, graph_y + graph_h),
 				IM_COL32(20, 20, 25, 255), 2.0f);
 
@@ -1332,18 +1325,18 @@ static void ShowEasingDemo()
 			for (int g = 1; g < 4; g++) {
 				float gx = graph_x + graph_w * (g / 4.0f);
 				float gy = graph_y + graph_h * (g / 4.0f);
-				draw_list->AddLine(ImVec2(gx, graph_y), ImVec2(gx, graph_y + graph_h), IM_COL32(50, 50, 55, 100));
-				draw_list->AddLine(ImVec2(graph_x, gy), ImVec2(graph_x + graph_w, gy), IM_COL32(50, 50, 55, 100));
+				grid_dl->AddLine(ImVec2(gx, graph_y), ImVec2(gx, graph_y + graph_h), IM_COL32(50, 50, 55, 100));
+				grid_dl->AddLine(ImVec2(graph_x, gy), ImVec2(graph_x + graph_w, gy), IM_COL32(50, 50, 55, 100));
 			}
 
 			// Y=0 and Y=1 reference lines
 			float y0_line = graph_y + graph_h;
 			float y1_line = graph_y;
-			draw_list->AddLine(ImVec2(graph_x, y0_line), ImVec2(graph_x + graph_w, y0_line), IM_COL32(80, 80, 80, 150));
-			draw_list->AddLine(ImVec2(graph_x, y1_line), ImVec2(graph_x + graph_w, y1_line), IM_COL32(80, 80, 80, 150));
+			grid_dl->AddLine(ImVec2(graph_x, y0_line), ImVec2(graph_x + graph_w, y0_line), IM_COL32(80, 80, 80, 150));
+			grid_dl->AddLine(ImVec2(graph_x, y1_line), ImVec2(graph_x + graph_w, y1_line), IM_COL32(80, 80, 80, 150));
 
 			// Draw easing curve
-			ImVec2 prev_pt(graph_x, graph_y + graph_h);
+			ImVec2 graph_prev(graph_x, graph_y + graph_h);
 			for (int j = 1; j <= 60; j++) {
 				float ct = j / 60.0f;
 				float val = iam_eval_preset(eases[i].type, ct);
@@ -1353,8 +1346,8 @@ static void ShowEasingDemo()
 				pt.x = graph_x + graph_w * ct;
 				pt.y = graph_y + graph_h - graph_h * val;
 
-				draw_list->AddLine(prev_pt, pt, IM_COL32(100, 180, 255, 255), 2.0f);
-				prev_pt = pt;
+				grid_dl->AddLine(graph_prev, pt, IM_COL32(100, 180, 255, 255), 2.0f);
+				graph_prev = pt;
 			}
 
 			// Animated indicators
@@ -1366,22 +1359,22 @@ static void ShowEasingDemo()
 				float ball_y = graph_y + graph_h - graph_h * eased_clamped;
 
 				// X axis indicator (red) - horizontal line with disc
-				draw_list->AddLine(ImVec2(graph_x, ball_y), ImVec2(ball_x, ball_y), IM_COL32(255, 80, 80, 150), 1.0f);
-				draw_list->AddCircleFilled(ImVec2(graph_x - 6, ball_y), 5.0f, IM_COL32(255, 80, 80, 255));
+				grid_dl->AddLine(ImVec2(graph_x, ball_y), ImVec2(ball_x, ball_y), IM_COL32(255, 80, 80, 150), 1.0f);
+				grid_dl->AddCircleFilled(ImVec2(graph_x - 6, ball_y), 5.0f, IM_COL32(255, 80, 80, 255));
 
 				// Y axis indicator (green) - vertical line with disc
-				draw_list->AddLine(ImVec2(ball_x, graph_y + graph_h), ImVec2(ball_x, ball_y), IM_COL32(80, 255, 80, 150), 1.0f);
-				draw_list->AddCircleFilled(ImVec2(ball_x, graph_y + graph_h + 6), 5.0f, IM_COL32(80, 255, 80, 255));
+				grid_dl->AddLine(ImVec2(ball_x, graph_y + graph_h), ImVec2(ball_x, ball_y), IM_COL32(80, 255, 80, 150), 1.0f);
+				grid_dl->AddCircleFilled(ImVec2(ball_x, graph_y + graph_h + 6), 5.0f, IM_COL32(80, 255, 80, 255));
 
 				// Ball on curve (yellow)
-				draw_list->AddCircleFilled(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 220, 100, 255));
-				draw_list->AddCircle(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 255, 255, 200), 0, 1.5f);
+				grid_dl->AddCircleFilled(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 220, 100, 255));
+				grid_dl->AddCircle(ImVec2(ball_x, ball_y), 6.0f, IM_COL32(255, 255, 255, 200), 0, 1.5f);
 			}
 
 			// Label at top
 			ImVec2 text_size = ImGui::CalcTextSize(eases[i].name);
 			ImVec2 text_pos = ImVec2(cell_pos.x + (cell_size.x - text_size.x) * 0.5f, cell_pos.y + 3);
-			draw_list->AddText(text_pos, IM_COL32(220, 220, 220, 255), eases[i].name);
+			grid_dl->AddText(text_pos, IM_COL32(220, 220, 220, 255), eases[i].name);
 
 			ImGui::Dummy(cell_size);
 			ImGui::EndGroup();
@@ -7073,7 +7066,7 @@ static void ShowTimelineMarkersDemo()
 	static float marker_log_time = 0;
 
 	// Marker callback
-	static auto marker_callback = [](ImGuiID inst_id, ImGuiID marker_id, float marker_time, void* user_data) {
+	static auto marker_callback = [](ImGuiID, ImGuiID, float marker_time, void*) {
 		char* msg = new char[64];
 		snprintf(msg, 64, "Marker at %.2fs", marker_time);
 		marker_log.push_back(msg);
