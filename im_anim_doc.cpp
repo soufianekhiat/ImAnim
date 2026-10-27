@@ -13,6 +13,35 @@
 #include <math.h>
 #include <stdio.h>
 
+// Scales the text that follows by 'scale', until PopFontScale()
+static void PushFontScale(float scale)
+{
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+	ImGui::SetWindowFontScale(scale);
+#else
+	ImGui::PushFont(NULL, ImGui::GetStyle().FontSizeBase * scale);
+#endif
+}
+
+static void PopFontScale()
+{
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+	ImGui::SetWindowFontScale(1.0f);
+#else
+	ImGui::PopFont();
+#endif
+}
+
+// Pushes 'font' at the current size
+static void PushFontKeepSize(ImFont* font)
+{
+#ifdef IM_ANIM_PRE_19200_COMPATIBILITY
+	ImGui::PushFont(font);
+#else
+	ImGui::PushFont(font, 0.0f);
+#endif
+}
+
 // ============================================================
 // HELPER: Get delta time with safety bounds
 // ============================================================
@@ -334,10 +363,10 @@ static void DocSection_TweenTypes()
 		int value = iam_tween_int(id, DOC_CH_VALUE, target_int, 0.8f,
 			iam_ease_preset(iam_ease_out_expo), iam_policy_crossfade, dt);
 
-		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
-		ImGui::SetWindowFontScale(2.0f);
+		PushFontKeepSize(ImGui::GetIO().Fonts->Fonts[0]);
+		PushFontScale(2.0f);
 		ImGui::Text("%d", value);
-		ImGui::SetWindowFontScale(1.0f);
+		PopFontScale();
 		ImGui::PopFont();
 
 		ImGui::TreePop();

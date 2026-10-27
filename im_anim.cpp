@@ -21,6 +21,13 @@ typedef ImFont FontType;
 typedef ImFontBaked FontType;
 #endif
 
+#if IMGUI_VERSION_NUM >= 19180
+	// ImGuiColorEditFlags_AlphaPreview was removed in ImGui 1.91.8: the checkerboard preview is now the default
+#define IAM_COLOR_ALPHA_PREVIEW 0
+#else
+#define IAM_COLOR_ALPHA_PREVIEW ImGuiColorEditFlags_AlphaPreview
+#endif
+
 static FontType* GetBakedFont(ImFont* font, float font_size) {
 #ifdef IM_ANIM_PRE_19200_COMPATIBILITY
 	(void)font_size; // suppress unused warning
@@ -7689,7 +7696,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 						ImGui::Text("Value: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
 						{
 							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
-							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | IAM_COLOR_ALPHA_PREVIEW, ImVec2(16, 16));
 						}
 						break;
 					case iam_chan_int:
@@ -7699,7 +7706,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 						ImGui::Text("Color: (%.3f, %.3f, %.3f, %.3f)", key.value[0], key.value[1], key.value[2], key.value[3]);
 						{
 							ImVec4 col(key.value[0], key.value[1], key.value[2], key.value[3]);
-							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreview, ImVec2(16, 16));
+							ImGui::ColorButton("##val", col, ImGuiColorEditFlags_NoTooltip | IAM_COLOR_ALPHA_PREVIEW, ImVec2(16, 16));
 							char const* space_names[] = { "sRGB", "Linear", "HSV", "OKLAB", "OKLCH" };
 							if (key.color_space >= 0 && key.color_space < 5) {
 								ImGui::SameLine();
