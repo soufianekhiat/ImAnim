@@ -259,7 +259,7 @@ struct iam_lottie {
 
 	// Replay cache: a draw repeated with the same key (paused animation, idle widget) copies
 	// the vertices it produced last time instead of evaluating and filling again
-	struct draw_key { float frame, pos[2], size[2], uv[2], clip[4]; int gpu; };  // plain floats: compared bytewise
+	struct draw_key { float frame, pos[2], size[2], uv[2], clip[4]; int gpu; iam_lottie_render_fn render_fn; void* render_user; };  // compared bytewise (memset first)
 	struct draw_entry { draw_key key; unsigned stamp; bool valid; ImVector<ImDrawVert> vtx; ImVector<ImDrawIdx> idx; };
 	enum { CACHE = 8 };
 	mutable draw_entry cache[CACHE];
@@ -931,6 +931,10 @@ static m4 m4_inverse_affine(m4 const& A) {
 }
 
 struct contour { int first, count; bool closed; };
+static_assert(sizeof(contour) == sizeof(iam_lottie_contour), "contours are handed to the renderer hook as they are");
+
+static iam_lottie_render_fn s_render_fn = nullptr;
+static void* s_render_user = nullptr;
 // Fill rules: 0 non-zero, 1 even-odd, k >= 2: winding >= k - 1 (merge paths)
 struct geom {
 	ImVector<ImVec2> pts;      // cubic chains: p0, (c1 c2 p) * n
@@ -2752,6 +2756,45 @@ struct ctx {
 		}
 	}
 
+	// The renderer hook (iam_lottie_set_renderer): true when it drew the style
+	bool render_hook(shape_t const& sh, geom const& g, mat const& M, float t, ImU32 col, paint_t const* pt, bool stroke) {
+		iam_lottie_outline o;
+		o.pts = g.pts.Data;
+		o.contours = (iam_lottie_contour const*)g.cs.Data;
+		o.contour_count = g.cs.Size;
+		o.fill_rule = g.rule >= 0 ? g.rule : sh.rule == 2 ? 1 : 0;
+		iam_lottie_paint p;
+		memset(&p, 0, sizeof(p));
+		p.color = col;
+		if (pt) {
+			p.type = pt->type;
+			p.p0 = pt->p0; p.p1 = pt->p1; p.focal = pt->focal;
+			p.stop_count = pt->n;
+			p.stop_offsets = pt->off;
+			p.stop_rgba = pt->rgba;
+		}
+		if (!stroke) return s_render_fn(dl, &o, &p, nullptr, s_render_user);
+		bool const grad = sh.kind == SK_GSTROKE;
+		float const scale = mat_scale(M);
+		iam_lottie_stroke s;
+		s.width = pv(sh.p[grad ? 4 : 2], t, 0, 1.0f) * scale;
+		if (s.width <= 0.0f) return true;
+		s.cap = sh.cap; s.join = sh.join; s.miter_limit = sh.miter;
+		float pattern[16];
+		int np = 0;
+		s.dash_offset = 0.0f;
+		for (int i = 0; i < sh.dashn; i++) {
+			dash_t const& d = L->dashes[sh.dash + i];
+			float const v = pv(d.v, t, 0, 0.0f) * scale;
+			if (d.kind == 2) s.dash_offset = v;
+			else if (np < 16) pattern[np++] = v;
+		}
+		if (np % 2 == 1 && np < 8) { for (int i = 0; i < np; i++) pattern[np + i] = pattern[i]; np *= 2; }  // odd patterns repeat twice
+		s.dashes = pattern;
+		s.dash_count = np;
+		return s_render_fn(dl, &o, &p, &s, s_render_user);
+	}
+
 	void draw_style(shape_t const& sh, geom const& g, mat const& M, float alpha, float t) {
 		if (g.cs.Size == 0) return;
 		bool const stroke = sh.kind == SK_STROKE || sh.kind == SK_GSTROKE;
@@ -2771,6 +2814,7 @@ struct ctx {
 		}
 		static ImVector<ImVec2> poly, segs;  // draw_style is not re-entered
 		poly.resize(0); segs.resize(0);
+		if (s_render_fn && !collect && !offscreen && nclips == 0 && soft <= 1.0f && !shadow && g.soup.Size == 0 && g.rule < 2 && render_hook(sh, g, M, t, col, grad ? &pt : nullptr, stroke)) return;
 		bool const fast = !collect && !grad && nclips == 0 && soft <= 1.0f && !shadow;
 		if (!stroke && fast && g.cs.Size == 1 && g.soup.Size == 0) {
 			flatten_contour(g, g.cs[0], poly, tol);
@@ -3347,6 +3391,8 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 	key.uv[0] = dl->_Data->TexUvWhitePixel.x; key.uv[1] = dl->_Data->TexUvWhitePixel.y;
 	key.clip[0] = dl->_CmdHeader.ClipRect.x; key.clip[1] = dl->_CmdHeader.ClipRect.y; key.clip[2] = dl->_CmdHeader.ClipRect.z; key.clip[3] = dl->_CmdHeader.ClipRect.w;
 	key.gpu = (s_gpu_enabled ? 1 : 0) | (ImGui::GetCurrentContext() ? (int)(ImGui::GetIO().DisplayFramebufferScale.x * 100.0f) << 1 : 0);
+	key.render_fn = s_render_fn;
+	key.render_user = s_render_user;
 	if (anim->cache_enabled) {
 		for (int i = 0; i < iam_lottie::CACHE; i++) {
 			iam_lottie::draw_entry& e = anim->cache[i];
@@ -3414,6 +3460,11 @@ void iam_lottie_draw(ImDrawList* dl, iam_lottie const* anim, float time, iam_vec
 }
 
 void iam_lottie_set_frame_snap(iam_lottie* anim, bool enabled) { if (anim) anim->frame_snap = enabled; }
+
+void iam_lottie_set_renderer(iam_lottie_render_fn fn, void* user) {
+	s_render_fn = fn;
+	s_render_user = user;
+}
 
 void iam_lottie_set_cache(iam_lottie* anim, bool enabled) {
 	if (!anim) return;

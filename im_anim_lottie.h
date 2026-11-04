@@ -58,3 +58,36 @@ IM_ANIM_API void         iam_lottie_set_frame_snap(iam_lottie* anim, bool enable
 // masks, other backends, or a failed shader compile use the CPU path.
 IM_ANIM_API bool         iam_lottie_gpu_active();               // GPU fill compiled in, enabled and working
 IM_ANIM_API void         iam_lottie_set_gpu(bool enabled);      // on by default
+
+// Renderer hook: a fill or stroke handed to another renderer (a vector painter) before the player draws it. The
+// outline is in screen space, as cubic chains per contour (pts[first]: start, then (control, control, end) per
+// segment; lines have their handles on their vertices). Return true when drawn; false lets the player draw it.
+// Only plain shapes are offered: not inside a matte, mask, soft edge (blur, drop shadow) or offscreen layer, nor merged
+// or offset paths. Set while drawing (null: none). The function and 'user' are part of the replay cache's key
+// (iam_lottie_set_cache): pass another 'user' when the renderer's output changes for the same frame.
+struct iam_lottie_contour { int first, count; bool closed; };
+struct iam_lottie_outline {
+	ImVec2 const* pts;
+	iam_lottie_contour const* contours;
+	int contour_count;
+	int fill_rule;                  // 0 non-zero, 1 even-odd
+};
+struct iam_lottie_paint {
+	int type;                       // 0 solid, 1 linear gradient, 2 radial gradient
+	ImU32 color;                    // solid (opacity included)
+	ImVec2 p0, p1, focal;           // linear: from p0 to p1; radial: centre p0, radius |p1 - p0|, highlight at focal
+	int stop_count;
+	float const* stop_offsets;
+	float const (*stop_rgba)[4];    // straight alpha, opacity included; interpolated premultiplied
+};
+struct iam_lottie_stroke {
+	float width;
+	int cap;                        // 1 butt, 2 round, 3 square
+	int join;                       // 1 miter, 2 round, 3 bevel
+	float miter_limit;
+	float const* dashes;            // dash, gap, ... (screen units; odd lists already doubled); dash_count 0: solid
+	int dash_count;
+	float dash_offset;
+};
+typedef bool (*iam_lottie_render_fn)(ImDrawList* dl, iam_lottie_outline const* outline, iam_lottie_paint const* paint, iam_lottie_stroke const* stroke, void* user);  // stroke null: a fill
+IM_ANIM_API void         iam_lottie_set_renderer(iam_lottie_render_fn fn, void* user);
